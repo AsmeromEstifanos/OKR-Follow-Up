@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import AppShell from "@/app/app-shell";
+import AuthProviders from "@/app/auth-providers";
 import type { ReactNode } from "react";
 import "./globals.css";
 
@@ -12,14 +13,9 @@ export default function RootLayout({ children }: { children: ReactNode }): JSX.E
   return (
     <html lang="en">
       <body>
-        <div className="shell">
-          <header className="topbar">
-            <Link href="/" className="brand">
-              OKR Follow-Up
-            </Link>
-          </header>
-          <main className="layout">{children}</main>
-        </div>
+        <AuthProviders>
+          <AppShell>{children}</AppShell>
+        </AuthProviders>
       </body>
     </html>
   );
