@@ -97,7 +97,7 @@ export default function DashboardPositionControls({ selectedVentureKey, existing
   return (
     <div className="position-controls">
       <button
-        className={`tab-btn ${isAdding ? "tab-btn-active" : ""}`}
+        className={`tab-btn tab-btn-add ${isAdding ? "tab-btn-active" : ""}`}
         type="button"
         onClick={isAdding ? closeAdd : openAdd}
         disabled={isSaving}
@@ -120,7 +120,7 @@ export default function DashboardPositionControls({ selectedVentureKey, existing
             autoFocus
             disabled={isSaving}
           />
-          <button className="btn" type="submit" disabled={isSaving}>
+          <button className="btn btn-add" type="submit" disabled={isSaving}>
             Add
           </button>
           <button className="tab-btn" type="button" onClick={closeAdd} disabled={isSaving}>

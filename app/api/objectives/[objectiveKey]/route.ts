@@ -1,4 +1,4 @@
-import { deleteObjective, getObjectiveWithContext, updateObjective } from "@/lib/dummy-store";
+import { deleteObjective, getObjectiveWithContext, updateObjective } from "@/lib/store";
 import type { Confidence, ObjectiveStatus, ObjectiveType, OkrCycle, UpdateObjectiveInput } from "@/lib/types";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -18,21 +18,23 @@ const CONFIDENCE_VALUES = new Set<Confidence>(["High", "Medium", "Low"]);
 
 const ALLOWED_PATCH_FIELDS = new Set([
   "periodKey",
+  "objectiveCode",
   "title",
   "description",
   "owner",
+  "ownerEmail",
   "department",
   "strategicTheme",
   "objectiveType",
   "okrCycle",
+  "blockers",
   "keyRisksDependency",
   "notes",
   "status",
   "confidence",
   "progressPct",
   "startDate",
-  "endDate",
-  "lastCheckinAt"
+  "endDate"
 ]);
 const READ_ONLY_FIELDS = new Set(["objectiveKey", "rag"]);
 
@@ -94,6 +96,10 @@ function parseObjectivePatch(body: unknown): UpdateObjectiveInput {
     patch.periodKey = expectString(raw, "periodKey");
   }
 
+  if (raw.objectiveCode !== undefined) {
+    patch.objectiveCode = expectString(raw, "objectiveCode", true);
+  }
+
   if (raw.title !== undefined) {
     patch.title = expectString(raw, "title");
   }
@@ -104,6 +110,10 @@ function parseObjectivePatch(body: unknown): UpdateObjectiveInput {
 
   if (raw.owner !== undefined) {
     patch.owner = expectString(raw, "owner");
+  }
+
+  if (raw.ownerEmail !== undefined) {
+    patch.ownerEmail = expectString(raw, "ownerEmail", true);
   }
 
   if (raw.department !== undefined) {
@@ -120,6 +130,10 @@ function parseObjectivePatch(body: unknown): UpdateObjectiveInput {
 
   if (raw.okrCycle !== undefined) {
     patch.okrCycle = expectEnum(raw, "okrCycle", OKR_CYCLE_VALUES);
+  }
+
+  if (raw.blockers !== undefined) {
+    patch.blockers = expectString(raw, "blockers", true);
   }
 
   if (raw.notes !== undefined) {
@@ -150,20 +164,11 @@ function parseObjectivePatch(body: unknown): UpdateObjectiveInput {
     patch.endDate = expectString(raw, "endDate");
   }
 
-  if (raw.lastCheckinAt !== undefined) {
-    const value = raw.lastCheckinAt;
-    if (value !== null && typeof value !== "string") {
-      throw new Error("lastCheckinAt must be a string or null.");
-    }
-
-    patch.lastCheckinAt = value;
-  }
-
   return patch;
 }
 
 export async function GET(_request: NextRequest, context: Context): Promise<NextResponse> {
-  const objective = getObjectiveWithContext(context.params.objectiveKey);
+  const objective = await getObjectiveWithContext(context.params.objectiveKey);
 
   if (!objective) {
     return NextResponse.json({ error: "Objective not found." }, { status: 404 });
@@ -176,7 +181,7 @@ export async function PATCH(request: NextRequest, context: Context): Promise<Nex
   try {
     const body = await request.json();
     const patch = parseObjectivePatch(body);
-    const objective = updateObjective(context.params.objectiveKey, patch);
+    const objective = await updateObjective(context.params.objectiveKey, patch);
 
     if (!objective) {
       return NextResponse.json({ error: "Objective not found." }, { status: 404 });
@@ -190,7 +195,7 @@ export async function PATCH(request: NextRequest, context: Context): Promise<Nex
 }
 
 export async function DELETE(_request: NextRequest, context: Context): Promise<NextResponse> {
-  const deleted = deleteObjective(context.params.objectiveKey);
+  const deleted = await deleteObjective(context.params.objectiveKey);
 
   if (!deleted) {
     return NextResponse.json({ error: "Objective not found." }, { status: 404 });

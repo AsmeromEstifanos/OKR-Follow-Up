@@ -1,4 +1,4 @@
-import { deleteKeyResult, getKeyResult, updateKeyResult } from "@/lib/dummy-store";
+import { deleteKeyResult, getKeyResult, updateKeyResult } from "@/lib/store";
 import type { CheckInFrequency, KrStatus, MetricType, UpdateKeyResultInput } from "@/lib/types";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -15,10 +15,12 @@ const METRIC_TYPE_VALUES = new Set<MetricType>(["Delivery", "Financial", "Operat
 const KR_STATUS_VALUES = new Set<KrStatus>(["NotStarted", "OnTrack", "AtRisk", "OffTrack", "Done"]);
 const CHECKIN_FREQUENCY_VALUES = new Set<CheckInFrequency>(["Weekly", "BiWeekly", "Monthly", "AdHoc"]);
 const ALLOWED_PATCH_FIELDS = new Set([
+  "krCode",
   "objectiveKey",
   "periodKey",
   "title",
   "owner",
+  "ownerEmail",
   "metricType",
   "baselineValue",
   "targetValue",
@@ -26,8 +28,8 @@ const ALLOWED_PATCH_FIELDS = new Set([
   "status",
   "dueDate",
   "checkInFrequency",
-  "notes",
-  "lastCheckinAt"
+  "blockers",
+  "notes"
 ]);
 const READ_ONLY_FIELDS = new Set(["krKey", "progressPct"]);
 
@@ -85,6 +87,10 @@ function parseKrPatch(body: unknown): UpdateKeyResultInput {
   }
 
   const patch: UpdateKeyResultInput = {};
+  if (raw.krCode !== undefined) {
+    patch.krCode = expectString(raw, "krCode", true);
+  }
+
   if (raw.objectiveKey !== undefined) {
     patch.objectiveKey = expectString(raw, "objectiveKey");
   }
@@ -99,6 +105,10 @@ function parseKrPatch(body: unknown): UpdateKeyResultInput {
 
   if (raw.owner !== undefined) {
     patch.owner = expectString(raw, "owner");
+  }
+
+  if (raw.ownerEmail !== undefined) {
+    patch.ownerEmail = expectString(raw, "ownerEmail", true);
   }
 
   if (raw.metricType !== undefined) {
@@ -129,24 +139,19 @@ function parseKrPatch(body: unknown): UpdateKeyResultInput {
     patch.checkInFrequency = expectEnum(raw, "checkInFrequency", CHECKIN_FREQUENCY_VALUES);
   }
 
-  if (raw.notes !== undefined) {
-    patch.notes = expectString(raw, "notes", true);
+  if (raw.blockers !== undefined) {
+    patch.blockers = expectString(raw, "blockers", true);
   }
 
-  if (raw.lastCheckinAt !== undefined) {
-    const value = raw.lastCheckinAt;
-    if (value !== null && typeof value !== "string") {
-      throw new Error("lastCheckinAt must be a string or null.");
-    }
-
-    patch.lastCheckinAt = value;
+  if (raw.notes !== undefined) {
+    patch.notes = expectString(raw, "notes", true);
   }
 
   return patch;
 }
 
 export async function GET(_request: NextRequest, context: Context): Promise<NextResponse> {
-  const keyResult = getKeyResult(context.params.krKey);
+  const keyResult = await getKeyResult(context.params.krKey);
 
   if (!keyResult) {
     return NextResponse.json({ error: "Key result not found." }, { status: 404 });
@@ -159,7 +164,7 @@ export async function PATCH(request: NextRequest, context: Context): Promise<Nex
   try {
     const body = await request.json();
     const patch = parseKrPatch(body);
-    const keyResult = updateKeyResult(context.params.krKey, patch);
+    const keyResult = await updateKeyResult(context.params.krKey, patch);
 
     if (!keyResult) {
       return NextResponse.json({ error: "Key result not found." }, { status: 404 });
@@ -173,7 +178,7 @@ export async function PATCH(request: NextRequest, context: Context): Promise<Nex
 }
 
 export async function DELETE(_request: NextRequest, context: Context): Promise<NextResponse> {
-  const deleted = deleteKeyResult(context.params.krKey);
+  const deleted = await deleteKeyResult(context.params.krKey);
 
   if (!deleted) {
     return NextResponse.json({ error: "Key result not found." }, { status: 404 });

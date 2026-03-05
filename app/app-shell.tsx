@@ -2,23 +2,17 @@
 
 import AuthButtons from "@/app/auth-buttons";
 import AuthGate from "@/app/auth-gate";
+import SharePointActivityLoader from "@/app/sharepoint-activity-loader";
 import useSharePointConnection from "@/app/use-sharepoint-connection";
 import { ensureActiveAccount } from "@/lib/auth/msal-client";
 import { useIsAuthenticated, useMsal } from "@azure/msal-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Props = {
   children: React.ReactNode;
 };
-
-type NavItem = {
-  href: string;
-  label: string;
-};
-
-const NAV_ITEMS: NavItem[] = [{ href: "/", label: "OKR Board" }];
 
 function getPrincipalName(
   activeUsername: string | undefined,
@@ -45,13 +39,25 @@ function getPrincipalName(
   return "";
 }
 
+function getActiveAccountSafely(
+  instance: ReturnType<typeof useMsal>["instance"],
+  accounts: ReturnType<typeof useMsal>["accounts"]
+) {
+  try {
+    return instance.getActiveAccount() ?? accounts[0] ?? null;
+  } catch {
+    return accounts[0] ?? null;
+  }
+}
+
 export default function AppShell({ children }: Props): JSX.Element {
-  const pathname = usePathname();
   const { instance, accounts } = useMsal();
   const isAuthenticated = useIsAuthenticated();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
-  const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
+  const [isDesktopHovered, setIsDesktopHovered] = useState<boolean>(false);
 
   const connection = useSharePointConnection(isAuthenticated);
 
@@ -76,9 +82,9 @@ export default function AppShell({ children }: Props): JSX.Element {
     }
   }, [accounts]);
 
-  const isNavCollapsed = isMobile ? !isMobileMenuOpen : isCollapsed;
+  const isNavCollapsed = isMobile ? !isMobileMenuOpen : !isDesktopHovered;
   const activeAccount = useMemo(() => {
-    return instance.getActiveAccount() ?? accounts[0] ?? null;
+    return getActiveAccountSafely(instance, accounts);
   }, [accounts, instance]);
 
   const principal = useMemo(() => {
@@ -90,10 +96,32 @@ export default function AppShell({ children }: Props): JSX.Element {
     return getPrincipalName(activeAccount.username, claims?.preferred_username, claims?.email, claims?.name);
   }, [activeAccount]);
 
-  const mainClassName = `ln-main ${isMobile ? "ln-main-mobile" : isCollapsed ? "ln-main-collapsed" : "ln-main-expanded"}`;
+  const mainClassName = `ln-main ${isMobile ? "ln-main-mobile" : "ln-main-collapsed"}`;
   const sidebarClassName = `ln-sidebar ${isMobile ? "ln-sidebar-mobile" : "ln-sidebar-desktop"} ${
     isNavCollapsed ? "ln-sidebar-collapsed" : "ln-sidebar-expanded"
   }`;
+  const isSharePointOnline = connection.status === "linked";
+  const sharePointStatusLabel = isSharePointOnline ? "Online" : "Offline";
+  const sharePointStatusClassName = isSharePointOnline ? "linked" : "error";
+  const isDashboardRoute = pathname.startsWith("/dashboard");
+  const navQuery = useMemo(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    const preserved = new URLSearchParams();
+    const ventureKey = params.get("ventureKey");
+    const department = params.get("department");
+
+    if (ventureKey) {
+      preserved.set("ventureKey", ventureKey);
+    }
+
+    if (department) {
+      preserved.set("department", department);
+    }
+
+    return preserved.toString();
+  }, [searchParams]);
+  const boardHref = navQuery ? `/?${navQuery}` : "/";
+  const dashboardHref = navQuery ? `/dashboard?${navQuery}` : "/dashboard";
   const refreshConnection = useCallback(() => {
     connection.refresh();
   }, [connection]);
@@ -109,48 +137,64 @@ export default function AppShell({ children }: Props): JSX.Element {
         />
       ) : null}
 
-      <aside className={sidebarClassName}>
+      <aside
+        className={sidebarClassName}
+        onMouseEnter={() => {
+          if (!isMobile) {
+            setIsDesktopHovered(true);
+          }
+        }}
+        onMouseLeave={() => {
+          if (!isMobile) {
+            setIsDesktopHovered(false);
+          }
+        }}
+      >
         <div className="ln-sidebar-header">
           {!isNavCollapsed ? (
             <div className="ln-brand-wrap">
               <span className="ln-brand-title">OKR Follow-Up</span>
             </div>
           ) : null}
-          <button
-            type="button"
-            className="ln-toggle-btn"
-            onClick={() => {
-              if (isMobile) {
-                setIsMobileMenuOpen((previous) => !previous);
-                return;
-              }
-
-              setIsCollapsed((previous) => !previous);
-            }}
-            aria-label={isNavCollapsed ? "Expand navigation" : "Collapse navigation"}
-          >
-            {isNavCollapsed ? ">" : "<"}
-          </button>
+          {isMobile ? (
+            <button
+              type="button"
+              className="ln-toggle-btn"
+              onClick={() => setIsMobileMenuOpen((previous) => !previous)}
+              aria-label={isNavCollapsed ? "Expand navigation" : "Collapse navigation"}
+            >
+              {isNavCollapsed ? ">" : "<"}
+            </button>
+          ) : null}
         </div>
 
-        <nav className="ln-sidebar-nav" aria-label="Primary">
-          {NAV_ITEMS.map((item) => {
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`ln-nav-item ${isActive ? "ln-nav-item-active" : ""} ${isNavCollapsed ? "ln-nav-item-collapsed" : ""}`}
-                onClick={() => {
-                  if (isMobile) {
-                    setIsMobileMenuOpen(false);
-                  }
-                }}
-              >
-                {!isNavCollapsed ? item.label : "OKR"}
-              </Link>
-            );
-          })}
+        <nav className="ln-sidebar-nav" aria-label="Primary navigation">
+          <Link
+            href={boardHref}
+            className={`ln-nav-item ${!isDashboardRoute ? "ln-nav-item-active" : ""} ${
+              isNavCollapsed ? "ln-nav-item-collapsed" : ""
+            }`}
+            onClick={() => {
+              if (isMobile) {
+                setIsMobileMenuOpen(false);
+              }
+            }}
+          >
+            {isNavCollapsed ? "B" : "OKR Board"}
+          </Link>
+          <Link
+            href={dashboardHref}
+            className={`ln-nav-item ${isDashboardRoute ? "ln-nav-item-active" : ""} ${
+              isNavCollapsed ? "ln-nav-item-collapsed" : ""
+            }`}
+            onClick={() => {
+              if (isMobile) {
+                setIsMobileMenuOpen(false);
+              }
+            }}
+          >
+            {isNavCollapsed ? "D" : "Dashboard"}
+          </Link>
         </nav>
 
         <div className="ln-sidebar-footer">
@@ -163,12 +207,12 @@ export default function AppShell({ children }: Props): JSX.Element {
           <AuthButtons compact={isMobile} onAuthChanged={refreshConnection} />
           {!isNavCollapsed ? (
             <div
-              className={`ln-sp-status ln-sp-status-${connection.status}`}
+              className={`ln-sp-status ln-sp-status-${sharePointStatusClassName}`}
               title={connection.detail}
-              aria-label={`SharePoint status: ${connection.message}`}
+              aria-label={`SharePoint status: ${sharePointStatusLabel}`}
             >
               <span className="ln-sp-dot" />
-              <span>SharePoint {connection.message}</span>
+              <span>{sharePointStatusLabel}</span>
             </div>
           ) : null}
         </div>
@@ -193,6 +237,8 @@ export default function AppShell({ children }: Props): JSX.Element {
           <div className="layout">{children}</div>
         </AuthGate>
       </main>
+
+      <SharePointActivityLoader />
     </div>
   );
 }

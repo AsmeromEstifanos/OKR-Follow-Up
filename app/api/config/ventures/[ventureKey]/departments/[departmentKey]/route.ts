@@ -1,4 +1,4 @@
-import { deleteDepartmentFromVenture, updateDepartmentInVenture } from "@/lib/dummy-store";
+import { deleteDepartmentFromVenture, updateDepartmentInVenture } from "@/lib/store";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ type Context = {
 export async function PATCH(request: NextRequest, context: Context): Promise<NextResponse> {
   try {
     const payload = await request.json();
-    const venture = updateDepartmentInVenture(context.params.ventureKey, context.params.departmentKey, payload);
+    const venture = await updateDepartmentInVenture(context.params.ventureKey, context.params.departmentKey, payload);
 
     if (!venture) {
       return NextResponse.json({ error: "Venture or department not found." }, { status: 404 });
@@ -29,7 +29,7 @@ export async function PATCH(request: NextRequest, context: Context): Promise<Nex
 
 export async function DELETE(_request: NextRequest, context: Context): Promise<NextResponse> {
   try {
-    const venture = deleteDepartmentFromVenture(context.params.ventureKey, context.params.departmentKey);
+    const venture = await deleteDepartmentFromVenture(context.params.ventureKey, context.params.departmentKey);
 
     if (!venture) {
       return NextResponse.json({ error: "Venture or department not found." }, { status: 404 });

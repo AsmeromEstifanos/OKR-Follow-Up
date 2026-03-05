@@ -284,7 +284,7 @@ export default function DashboardVentureTabs({ ventures, rootVentureKey, selecte
         })}
         <button
           type="button"
-          className={`tab-btn venture-add-btn ${isAddingVenture ? "tab-btn-active" : ""}`}
+          className={`tab-btn tab-btn-add venture-add-btn ${isAddingVenture ? "tab-btn-active" : ""}`}
           onClick={isAddingVenture ? closeAddVenture : openAddVenture}
           aria-label="Add Venture"
         >
@@ -302,7 +302,7 @@ export default function DashboardVentureTabs({ ventures, rootVentureKey, selecte
             autoFocus
             disabled={isSavingVenture}
           />
-          <button className="btn" type="submit" disabled={isSavingVenture}>
+          <button className="btn btn-add" type="submit" disabled={isSavingVenture}>
             Add venture
           </button>
           <button className="tab-btn" type="button" onClick={closeAddVenture} disabled={isSavingVenture}>

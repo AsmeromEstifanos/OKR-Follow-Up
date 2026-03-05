@@ -1,5 +1,6 @@
 "use client";
 
+import OwnerInput from "@/app/owner-input";
 import type {
   AppConfig,
   CheckInFrequency,
@@ -19,6 +20,12 @@ type ApiError = {
   error?: string;
 };
 
+type OwnerSuggestion = {
+  displayName: string;
+  principalName: string;
+  mail: string;
+};
+
 type CreateMode = "none" | "objective" | "kr";
 
 const OBJECTIVE_TYPE_OPTIONS: ObjectiveType[] = ["Aspirational", "Committed", "Learning"];
@@ -26,12 +33,6 @@ const HEALTH_STATUS_OPTIONS: ObjectiveStatus[] = ["OnTrack", "OffTrack", "Done",
 const KR_HEALTH_OPTIONS: KrStatus[] = ["OnTrack", "OffTrack", "Done", "AtRisk"];
 const OKR_CYCLE_OPTIONS: OkrCycle[] = ["Q1", "Q2", "Q3", "Q4"];
 const CHECKIN_FREQUENCY_OPTIONS: CheckInFrequency[] = ["Weekly", "BiWeekly", "Monthly", "AdHoc"];
-
-function todayPlus(days: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
-}
 
 function getCurrentCycle(): OkrCycle {
   const quarter = Math.floor(new Date().getMonth() / 3) + 1;
@@ -150,9 +151,10 @@ export default function DashboardCreateControls(): JSX.Element {
   const [objectives, setObjectives] = useState<Objective[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
 
-  const [objectiveCode, setObjectiveCode] = useState<string>("");
+  const [objectiveCodePreview, setObjectiveCodePreview] = useState<string>("");
   const [objectiveTitle, setObjectiveTitle] = useState<string>("");
-  const [objectiveOwner, setObjectiveOwner] = useState<string>("alex@contoso.com");
+  const [objectiveOwner, setObjectiveOwner] = useState<string>("");
+  const [objectiveOwnerEmail, setObjectiveOwnerEmail] = useState<string>("");
   const [objectiveVenture, setObjectiveVenture] = useState<string>("");
   const [objectiveStrategicTheme, setObjectiveStrategicTheme] = useState<string>("");
   const [objectiveDepartment, setObjectiveDepartment] = useState<string>("");
@@ -161,20 +163,21 @@ export default function DashboardCreateControls(): JSX.Element {
   const [objectiveCycle, setObjectiveCycle] = useState<OkrCycle>(getCurrentCycle());
   const [objectiveProgress, setObjectiveProgress] = useState<string>("0 / 100");
   const [objectiveProgressPct, setObjectiveProgressPct] = useState<string>("0");
+  const [objectiveBlockers, setObjectiveBlockers] = useState<string>("");
   const [objectiveKeyRisksDependency, setObjectiveKeyRisksDependency] = useState<string>("");
   const [objectiveNotes, setObjectiveNotes] = useState<string>("");
-  const [objectiveLastUpdated, setObjectiveLastUpdated] = useState<string>(todayPlus(0));
 
-  const [krCode, setKrCode] = useState<string>("");
+  const [krCodePreview, setKrCodePreview] = useState<string>("");
   const [krObjectiveKey, setKrObjectiveKey] = useState<string>("");
   const [krTitle, setKrTitle] = useState<string>("");
-  const [krOwner, setKrOwner] = useState<string>("alex@contoso.com");
+  const [krOwner, setKrOwner] = useState<string>("");
+  const [krOwnerEmail, setKrOwnerEmail] = useState<string>("");
   const [krStatus, setKrStatus] = useState<KrStatus>("OnTrack");
   const [krProgress, setKrProgress] = useState<string>("0 / 100");
   const [krProgressPct, setKrProgressPct] = useState<string>("0");
   const [krCheckInFrequency, setKrCheckInFrequency] = useState<CheckInFrequency>("Weekly");
+  const [krBlockers, setKrBlockers] = useState<string>("");
   const [krNotes, setKrNotes] = useState<string>("");
-  const [krLastUpdated, setKrLastUpdated] = useState<string>(todayPlus(0));
   const [existingKrs, setExistingKrs] = useState<KeyResult[]>([]);
   const [existingKrsLoading, setExistingKrsLoading] = useState<boolean>(false);
   const [existingKrsError, setExistingKrsError] = useState<string>("");
@@ -247,6 +250,44 @@ export default function DashboardCreateControls(): JSX.Element {
     setExistingKrsLoading(false);
   };
 
+  const loadObjectiveCodePreview = async (): Promise<void> => {
+    if (!objectiveDepartment.trim()) {
+      setObjectiveCodePreview("");
+      return;
+    }
+
+    const params = new URLSearchParams({
+      department: objectiveDepartment.trim(),
+      ventureName: objectiveVenture.trim(),
+      strategicTheme: objectiveStrategicTheme.trim()
+    });
+
+    const response = await fetch(`/api/codes/objective?${params.toString()}`, { cache: "no-store" });
+    if (!response.ok) {
+      setObjectiveCodePreview("OBJ-001");
+      return;
+    }
+
+    const payload = (await response.json()) as { code?: string };
+    setObjectiveCodePreview(payload.code?.trim() || "OBJ-001");
+  };
+
+  const loadKrCodePreview = async (): Promise<void> => {
+    if (!krObjectiveKey.trim()) {
+      setKrCodePreview("");
+      return;
+    }
+
+    const response = await fetch(`/api/codes/kr?objectiveKey=${encodeURIComponent(krObjectiveKey)}`, { cache: "no-store" });
+    if (!response.ok) {
+      setKrCodePreview("KR-001");
+      return;
+    }
+
+    const payload = (await response.json()) as { code?: string };
+    setKrCodePreview(payload.code?.trim() || "KR-001");
+  };
+
   const loadData = async (): Promise<void> => {
     const [periodResp, objectiveResp, configResp] = await Promise.all([
       fetch("/api/periods", { cache: "no-store" }),
@@ -308,6 +349,24 @@ export default function DashboardCreateControls(): JSX.Element {
     }
   }, [objectiveDepartment, selectedObjectiveVenture]);
 
+  useEffect(() => {
+    if (mode !== "objective") {
+      return;
+    }
+
+    void loadObjectiveCodePreview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, objectiveDepartment, objectiveVenture, objectiveStrategicTheme]);
+
+  useEffect(() => {
+    if (mode !== "kr") {
+      return;
+    }
+
+    void loadKrCodePreview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, krObjectiveKey]);
+
   const createObjective = async (): Promise<void> => {
     if (!objectiveTitle.trim()) {
       setError("Objective title is required.");
@@ -326,6 +385,11 @@ export default function DashboardCreateControls(): JSX.Element {
 
     if (!objectiveDepartment.trim()) {
       setError("Department is required.");
+      return;
+    }
+
+    if (!objectiveOwner.trim()) {
+      setError("Owner is required.");
       return;
     }
 
@@ -366,11 +430,7 @@ export default function DashboardCreateControls(): JSX.Element {
       resolvedObjectiveProgressPct = (parsedObjectiveProgress.current / parsedObjectiveProgress.target) * 100;
     }
 
-    const objectiveLastCheckinAt = objectiveLastUpdated
-      ? new Date(`${objectiveLastUpdated}T00:00:00`).toISOString()
-      : undefined;
-
-    const { startDate, endDate } = getCycleDateRange(objectiveCycle);
+  const { startDate, endDate } = getCycleDateRange(objectiveCycle);
 
     setIsBusy(true);
     setError("");
@@ -382,24 +442,26 @@ export default function DashboardCreateControls(): JSX.Element {
         "content-type": "application/json"
       },
       body: JSON.stringify({
-        objectiveKey: objectiveCode.trim() || undefined,
+        objectiveCode: objectiveCodePreview || undefined,
         periodKey: period.periodKey,
         title: objectiveTitle.trim(),
         description: objectiveNotes.trim(),
-        owner: objectiveOwner.trim() || "alex@contoso.com",
+        owner: objectiveOwner.trim(),
+        ownerEmail: objectiveOwnerEmail.trim(),
         department: objectiveDepartment.trim(),
+        ventureName: objectiveVenture.trim(),
         strategicTheme: objectiveStrategicTheme.trim(),
         objectiveType,
         okrCycle: objectiveCycle,
         progressPct: clampProgressPct(resolvedObjectiveProgressPct),
+        blockers: objectiveBlockers.trim(),
         keyRisksDependency: objectiveKeyRisksDependency.trim(),
         notes: objectiveNotes.trim(),
         status: objectiveStatus,
         confidence: "Medium",
         rag: "Amber",
         startDate,
-        endDate,
-        lastCheckinAt: objectiveLastCheckinAt
+        endDate
       })
     });
 
@@ -410,14 +472,14 @@ export default function DashboardCreateControls(): JSX.Element {
       return;
     }
 
-    setObjectiveCode("");
+    setObjectiveCodePreview("");
     setObjectiveTitle("");
     setObjectiveStrategicTheme("");
     setObjectiveProgress("0 / 100");
     setObjectiveProgressPct("0");
+    setObjectiveBlockers("");
     setObjectiveKeyRisksDependency("");
     setObjectiveNotes("");
-    setObjectiveLastUpdated(todayPlus(0));
     setMessage("Objective created.");
     await loadData();
     router.refresh();
@@ -433,6 +495,11 @@ export default function DashboardCreateControls(): JSX.Element {
 
     if (!krTitle.trim()) {
       setError("KR title is required.");
+      return;
+    }
+
+    if (!krOwner.trim()) {
+      setError("Owner is required.");
       return;
     }
 
@@ -457,8 +524,6 @@ export default function DashboardCreateControls(): JSX.Element {
       currentValue = progressPct;
     }
 
-    const lastCheckinAt = krLastUpdated ? new Date(`${krLastUpdated}T00:00:00`).toISOString() : undefined;
-
     setIsBusy(true);
     setError("");
     setMessage("");
@@ -469,11 +534,12 @@ export default function DashboardCreateControls(): JSX.Element {
         "content-type": "application/json"
       },
       body: JSON.stringify({
-        krKey: krCode.trim() || undefined,
+        krCode: krCodePreview || undefined,
         objectiveKey: selectedObjective.objectiveKey,
         periodKey: selectedObjective.periodKey,
         title: krTitle.trim(),
-        owner: krOwner.trim() || "alex@contoso.com",
+        owner: krOwner.trim(),
+        ownerEmail: krOwnerEmail.trim(),
         metricType: "Operational" as MetricType,
         baselineValue,
         targetValue,
@@ -481,8 +547,8 @@ export default function DashboardCreateControls(): JSX.Element {
         status: krStatus,
         dueDate: selectedObjective.endDate,
         checkInFrequency: krCheckInFrequency,
-        notes: krNotes.trim(),
-        lastCheckinAt
+        blockers: krBlockers.trim(),
+        notes: krNotes.trim()
       })
     });
 
@@ -493,13 +559,13 @@ export default function DashboardCreateControls(): JSX.Element {
       return;
     }
 
-    setKrCode("");
+    setKrCodePreview("");
     setKrTitle("");
     setKrProgress("0 / 100");
     setKrProgressPct("0");
     setKrCheckInFrequency("Weekly");
+    setKrBlockers("");
     setKrNotes("");
-    setKrLastUpdated(todayPlus(0));
     setMessage("Key result created.");
     await loadData();
     await loadExistingKrs(selectedObjective.objectiveKey);
@@ -541,9 +607,8 @@ export default function DashboardCreateControls(): JSX.Element {
               <label htmlFor="quick-objective-code">Objective Code</label>
               <input
                 id="quick-objective-code"
-                value={objectiveCode}
-                onChange={(event) => setObjectiveCode(event.target.value)}
-                placeholder="OKR-ENG-001"
+                value={objectiveCodePreview}
+                readOnly
               />
             </div>
             <div className="field">
@@ -554,13 +619,17 @@ export default function DashboardCreateControls(): JSX.Element {
                 onChange={(event) => setObjectiveTitle(event.target.value)}
               />
             </div>
+            <OwnerInput
+              id="quick-objective-owner"
+              value={objectiveOwner}
+              onChange={setObjectiveOwner}
+              onSelectUser={(user: OwnerSuggestion | null) => {
+                setObjectiveOwnerEmail(user ? user.mail || user.principalName : "");
+              }}
+            />
             <div className="field">
-              <label htmlFor="quick-objective-owner">Owner</label>
-              <input
-                id="quick-objective-owner"
-                value={objectiveOwner}
-                onChange={(event) => setObjectiveOwner(event.target.value)}
-              />
+              <label htmlFor="quick-objective-owner-email">Owner Email</label>
+              <input id="quick-objective-owner-email" value={objectiveOwnerEmail} readOnly />
             </div>
             <div className="field">
               <label htmlFor="quick-objective-venture">Venture</label>
@@ -669,15 +738,14 @@ export default function DashboardCreateControls(): JSX.Element {
                 onChange={(event) => setObjectiveProgressPct(event.target.value)}
               />
             </div>
-            <div className="field">
-              <label htmlFor="quick-objective-updated">Last updated</label>
-              <input
-                id="quick-objective-updated"
-                type="date"
-                value={objectiveLastUpdated}
-                onChange={(event) => setObjectiveLastUpdated(event.target.value)}
-              />
-            </div>
+          </div>
+          <div className="field">
+            <label htmlFor="quick-objective-blockers">Blockers</label>
+            <textarea
+              id="quick-objective-blockers"
+              value={objectiveBlockers}
+              onChange={(event) => setObjectiveBlockers(event.target.value)}
+            />
           </div>
           <div className="field">
             <label htmlFor="quick-objective-risk">Key Risks/Dependancy</label>
@@ -704,26 +772,34 @@ export default function DashboardCreateControls(): JSX.Element {
           <div className="config-grid">
             <div className="field">
               <label htmlFor="quick-kr-code">KR Code</label>
-              <input id="quick-kr-code" value={krCode} onChange={(event) => setKrCode(event.target.value)} placeholder="KR-ENG-001" />
+              <input id="quick-kr-code" value={krCodePreview} readOnly />
             </div>
             <div className="field">
               <label htmlFor="quick-kr-objective">Objectives</label>
               <select id="quick-kr-objective" value={krObjectiveKey} onChange={(event) => setKrObjectiveKey(event.target.value)}>
                 <option value="">Select objective</option>
                 {objectives.map((objective) => (
-                  <option key={objective.objectiveKey} value={objective.objectiveKey}>
-                    {objective.title}
-                  </option>
-                ))}
+                <option key={objective.objectiveKey} value={objective.objectiveKey}>
+                    {objective.title} ({objective.objectiveCode ?? objective.objectiveKey})
+                </option>
+              ))}
               </select>
             </div>
             <div className="field">
               <label htmlFor="quick-kr-title">KR</label>
               <input id="quick-kr-title" value={krTitle} onChange={(event) => setKrTitle(event.target.value)} />
             </div>
+            <OwnerInput
+              id="quick-kr-owner"
+              value={krOwner}
+              onChange={setKrOwner}
+              onSelectUser={(user: OwnerSuggestion | null) => {
+                setKrOwnerEmail(user ? user.mail || user.principalName : "");
+              }}
+            />
             <div className="field">
-              <label htmlFor="quick-kr-owner">Owner</label>
-              <input id="quick-kr-owner" value={krOwner} onChange={(event) => setKrOwner(event.target.value)} />
+              <label htmlFor="quick-kr-owner-email">Owner Email</label>
+              <input id="quick-kr-owner-email" value={krOwnerEmail} readOnly />
             </div>
             <div className="field">
               <label htmlFor="quick-kr-strategic-theme">Strategic Theme</label>
@@ -780,20 +856,16 @@ export default function DashboardCreateControls(): JSX.Element {
               <label htmlFor="quick-kr-okr-cycle">OKR Cycle</label>
               <input id="quick-kr-okr-cycle" value={selectedKrObjective?.okrCycle ?? ""} readOnly />
             </div>
-            <div className="field">
-              <label htmlFor="quick-kr-updated">Last updated</label>
-              <input
-                id="quick-kr-updated"
-                type="date"
-                value={krLastUpdated}
-                onChange={(event) => setKrLastUpdated(event.target.value)}
-              />
-            </div>
           </div>
 
           <div className="field">
             <label htmlFor="quick-kr-risks">Key Risks/Dependancy</label>
             <textarea id="quick-kr-risks" value={selectedKrObjective?.keyRisksDependency ?? ""} readOnly />
+          </div>
+
+          <div className="field">
+            <label htmlFor="quick-kr-blockers">Blockers</label>
+            <textarea id="quick-kr-blockers" value={krBlockers} onChange={(event) => setKrBlockers(event.target.value)} />
           </div>
 
           <div className="field">
@@ -816,6 +888,7 @@ export default function DashboardCreateControls(): JSX.Element {
                   <th>KR Progress</th>
                   <th>KR Progress %</th>
                   <th>OKR Cycle</th>
+                  <th>Blockers</th>
                   <th>Key Risks/Dependancy</th>
                   <th>Check-in Frequency</th>
                   <th>KR Notes</th>
@@ -825,15 +898,15 @@ export default function DashboardCreateControls(): JSX.Element {
               <tbody>
                 {existingKrsLoading ? (
                   <tr>
-                    <td colSpan={15}>Loading key results...</td>
+                    <td colSpan={16}>Loading key results...</td>
                   </tr>
                 ) : existingKrsError ? (
                   <tr>
-                    <td colSpan={15}>{existingKrsError}</td>
+                    <td colSpan={16}>{existingKrsError}</td>
                   </tr>
                 ) : existingKrs.length === 0 ? (
                   <tr>
-                    <td colSpan={15}>No key results for the selected objective.</td>
+                    <td colSpan={16}>No key results for the selected objective.</td>
                   </tr>
                 ) : (
                   existingKrs.map((kr) => {
@@ -843,11 +916,11 @@ export default function DashboardCreateControls(): JSX.Element {
                       <tr key={kr.krKey}>
                         <td>
                           {parentObjective?.title || "-"}
-                          <div className="meta">{parentObjective?.objectiveKey || "-"}</div>
+                          <div className="meta">{parentObjective?.objectiveCode || parentObjective?.objectiveKey || "-"}</div>
                         </td>
                         <td>
                           {kr.title}
-                          <div className="meta">{kr.krKey}</div>
+                          <div className="meta">{kr.krCode || kr.krKey}</div>
                         </td>
                         <td>{kr.owner}</td>
                         <td>{parentObjective?.strategicTheme || "-"}</td>
@@ -860,6 +933,7 @@ export default function DashboardCreateControls(): JSX.Element {
                         </td>
                         <td>{kr.progressPct}%</td>
                         <td>{parentObjective?.okrCycle || "-"}</td>
+                        <td>{kr.blockers || "-"}</td>
                         <td>{parentObjective?.keyRisksDependency || "-"}</td>
                         <td>{kr.checkInFrequency}</td>
                         <td>{kr.notes || "-"}</td>

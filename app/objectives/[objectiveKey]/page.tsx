@@ -1,4 +1,4 @@
-import { getConfig, getObjectiveWithContext, listObjectives, listPeriods } from "@/lib/dummy-store";
+import { getConfig, getObjectiveWithContext, listObjectives, listPeriods } from "@/lib/store";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import KeyResultEditControls from "./key-result-edit-controls";
@@ -20,6 +20,15 @@ function formatDate(value: string | null): string {
   return new Date(value).toLocaleDateString();
 }
 
+function getMostRecentTimestamp(primary: string | null | undefined, fallback: string | null | undefined): string | null {
+  const candidates = [primary, fallback]
+    .map((value) => (typeof value === "string" ? value : ""))
+    .filter((value) => Boolean(value))
+    .sort((left, right) => left.localeCompare(right));
+
+  return candidates.at(-1) ?? null;
+}
+
 function pillClass(rag: string): string {
   if (rag === "Green") {
     return "pill pill-green";
@@ -32,18 +41,19 @@ function pillClass(rag: string): string {
   return "pill pill-red";
 }
 
-export default function ObjectiveDetailPage({ params }: Props): JSX.Element {
-  const data = getObjectiveWithContext(params.objectiveKey);
+export default async function ObjectiveDetailPage({ params }: Props): Promise<JSX.Element> {
+  const data = await getObjectiveWithContext(params.objectiveKey);
 
   if (!data) {
     notFound();
   }
 
-  const config = getConfig();
-  const periodOptions = listPeriods().map((period) => period.periodKey);
+  const config = await getConfig();
+  const periodOptions = (await listPeriods()).map((period) => period.periodKey);
   const departmentOptions = config.ventures.flatMap((venture) => venture.departments.map((department) => department.name));
-  const objectiveOptions = listObjectives().map((item) => ({
+  const objectiveOptions = (await listObjectives()).map((item) => ({
     objectiveKey: item.objectiveKey,
+    objectiveCode: item.objectiveCode ?? item.objectiveKey,
     title: item.title
   }));
 
@@ -58,7 +68,7 @@ export default function ObjectiveDetailPage({ params }: Props): JSX.Element {
         <div className="section-header">
           <h2>Objective Details</h2>
         </div>
-        <p className="meta">Objective key: {objective.objectiveKey}</p>
+        <p className="meta">Objective code: {objective.objectiveCode ?? objective.objectiveKey}</p>
         <ObjectiveEditControls objective={objective} periodOptions={periodOptions} departmentOptions={departmentOptions} />
       </section>
 
@@ -115,15 +125,15 @@ export default function ObjectiveDetailPage({ params }: Props): JSX.Element {
                     <tr key={kr.krKey}>
                       <td>
                         {kr.title}
-                        <div className="meta">{kr.krKey}</div>
+                        <div className="meta">{kr.krCode ?? kr.krKey}</div>
                       </td>
                       <td>{kr.owner}</td>
                       <td>
                         {kr.progressPct}% ({kr.currentValue}/{kr.targetValue})
                       </td>
-                      <td>{formatDate(latest?.checkInAt ?? kr.lastCheckinAt)}</td>
+                      <td>{formatDate(getMostRecentTimestamp(latest?.checkInAt, kr.lastCheckinAt))}</td>
                       <td>{latest?.updateNotes || "-"}</td>
-                      <td>{latest?.blockers || "-"}</td>
+                      <td>{latest?.blockers || kr.blockers || "-"}</td>
                       <td>
                         <Link className="btn-link" href={`/krs/${kr.krKey}/checkin`}>
                           Update KR

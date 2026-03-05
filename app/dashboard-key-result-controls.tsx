@@ -1,8 +1,9 @@
 "use client";
 
+import OwnerInput from "@/app/owner-input";
 import type { CheckInFrequency, KrStatus, MetricType } from "@/lib/types";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type Props = {
   objectiveKey: string;
@@ -13,6 +14,12 @@ type Props = {
 
 type ApiError = {
   error?: string;
+};
+
+type OwnerSuggestion = {
+  displayName: string;
+  principalName: string;
+  mail: string;
 };
 
 const METRIC_TYPE_OPTIONS: MetricType[] = ["Delivery", "Financial", "Operational", "People", "Quality"];
@@ -40,6 +47,19 @@ function toDateInput(value: string): string {
   return value.slice(0, 10);
 }
 
+function sanitizeDefaultOwner(value: string): string {
+  const normalized = value.trim();
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized.toLowerCase().includes("@contoso")) {
+    return "";
+  }
+
+  return normalized;
+}
+
 export default function DashboardKeyResultControls({
   objectiveKey,
   periodKey,
@@ -47,11 +67,13 @@ export default function DashboardKeyResultControls({
   defaultOwner
 }: Props): JSX.Element {
   const router = useRouter();
+  const sanitizedDefaultOwner = sanitizeDefaultOwner(defaultOwner);
   const [isAdding, setIsAdding] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [krCode, setKrCode] = useState<string>("");
+  const [krCodePreview, setKrCodePreview] = useState<string>("");
   const [title, setTitle] = useState<string>("");
-  const [owner, setOwner] = useState<string>(defaultOwner);
+  const [owner, setOwner] = useState<string>(sanitizedDefaultOwner);
+  const [ownerEmail, setOwnerEmail] = useState<string>("");
   const [metricType, setMetricType] = useState<MetricType>("Operational");
   const [baselineValue, setBaselineValue] = useState<string>("0");
   const [targetValue, setTargetValue] = useState<string>("100");
@@ -59,12 +81,24 @@ export default function DashboardKeyResultControls({
   const [status, setStatus] = useState<KrStatus>("NotStarted");
   const [dueDate, setDueDate] = useState<string>(toDateInput(defaultDueDate));
   const [checkInFrequency, setCheckInFrequency] = useState<CheckInFrequency>("Weekly");
+  const [blockers, setBlockers] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
-  const [lastUpdated, setLastUpdated] = useState<string>("");
   const [error, setError] = useState<string>("");
+
+  const loadKrCodePreview = async (): Promise<void> => {
+    const response = await fetch(`/api/codes/kr?objectiveKey=${encodeURIComponent(objectiveKey)}`, { cache: "no-store" });
+    if (!response.ok) {
+      setKrCodePreview("KR-001");
+      return;
+    }
+
+    const payload = (await response.json()) as { code?: string };
+    setKrCodePreview(payload.code?.trim() || "KR-001");
+  };
 
   const openAdd = (): void => {
     setError("");
+    void loadKrCodePreview();
     setIsAdding(true);
   };
 
@@ -75,9 +109,10 @@ export default function DashboardKeyResultControls({
 
     setError("");
     setIsAdding(false);
-    setKrCode("");
+    setKrCodePreview("");
     setTitle("");
-    setOwner(defaultOwner);
+    setOwner(sanitizedDefaultOwner);
+    setOwnerEmail("");
     setMetricType("Operational");
     setBaselineValue("0");
     setTargetValue("100");
@@ -85,9 +120,25 @@ export default function DashboardKeyResultControls({
     setStatus("NotStarted");
     setDueDate(toDateInput(defaultDueDate));
     setCheckInFrequency("Weekly");
+    setBlockers("");
     setNotes("");
-    setLastUpdated("");
   };
+
+  useEffect(() => {
+    if (!isAdding) {
+      return;
+    }
+
+    void loadKrCodePreview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdding, objectiveKey]);
+
+  useEffect(() => {
+    if (!isAdding) {
+      setOwner(sanitizedDefaultOwner);
+      setOwnerEmail("");
+    }
+  }, [isAdding, sanitizedDefaultOwner]);
 
   const createKr = async (): Promise<void> => {
     if (isSaving) {
@@ -113,6 +164,11 @@ export default function DashboardKeyResultControls({
       return;
     }
 
+    if (!owner.trim()) {
+      setError("Owner is required.");
+      return;
+    }
+
     setIsSaving(true);
     setError("");
 
@@ -122,11 +178,12 @@ export default function DashboardKeyResultControls({
         "content-type": "application/json"
       },
       body: JSON.stringify({
-        krKey: krCode.trim() || undefined,
+        krCode: krCodePreview || undefined,
         objectiveKey,
         periodKey,
         title: trimmedTitle,
-        owner: owner.trim() || defaultOwner,
+        owner: owner.trim(),
+        ownerEmail: ownerEmail.trim(),
         metricType,
         baselineValue: baseline,
         targetValue: target,
@@ -134,8 +191,8 @@ export default function DashboardKeyResultControls({
         status,
         dueDate,
         checkInFrequency,
-        notes: notes.trim(),
-        lastCheckinAt: lastUpdated ? new Date(`${lastUpdated}T00:00:00.000Z`).toISOString() : null
+        blockers: blockers.trim(),
+        notes: notes.trim()
       })
     });
     const payload = await readJson<ApiError>(response);
@@ -154,7 +211,7 @@ export default function DashboardKeyResultControls({
   return (
     <div className="kr-controls">
       <button
-        className={`tab-btn kr-add-btn ${isAdding ? "tab-btn-active" : ""}`}
+        className={`tab-btn tab-btn-add kr-add-btn ${isAdding ? "tab-btn-active" : ""}`}
         type="button"
         onClick={isAdding ? closeAdd : openAdd}
         disabled={isSaving}
@@ -173,12 +230,7 @@ export default function DashboardKeyResultControls({
           <div className="kr-form-grid">
             <div className="field">
               <label>KR Code</label>
-              <input
-                value={krCode}
-                onChange={(event) => setKrCode(event.target.value)}
-                placeholder="KR-010"
-                disabled={isSaving}
-              />
+              <input value={krCodePreview} readOnly disabled={isSaving} />
             </div>
             <div className="field">
               <label>Key Result</label>
@@ -190,9 +242,18 @@ export default function DashboardKeyResultControls({
                 disabled={isSaving}
               />
             </div>
+            <OwnerInput
+              id={`kr-owner-${objectiveKey.replace(/[^a-zA-Z0-9_-]/g, "-")}`}
+              value={owner}
+              onChange={setOwner}
+              onSelectUser={(user: OwnerSuggestion | null) => {
+                setOwnerEmail(user ? user.mail || user.principalName : "");
+              }}
+              disabled={isSaving}
+            />
             <div className="field">
-              <label>Owner</label>
-              <input value={owner} onChange={(event) => setOwner(event.target.value)} disabled={isSaving} />
+              <label>Owner Email</label>
+              <input value={ownerEmail} readOnly disabled={isSaving} />
             </div>
             <div className="field">
               <label>KR Metric Type</label>
@@ -262,14 +323,9 @@ export default function DashboardKeyResultControls({
                 ))}
               </select>
             </div>
-            <div className="field">
-              <label>Last updated</label>
-              <input
-                type="date"
-                value={lastUpdated}
-                onChange={(event) => setLastUpdated(event.target.value)}
-                disabled={isSaving}
-              />
+            <div className="field kr-field-wide">
+              <label>Blockers</label>
+              <textarea value={blockers} onChange={(event) => setBlockers(event.target.value)} disabled={isSaving} />
             </div>
             <div className="field kr-field-wide">
               <label>Notes</label>
@@ -277,7 +333,7 @@ export default function DashboardKeyResultControls({
             </div>
           </div>
           <div className="actions">
-            <button className="btn" type="submit" disabled={isSaving}>
+            <button className="btn btn-add" type="submit" disabled={isSaving}>
               Add
             </button>
             <button className="tab-btn" type="button" onClick={closeAdd} disabled={isSaving}>

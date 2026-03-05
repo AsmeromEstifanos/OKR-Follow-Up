@@ -1,6 +1,6 @@
-# OKR Follow-Up (Dummy Data MVP)
+# OKR Follow-Up
 
-Internal OKR follow-up MVP built with Next.js and a local dummy data store.
+Internal OKR follow-up app built with Next.js and SharePoint list-backed persistence.
 
 ## What is implemented
 
@@ -47,10 +47,32 @@ http://localhost:3000/config
 
 ## Data source and persistence
 
-- Core dummy-store logic: [`lib/dummy-store.ts`](./lib/dummy-store.ts)
-- Venture/position persistence: [`.okr-ventures.json`](./.okr-ventures.json)
-- Objectives/KRs/check-ins persistence: [`.okr-content.json`](./.okr-content.json)
-- This is local dummy data for MVP iteration (not production storage)
+- Core business logic lives in [`lib/dummy-store.ts`](./lib/dummy-store.ts)
+- Runtime persistence is SharePoint-only via [`lib/sharepoint/server-storage.ts`](./lib/sharepoint/server-storage.ts)
+- If SharePoint server credentials are missing, API operations fail with a SharePoint configuration error.
+
+## SharePoint list storage (enabled mode)
+
+When these env vars are provided, the app hydrates data from SharePoint and syncs all CRUD changes back to SharePoint:
+
+- `AZURE_APP_TENANT_ID`
+- `AZURE_APP_CLIENT_ID`
+- `AZURE_APP_CLIENT_SECRET`
+- `SHAREPOINT_SITE_URL`
+- `SHAREPOINT_STORAGE_LIST` (optional, default: `OKR Follow Up Store`)
+
+Data is stored in atomic SharePoint lists (list names use `SHAREPOINT_STORAGE_LIST` as a prefix):
+
+- `<prefix> Ventures`
+- `<prefix> Departments`
+- `<prefix> Periods`
+- `<prefix> Objectives`
+- `<prefix> Key Results`
+- `<prefix> Check-Ins`
+- `<prefix> Config`
+
+On first run (if records do not exist), default seed data is written to these lists.
+If legacy snapshot records (`Title = ventures` / `Title = content`) are found in `<prefix>`, they are migrated automatically.
 
 ## API surface
 
@@ -76,10 +98,7 @@ http://localhost:3000/config
 - Missing check-in logic uses a 7-day threshold for active periods
 - Objective RAG derives from configurable thresholds
 
-## Next step (SharePoint transition)
+## SharePoint setup API
 
-When moving beyond dummy data:
-
-1. Keep existing API contracts stable
-2. Replace `lib/dummy-store.ts` operations with SharePoint/Graph-backed repositories
-3. Keep `lib/okr-rules.ts` as shared business-logic layer
+- `GET /api/sharepoint/setup`: returns SharePoint storage config status
+- `POST /api/sharepoint/setup`: ensures the target list exists and seeds initial data when needed

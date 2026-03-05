@@ -1,8 +1,9 @@
 "use client";
 
+import OwnerInput from "@/app/owner-input";
 import type { ObjectiveStatus, ObjectiveType, OkrCycle } from "@/lib/types";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type Props = {
   positionName: string;
@@ -16,6 +17,12 @@ type Props = {
 
 type ApiError = {
   error?: string;
+};
+
+type OwnerSuggestion = {
+  displayName: string;
+  principalName: string;
+  mail: string;
 };
 
 const OBJECTIVE_TYPE_OPTIONS: ObjectiveType[] = ["Aspirational", "Committed", "Learning"];
@@ -54,29 +61,50 @@ export default function DashboardObjectiveControls({
   const [isAdding, setIsAdding] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [title, setTitle] = useState<string>("");
-  const [objectiveCode, setObjectiveCode] = useState<string>("");
+  const [owner, setOwner] = useState<string>(defaultOwner);
+  const [ownerEmail, setOwnerEmail] = useState<string>("");
+  const [objectiveCodePreview, setObjectiveCodePreview] = useState<string>("");
   const [objectiveType, setObjectiveType] = useState<ObjectiveType>("Committed");
   const [status, setStatus] = useState<ObjectiveStatus>("NotStarted");
   const [progress, setProgress] = useState<string>("0");
   const [progressPct, setProgressPct] = useState<string>("0");
   const [okrCycle, setOkrCycle] = useState<OkrCycle>(defaultCycle);
+  const [blockers, setBlockers] = useState<string>("");
   const [keyRisksDependency, setKeyRisksDependency] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
-  const [lastUpdated, setLastUpdated] = useState<string>("");
   const [error, setError] = useState<string>("");
+
+  const loadObjectiveCodePreview = async (): Promise<void> => {
+    const params = new URLSearchParams({
+      department: positionName,
+      ventureName: strategicTheme,
+      strategicTheme
+    });
+
+    const response = await fetch(`/api/codes/objective?${params.toString()}`, { cache: "no-store" });
+    if (!response.ok) {
+      setObjectiveCodePreview("OBJ-001");
+      return;
+    }
+
+    const payload = (await response.json()) as { code?: string };
+    setObjectiveCodePreview(payload.code?.trim() || "OBJ-001");
+  };
 
   const openAdd = (): void => {
     setError("");
     setTitle("");
-    setObjectiveCode("");
+    setOwner(defaultOwner);
+    setOwnerEmail("");
+    void loadObjectiveCodePreview();
     setObjectiveType("Committed");
     setStatus("NotStarted");
     setProgress("0");
     setProgressPct("0");
     setOkrCycle(defaultCycle);
+    setBlockers("");
     setKeyRisksDependency("");
     setNotes("");
-    setLastUpdated("");
     setIsAdding(true);
   };
 
@@ -87,17 +115,28 @@ export default function DashboardObjectiveControls({
 
     setError("");
     setTitle("");
-    setObjectiveCode("");
+    setOwner(defaultOwner);
+    setOwnerEmail("");
+    setObjectiveCodePreview("");
     setObjectiveType("Committed");
     setStatus("NotStarted");
     setProgress("0");
     setProgressPct("0");
     setOkrCycle(defaultCycle);
+    setBlockers("");
     setKeyRisksDependency("");
     setNotes("");
-    setLastUpdated("");
     setIsAdding(false);
   };
+
+  useEffect(() => {
+    if (!isAdding) {
+      return;
+    }
+
+    void loadObjectiveCodePreview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdding, positionName, strategicTheme]);
 
   const createObjective = async (): Promise<void> => {
     if (isSaving) {
@@ -105,7 +144,6 @@ export default function DashboardObjectiveControls({
     }
 
     const trimmedTitle = title.trim();
-    const trimmedObjectiveCode = objectiveCode.trim();
     if (!trimmedTitle) {
       setError("Objective title is required.");
       return;
@@ -113,6 +151,11 @@ export default function DashboardObjectiveControls({
 
     if (!defaultPeriodKey) {
       setError("No period is configured.");
+      return;
+    }
+
+    if (!owner.trim()) {
+      setError("Owner is required.");
       return;
     }
 
@@ -130,8 +173,6 @@ export default function DashboardObjectiveControls({
 
     const resolvedProgressPct = hasProgressPct ? rawProgressPct : rawProgress;
     const normalizedProgressPct = Math.min(100, Math.max(0, resolvedProgressPct));
-    const lastCheckinAt = lastUpdated ? new Date(`${lastUpdated}T00:00:00`).toISOString() : null;
-
     setIsSaving(true);
     setError("");
 
@@ -141,15 +182,18 @@ export default function DashboardObjectiveControls({
         "content-type": "application/json"
       },
       body: JSON.stringify({
-        objectiveKey: trimmedObjectiveCode || undefined,
+        objectiveCode: objectiveCodePreview || undefined,
         periodKey: defaultPeriodKey,
         title: trimmedTitle,
         description: notes.trim(),
-        owner: defaultOwner,
+        owner: owner.trim(),
+        ownerEmail: ownerEmail.trim(),
         department: positionName,
+        ventureName: strategicTheme,
         strategicTheme,
         objectiveType,
         okrCycle,
+        blockers: blockers.trim(),
         keyRisksDependency: keyRisksDependency.trim(),
         notes: notes.trim(),
         status,
@@ -157,8 +201,7 @@ export default function DashboardObjectiveControls({
         confidence: "Medium",
         rag: "Amber",
         startDate,
-        endDate,
-        lastCheckinAt
+        endDate
       })
     });
     const payload = await readJson<ApiError>(response);
@@ -177,7 +220,7 @@ export default function DashboardObjectiveControls({
   return (
     <div className="objective-controls">
       <button
-        className={`tab-btn objective-add-btn ${isAdding ? "tab-btn-active" : ""}`}
+        className={`tab-btn tab-btn-add objective-add-btn ${isAdding ? "tab-btn-active" : ""}`}
         type="button"
         onClick={isAdding ? closeAdd : openAdd}
         disabled={isSaving}
@@ -196,12 +239,24 @@ export default function DashboardObjectiveControls({
             <div className="field">
               <label>Objective Code</label>
               <input
-                value={objectiveCode}
-                onChange={(event) => setObjectiveCode(event.target.value)}
-                placeholder="OKR-001"
+                value={objectiveCodePreview}
+                readOnly
                 aria-label={`Objective code for ${positionName}`}
                 disabled={isSaving}
               />
+            </div>
+            <OwnerInput
+              id={`objective-owner-${positionName.replace(/\s+/g, "-").toLowerCase()}`}
+              value={owner}
+              onChange={setOwner}
+              onSelectUser={(user: OwnerSuggestion | null) => {
+                setOwnerEmail(user ? user.mail || user.principalName : "");
+              }}
+              disabled={isSaving}
+            />
+            <div className="field">
+              <label>Owner Email</label>
+              <input value={ownerEmail} readOnly disabled={isSaving} />
             </div>
             <div className="field">
               <label>Objective</label>
@@ -270,9 +325,14 @@ export default function DashboardObjectiveControls({
                 ))}
               </select>
             </div>
-            <div className="field">
-              <label>Last updated</label>
-              <input type="date" value={lastUpdated} onChange={(event) => setLastUpdated(event.target.value)} disabled={isSaving} />
+            <div className="field objective-field-wide">
+              <label>Blockers</label>
+              <textarea
+                value={blockers}
+                onChange={(event) => setBlockers(event.target.value)}
+                placeholder="Current blockers"
+                disabled={isSaving}
+              />
             </div>
             <div className="field objective-field-wide">
               <label>Key Risks/Dependancy</label>
@@ -289,7 +349,7 @@ export default function DashboardObjectiveControls({
             </div>
           </div>
           <div className="actions">
-            <button className="btn" type="submit" disabled={isSaving}>
+            <button className="btn btn-add" type="submit" disabled={isSaving}>
               Add
             </button>
             <button className="tab-btn" type="button" onClick={closeAdd} disabled={isSaving}>

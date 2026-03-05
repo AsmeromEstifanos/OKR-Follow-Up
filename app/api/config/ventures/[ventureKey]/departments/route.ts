@@ -1,4 +1,4 @@
-import { addDepartmentToVenture } from "@/lib/dummy-store";
+import { addDepartmentToVenture } from "@/lib/store";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ type Context = {
 export async function POST(request: NextRequest, context: Context): Promise<NextResponse> {
   try {
     const payload = await request.json();
-    const venture = addDepartmentToVenture(context.params.ventureKey, payload);
+    const venture = await addDepartmentToVenture(context.params.ventureKey, payload);
 
     if (!venture) {
       return NextResponse.json({ error: "Venture not found." }, { status: 404 });

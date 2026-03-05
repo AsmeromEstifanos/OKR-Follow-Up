@@ -80,7 +80,7 @@ export default function DashboardFilters({
     <section className="section">
       <div className="section-header">
         <h2>Filters</h2>
-        <Link className="btn-link" href="/">
+        <Link className="btn-link" href={pathname}>
           Clear
         </Link>
       </div>

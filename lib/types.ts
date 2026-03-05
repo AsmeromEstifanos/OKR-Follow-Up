@@ -39,14 +39,18 @@ export interface Period {
 
 export interface Objective {
   objectiveKey: string;
+  objectiveCode?: string;
   periodKey: string;
   title: string;
   description: string;
   owner: string;
+  ownerEmail?: string;
   department: string;
+  ventureName?: string;
   strategicTheme: string;
   objectiveType: ObjectiveType;
   okrCycle: OkrCycle;
+  blockers?: string;
   keyRisksDependency: string;
   notes: string;
   status: ObjectiveStatus;
@@ -60,10 +64,12 @@ export interface Objective {
 
 export interface KeyResult {
   krKey: string;
+  krCode?: string;
   objectiveKey: string;
   periodKey: string;
   title: string;
   owner: string;
+  ownerEmail?: string;
   metricType: MetricType;
   baselineValue: number;
   targetValue: number;
@@ -72,6 +78,7 @@ export interface KeyResult {
   status: KrStatus;
   dueDate: string;
   checkInFrequency: CheckInFrequency;
+  blockers?: string;
   notes: string;
   lastCheckinAt: string | null;
 }
@@ -109,20 +116,26 @@ export interface ObjectiveWithContext {
 export type CreatePeriodInput = Omit<Period, "status"> & { status?: PeriodStatus };
 export type CreateObjectiveInput = Omit<Objective, "objectiveKey" | "progressPct" | "lastCheckinAt"> & {
   objectiveKey?: string;
+  objectiveCode?: string;
   progressPct?: number;
   lastCheckinAt?: string | null;
+  ventureName?: string;
 };
 export type UpdateObjectiveInput = Partial<
   Pick<
     Objective,
     | "periodKey"
+    | "objectiveCode"
     | "title"
     | "description"
     | "owner"
+    | "ownerEmail"
     | "department"
+    | "ventureName"
     | "strategicTheme"
     | "objectiveType"
     | "okrCycle"
+    | "blockers"
     | "keyRisksDependency"
     | "notes"
     | "status"
@@ -130,13 +143,17 @@ export type UpdateObjectiveInput = Partial<
     | "progressPct"
     | "startDate"
     | "endDate"
-    | "lastCheckinAt"
   >
 >;
-export type CreateKeyResultInput = Omit<KeyResult, "krKey" | "progressPct" | "lastCheckinAt" | "checkInFrequency" | "notes"> & {
+export type CreateKeyResultInput = Omit<
+  KeyResult,
+  "krKey" | "progressPct" | "lastCheckinAt" | "checkInFrequency" | "blockers" | "notes"
+> & {
   krKey?: string;
+  krCode?: string;
   progressPct?: number;
   checkInFrequency?: CheckInFrequency;
+  blockers?: string;
   notes?: string;
   lastCheckinAt?: string | null;
 };
@@ -144,9 +161,11 @@ export type UpdateKeyResultInput = Partial<
   Pick<
     KeyResult,
     | "objectiveKey"
+    | "krCode"
     | "periodKey"
     | "title"
     | "owner"
+    | "ownerEmail"
     | "metricType"
     | "baselineValue"
     | "targetValue"
@@ -154,8 +173,8 @@ export type UpdateKeyResultInput = Partial<
     | "status"
     | "dueDate"
     | "checkInFrequency"
+    | "blockers"
     | "notes"
-    | "lastCheckinAt"
   >
 >;
 export type CreateCheckInInput = Omit<CheckIn, "checkInAt" | "progressPctSnapshot"> & {

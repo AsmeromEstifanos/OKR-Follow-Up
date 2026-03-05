@@ -1,17 +1,25 @@
 "use client";
 
+import OwnerInput from "@/app/owner-input";
 import type { CheckInFrequency, KeyResult, KrStatus, MetricType } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 type Props = {
   keyResult: KeyResult;
+  objectiveKeyRisksDependency: string;
   latestUpdateNotes?: string;
   latestUpdatedAt?: string | null;
 };
 
 type ApiError = {
   error?: string;
+};
+
+type OwnerSuggestion = {
+  displayName: string;
+  principalName: string;
+  mail: string;
 };
 
 const METRIC_TYPE_OPTIONS: MetricType[] = ["Delivery", "Financial", "Operational", "People", "Quality"];
@@ -70,25 +78,6 @@ function toDateInput(value: string | null): string {
   return value.slice(0, 10);
 }
 
-function parseProgressValue(value: string): { current: number; target: number } | null {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  const parts = trimmed.split("/").map((part) => Number(part.trim()));
-  if (parts.length !== 2 || Number.isNaN(parts[0]) || Number.isNaN(parts[1])) {
-    return null;
-  }
-
-  const [current, target] = parts;
-  if (!Number.isFinite(current) || !Number.isFinite(target) || target === 0) {
-    return null;
-  }
-
-  return { current, target };
-}
-
 async function readJson<T>(response: Response): Promise<T | null> {
   const text = await response.text();
   if (!text) {
@@ -104,59 +93,64 @@ async function readJson<T>(response: Response): Promise<T | null> {
 
 export default function DashboardKeyResultRowEditor({
   keyResult,
+  objectiveKeyRisksDependency,
   latestUpdateNotes,
   latestUpdatedAt
 }: Props): JSX.Element {
   const router = useRouter();
+  const krCode = keyResult.krCode ?? keyResult.krKey;
 
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
 
+  const [code, setCode] = useState<string>(krCode);
   const [title, setTitle] = useState<string>(keyResult.title);
   const [owner, setOwner] = useState<string>(keyResult.owner);
+  const [ownerEmail, setOwnerEmail] = useState<string>(keyResult.ownerEmail ?? (keyResult.owner.includes("@") ? keyResult.owner : ""));
   const [metricType, setMetricType] = useState<MetricType>(keyResult.metricType);
   const [baselineValue, setBaselineValue] = useState<string>(String(keyResult.baselineValue));
   const [targetValue, setTargetValue] = useState<string>(String(keyResult.targetValue));
   const [currentValue, setCurrentValue] = useState<string>(String(keyResult.currentValue));
-  const [krProgress, setKrProgress] = useState<string>(`${keyResult.currentValue} / ${keyResult.targetValue}`);
   const [krProgressPct, setKrProgressPct] = useState<string>(String(keyResult.progressPct));
   const [status, setStatus] = useState<KrStatus>(keyResult.status);
   const [dueDate, setDueDate] = useState<string>(toDateInput(keyResult.dueDate));
   const [checkInFrequency, setCheckInFrequency] = useState<CheckInFrequency>(keyResult.checkInFrequency);
+  const [blockers, setBlockers] = useState<string>(keyResult.blockers ?? "");
   const [notes, setNotes] = useState<string>(keyResult.notes || latestUpdateNotes || "");
-  const [lastUpdated, setLastUpdated] = useState<string>(toDateInput(latestUpdatedAt ?? keyResult.lastCheckinAt));
 
   useEffect(() => {
+    setCode(krCode);
     setTitle(keyResult.title);
     setOwner(keyResult.owner);
+    setOwnerEmail(keyResult.ownerEmail ?? (keyResult.owner.includes("@") ? keyResult.owner : ""));
     setMetricType(keyResult.metricType);
     setBaselineValue(String(keyResult.baselineValue));
     setTargetValue(String(keyResult.targetValue));
     setCurrentValue(String(keyResult.currentValue));
-    setKrProgress(`${keyResult.currentValue} / ${keyResult.targetValue}`);
     setKrProgressPct(String(keyResult.progressPct));
     setStatus(keyResult.status);
     setDueDate(toDateInput(keyResult.dueDate));
     setCheckInFrequency(keyResult.checkInFrequency);
+    setBlockers(keyResult.blockers ?? "");
     setNotes(keyResult.notes || latestUpdateNotes || "");
-    setLastUpdated(toDateInput(latestUpdatedAt ?? keyResult.lastCheckinAt));
-  }, [keyResult, latestUpdateNotes, latestUpdatedAt]);
+  }, [keyResult, krCode, latestUpdateNotes, latestUpdatedAt]);
 
   const resetDraft = (): void => {
+    setCode(krCode);
     setTitle(keyResult.title);
     setOwner(keyResult.owner);
+    setOwnerEmail(keyResult.ownerEmail ?? (keyResult.owner.includes("@") ? keyResult.owner : ""));
     setMetricType(keyResult.metricType);
     setBaselineValue(String(keyResult.baselineValue));
     setTargetValue(String(keyResult.targetValue));
     setCurrentValue(String(keyResult.currentValue));
-    setKrProgress(`${keyResult.currentValue} / ${keyResult.targetValue}`);
     setKrProgressPct(String(keyResult.progressPct));
     setStatus(keyResult.status);
     setDueDate(toDateInput(keyResult.dueDate));
     setCheckInFrequency(keyResult.checkInFrequency);
+    setBlockers(keyResult.blockers ?? "");
     setNotes(keyResult.notes || latestUpdateNotes || "");
-    setLastUpdated(toDateInput(latestUpdatedAt ?? keyResult.lastCheckinAt));
   };
 
   const cancelEdit = (): void => {
@@ -189,20 +183,9 @@ export default function DashboardKeyResultRowEditor({
       return;
     }
 
-    const initialProgress = `${keyResult.currentValue} / ${keyResult.targetValue}`;
-    const progressChanged = krProgress.trim() !== initialProgress.trim();
     const progressPctChanged = krProgressPct.trim() !== String(keyResult.progressPct).trim();
 
-    if (progressChanged) {
-      const parsedProgress = parseProgressValue(krProgress);
-      if (!parsedProgress) {
-        setError("KR Progress must use 'current / target' format.");
-        return;
-      }
-
-      target = parsedProgress.target;
-      current = parsedProgress.current;
-    } else if (progressPctChanged) {
+    if (progressPctChanged) {
       const progressPctValue = Number(krProgressPct);
       if (!Number.isFinite(progressPctValue)) {
         setError("KR Progress % must be a number.");
@@ -222,7 +205,9 @@ export default function DashboardKeyResultRowEditor({
       },
       body: JSON.stringify({
         title: title.trim(),
+        krCode: code.trim(),
         owner: owner.trim(),
+        ownerEmail: ownerEmail.trim(),
         metricType,
         baselineValue: baseline,
         targetValue: target,
@@ -230,8 +215,8 @@ export default function DashboardKeyResultRowEditor({
         status,
         dueDate,
         checkInFrequency,
-        notes: notes.trim(),
-        lastCheckinAt: lastUpdated ? new Date(`${lastUpdated}T00:00:00.000Z`).toISOString() : null
+        blockers: blockers.trim(),
+        notes: notes.trim()
       })
     });
 
@@ -310,7 +295,16 @@ export default function DashboardKeyResultRowEditor({
             </button>
           ) : null}
         </div>
-        <div className="board-meta">{keyResult.krKey}</div>
+        <div className="board-meta">{krCode}</div>
+        {isEditing ? (
+          <input
+            className="objective-row-input"
+            value={code}
+            onChange={(event) => setCode(event.target.value)}
+            placeholder="KR-001"
+            disabled={isSaving}
+          />
+        ) : null}
         {isEditing ? (
           <div className="objective-row-actions">
             <button className="btn" type="button" onClick={() => void saveEdit()} disabled={isSaving}>
@@ -328,7 +322,26 @@ export default function DashboardKeyResultRowEditor({
       </td>
       <td>
         {isEditing ? (
-          <input className="objective-row-input" value={owner} onChange={(event) => setOwner(event.target.value)} disabled={isSaving} />
+          <>
+            <OwnerInput
+              id={`kr-owner-inline-${keyResult.krKey}`}
+              value={owner}
+              onChange={setOwner}
+              onSelectUser={(user: OwnerSuggestion | null) => {
+                setOwnerEmail(user ? user.mail || user.principalName : "");
+              }}
+              disabled={isSaving}
+              showLabel={false}
+              inputClassName="objective-row-input"
+            />
+            <input
+              className="objective-row-input"
+              value={ownerEmail}
+              readOnly
+              disabled={isSaving}
+              aria-label={`Owner email for ${keyResult.title}`}
+            />
+          </>
         ) : (
           keyResult.owner
         )}
@@ -397,19 +410,6 @@ export default function DashboardKeyResultRowEditor({
         {isEditing ? (
           <input
             className="objective-row-input"
-            value={krProgress}
-            onChange={(event) => setKrProgress(event.target.value)}
-            placeholder="current / target"
-            disabled={isSaving}
-          />
-        ) : (
-          `${formatMetricValue(keyResult.currentValue)} / ${formatMetricValue(keyResult.targetValue)}`
-        )}
-      </td>
-      <td>
-        {isEditing ? (
-          <input
-            className="objective-row-input"
             type="number"
             step="any"
             value={krProgressPct}
@@ -471,23 +471,26 @@ export default function DashboardKeyResultRowEditor({
       </td>
       <td>
         {isEditing ? (
+          <input
+            className="objective-row-input"
+            value={blockers}
+            onChange={(event) => setBlockers(event.target.value)}
+            disabled={isSaving}
+          />
+        ) : (
+          keyResult.blockers || "-"
+        )}
+      </td>
+      <td>{objectiveKeyRisksDependency || "-"}</td>
+      <td>
+        {isEditing ? (
           <input className="objective-row-input" value={notes} onChange={(event) => setNotes(event.target.value)} disabled={isSaving} />
         ) : (
           keyResult.notes || latestUpdateNotes || "-"
         )}
       </td>
       <td>
-        {isEditing ? (
-          <input
-            className="objective-row-input"
-            type="date"
-            value={lastUpdated}
-            onChange={(event) => setLastUpdated(event.target.value)}
-            disabled={isSaving}
-          />
-        ) : (
-          formatDate(latestUpdatedAt ?? keyResult.lastCheckinAt)
-        )}
+        {formatDate(latestUpdatedAt ?? keyResult.lastCheckinAt)}
       </td>
     </tr>
   );

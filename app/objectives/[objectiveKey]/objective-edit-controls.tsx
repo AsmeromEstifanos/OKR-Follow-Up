@@ -1,5 +1,6 @@
 "use client";
 
+import OwnerInput from "@/app/owner-input";
 import type { Confidence, Objective, ObjectiveStatus, ObjectiveType, OkrCycle } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -12,13 +13,16 @@ type ObjectiveEditControlsProps = {
 
 type ObjectiveDraft = {
   periodKey: string;
+  objectiveCode: string;
   title: string;
   description: string;
   owner: string;
+  ownerEmail: string;
   department: string;
   strategicTheme: string;
   objectiveType: ObjectiveType;
   okrCycle: OkrCycle;
+  blockers: string;
   keyRisksDependency: string;
   notes: string;
   status: ObjectiveStatus;
@@ -27,11 +31,16 @@ type ObjectiveDraft = {
   progressPct: string;
   startDate: string;
   endDate: string;
-  lastCheckinAt: string;
 };
 
 type ApiError = {
   error?: string;
+};
+
+type OwnerSuggestion = {
+  displayName: string;
+  principalName: string;
+  mail: string;
 };
 
 const OBJECTIVE_TYPE_OPTIONS: ObjectiveType[] = ["Aspirational", "Committed", "Learning"];
@@ -50,13 +59,16 @@ function toDateInput(value: string): string {
 function toDraft(objective: Objective): ObjectiveDraft {
   return {
     periodKey: objective.periodKey,
+    objectiveCode: objective.objectiveCode ?? objective.objectiveKey,
     title: objective.title,
     description: objective.description,
     owner: objective.owner,
+    ownerEmail: objective.ownerEmail ?? (objective.owner.includes("@") ? objective.owner : ""),
     department: objective.department,
     strategicTheme: objective.strategicTheme,
     objectiveType: objective.objectiveType,
     okrCycle: objective.okrCycle,
+    blockers: objective.blockers ?? "",
     keyRisksDependency: objective.keyRisksDependency,
     notes: objective.notes,
     status: objective.status,
@@ -64,8 +76,7 @@ function toDraft(objective: Objective): ObjectiveDraft {
     progressValue: String(Math.round(objective.progressPct)),
     progressPct: String(objective.progressPct),
     startDate: toDateInput(objective.startDate),
-    endDate: toDateInput(objective.endDate),
-    lastCheckinAt: toDateInput(objective.lastCheckinAt ?? "")
+    endDate: toDateInput(objective.endDate)
   };
 }
 
@@ -118,21 +129,23 @@ export default function ObjectiveEditControls({
       },
       body: JSON.stringify({
         periodKey: draft.periodKey.trim(),
+        objectiveCode: draft.objectiveCode.trim(),
         title: draft.title.trim(),
         description: draft.description.trim(),
         owner: draft.owner.trim(),
+        ownerEmail: draft.ownerEmail.trim(),
         department: draft.department.trim(),
         strategicTheme: draft.strategicTheme.trim(),
         objectiveType: draft.objectiveType,
         okrCycle: draft.okrCycle,
+        blockers: draft.blockers.trim(),
         keyRisksDependency: draft.keyRisksDependency.trim(),
         notes: draft.notes.trim(),
         status: draft.status,
         confidence: draft.confidence,
         progressPct: resolvedProgressPct,
         startDate: draft.startDate,
-        endDate: draft.endDate,
-        lastCheckinAt: draft.lastCheckinAt ? new Date(`${draft.lastCheckinAt}T00:00:00.000Z`).toISOString() : null
+        endDate: draft.endDate
       })
     });
 
@@ -168,8 +181,12 @@ export default function ObjectiveEditControls({
         <>
           <div className="config-grid">
             <div className="field">
-              <label htmlFor="objective-key-edit">Objective Key</label>
-              <input id="objective-key-edit" value={objective.objectiveKey} readOnly />
+              <label htmlFor="objective-code-edit">Objective Code</label>
+              <input
+                id="objective-code-edit"
+                value={draft.objectiveCode}
+                onChange={(event) => setDraft((current) => ({ ...current, objectiveCode: event.target.value }))}
+              />
             </div>
 
             <div className="field">
@@ -196,13 +213,20 @@ export default function ObjectiveEditControls({
               />
             </div>
 
+            <OwnerInput
+              id="objective-owner-edit"
+              value={draft.owner}
+              onChange={(next) => setDraft((current) => ({ ...current, owner: next }))}
+              onSelectUser={(user: OwnerSuggestion | null) => {
+                setDraft((current) => ({
+                  ...current,
+                  ownerEmail: user ? user.mail || user.principalName : ""
+                }));
+              }}
+            />
             <div className="field">
-              <label htmlFor="objective-owner-edit">Owner</label>
-              <input
-                id="objective-owner-edit"
-                value={draft.owner}
-                onChange={(event) => setDraft((current) => ({ ...current, owner: event.target.value }))}
-              />
+              <label htmlFor="objective-owner-email-edit">Owner Email</label>
+              <input id="objective-owner-email-edit" value={draft.ownerEmail} readOnly />
             </div>
 
             <div className="field">
@@ -331,15 +355,6 @@ export default function ObjectiveEditControls({
               />
             </div>
 
-            <div className="field">
-              <label htmlFor="objective-last-updated-edit">Last Updated</label>
-              <input
-                id="objective-last-updated-edit"
-                type="date"
-                value={draft.lastCheckinAt}
-                onChange={(event) => setDraft((current) => ({ ...current, lastCheckinAt: event.target.value }))}
-              />
-            </div>
           </div>
 
           <div className="field">
@@ -357,6 +372,15 @@ export default function ObjectiveEditControls({
               id="objective-notes-edit"
               value={draft.notes}
               onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))}
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="objective-blockers-edit">Blockers</label>
+            <textarea
+              id="objective-blockers-edit"
+              value={draft.blockers}
+              onChange={(event) => setDraft((current) => ({ ...current, blockers: event.target.value }))}
             />
           </div>
 

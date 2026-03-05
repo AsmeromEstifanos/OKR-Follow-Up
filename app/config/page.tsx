@@ -279,7 +279,7 @@ export default function ConfigPage(): JSX.Element {
           </div>
         </div>
         <div className="actions">
-          <button className="btn" type="button" onClick={() => void addVenture()} disabled={isBusy}>
+          <button className="btn btn-add" type="button" onClick={() => void addVenture()} disabled={isBusy}>
             Add Venture
           </button>
         </div>
@@ -346,7 +346,7 @@ export default function ConfigPage(): JSX.Element {
                 </div>
                 <div className="actions">
                   <button
-                    className="btn"
+                    className="btn btn-add"
                     type="button"
                     onClick={() => void addDepartment(venture.ventureKey)}
                     disabled={isBusy}

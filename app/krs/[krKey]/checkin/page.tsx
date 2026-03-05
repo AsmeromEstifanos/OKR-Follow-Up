@@ -128,7 +128,7 @@ export default function CheckInPage(): JSX.Element {
   return (
     <div>
       <h1 className="page-title">Update KR</h1>
-      <p className="subtitle">{kr ? `${kr.title} (${kr.krKey})` : "Loading key result..."}</p>
+      <p className="subtitle">{kr ? `${kr.title} (${kr.krCode ?? kr.krKey})` : "Loading key result..."}</p>
 
       <section className="section">
         {kr ? (

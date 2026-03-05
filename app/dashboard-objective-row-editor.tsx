@@ -1,5 +1,6 @@
 "use client";
 
+import OwnerInput from "@/app/owner-input";
 import type { Objective, ObjectiveStatus, ObjectiveType, OkrCycle } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -13,9 +14,27 @@ type ApiError = {
   error?: string;
 };
 
+type OwnerSuggestion = {
+  displayName: string;
+  principalName: string;
+  mail: string;
+};
+
 const OBJECTIVE_TYPE_OPTIONS: ObjectiveType[] = ["Aspirational", "Committed", "Learning"];
 const OBJECTIVE_STATUS_OPTIONS: ObjectiveStatus[] = ["NotStarted", "OnTrack", "AtRisk", "OffTrack", "Done"];
 const CYCLE_OPTIONS: OkrCycle[] = ["Q1", "Q2", "Q3", "Q4"];
+
+function ragPillClass(rag: string): string {
+  if (rag === "Green") {
+    return "pill pill-green";
+  }
+
+  if (rag === "Amber") {
+    return "pill pill-amber";
+  }
+
+  return "pill pill-red";
+}
 
 function formatStatus(value: ObjectiveStatus): string {
   if (value === "OnTrack") {
@@ -35,14 +54,6 @@ function formatStatus(value: ObjectiveStatus): string {
   }
 
   return value;
-}
-
-function toDateInput(value: string | null): string {
-  if (!value) {
-    return "";
-  }
-
-  return value.slice(0, 10);
 }
 
 function formatDate(value: string | null): string {
@@ -76,42 +87,51 @@ async function readJson<T>(response: Response): Promise<T | null> {
 
 export default function DashboardObjectiveRowEditor({ objective, keyResultsCount }: Props): JSX.Element {
   const router = useRouter();
+  const objectiveCode = objective.objectiveCode ?? objective.objectiveKey;
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
 
+  const [code, setCode] = useState<string>(objectiveCode);
   const [title, setTitle] = useState<string>(objective.title);
+  const [owner, setOwner] = useState<string>(objective.owner);
+  const [ownerEmail, setOwnerEmail] = useState<string>(
+    objective.ownerEmail ?? (objective.owner.includes("@") ? objective.owner : "")
+  );
   const [objectiveType, setObjectiveType] = useState<ObjectiveType>(objective.objectiveType);
   const [status, setStatus] = useState<ObjectiveStatus>(objective.status);
-  const [progress, setProgress] = useState<string>(String(Math.round(objective.progressPct)));
   const [progressPct, setProgressPct] = useState<string>(String(objective.progressPct));
   const [okrCycle, setOkrCycle] = useState<OkrCycle>(objective.okrCycle);
+  const [blockers, setBlockers] = useState<string>(objective.blockers ?? "");
   const [keyRisksDependency, setKeyRisksDependency] = useState<string>(objective.keyRisksDependency ?? "");
   const [notes, setNotes] = useState<string>(objective.notes ?? objective.description ?? "");
-  const [lastUpdated, setLastUpdated] = useState<string>(toDateInput(objective.lastCheckinAt));
 
   useEffect(() => {
+    setCode(objectiveCode);
     setTitle(objective.title);
+    setOwner(objective.owner);
+    setOwnerEmail(objective.ownerEmail ?? (objective.owner.includes("@") ? objective.owner : ""));
     setObjectiveType(objective.objectiveType);
     setStatus(objective.status);
-    setProgress(String(Math.round(objective.progressPct)));
     setProgressPct(String(objective.progressPct));
     setOkrCycle(objective.okrCycle);
+    setBlockers(objective.blockers ?? "");
     setKeyRisksDependency(objective.keyRisksDependency ?? "");
     setNotes(objective.notes ?? objective.description ?? "");
-    setLastUpdated(toDateInput(objective.lastCheckinAt));
-  }, [objective]);
+  }, [objective, objectiveCode]);
 
   const resetDraft = (): void => {
+    setCode(objectiveCode);
     setTitle(objective.title);
+    setOwner(objective.owner);
+    setOwnerEmail(objective.ownerEmail ?? (objective.owner.includes("@") ? objective.owner : ""));
     setObjectiveType(objective.objectiveType);
     setStatus(objective.status);
-    setProgress(String(Math.round(objective.progressPct)));
     setProgressPct(String(objective.progressPct));
     setOkrCycle(objective.okrCycle);
+    setBlockers(objective.blockers ?? "");
     setKeyRisksDependency(objective.keyRisksDependency ?? "");
     setNotes(objective.notes ?? objective.description ?? "");
-    setLastUpdated(toDateInput(objective.lastCheckinAt));
   };
 
   const cancelEdit = (): void => {
@@ -130,17 +150,18 @@ export default function DashboardObjectiveRowEditor({ objective, keyResultsCount
       return;
     }
 
-    const numericProgress = Number(progress);
-    const numericProgressPct = Number(progressPct);
-    const hasProgress = Number.isFinite(numericProgress);
-    const hasProgressPct = Number.isFinite(numericProgressPct);
-
-    if (!hasProgress && !hasProgressPct) {
-      setError("Provide Progress or Progress %.");
+    if (!owner.trim()) {
+      setError("Objective owner is required.");
       return;
     }
 
-    const resolvedProgressPct = hasProgressPct ? numericProgressPct : numericProgress;
+    const numericProgressPct = Number(progressPct);
+    if (!Number.isFinite(numericProgressPct)) {
+      setError("Provide Progress %.");
+      return;
+    }
+
+    const resolvedProgressPct = numericProgressPct;
 
     setIsSaving(true);
     setError("");
@@ -151,14 +172,17 @@ export default function DashboardObjectiveRowEditor({ objective, keyResultsCount
         "content-type": "application/json"
       },
       body: JSON.stringify({
+        objectiveCode: code.trim(),
         title: title.trim(),
+        owner: owner.trim(),
+        ownerEmail: ownerEmail.trim(),
         objectiveType,
         status,
         progressPct: clampPercent(resolvedProgressPct),
         okrCycle,
+        blockers: blockers.trim(),
         keyRisksDependency: keyRisksDependency.trim(),
-        notes: notes.trim(),
-        lastCheckinAt: lastUpdated ? new Date(`${lastUpdated}T00:00:00.000Z`).toISOString() : null
+        notes: notes.trim()
       })
     });
 
@@ -241,7 +265,16 @@ export default function DashboardObjectiveRowEditor({ objective, keyResultsCount
             </button>
           ) : null}
         </div>
-        <div className="board-meta">{objective.objectiveKey}</div>
+        <div className="board-meta">{objectiveCode}</div>
+        {isEditing ? (
+          <input
+            className="objective-row-input"
+            value={code}
+            onChange={(event) => setCode(event.target.value)}
+            placeholder="OBJ-001"
+            disabled={isSaving}
+          />
+        ) : null}
         {isEditing ? (
           <div className="objective-row-actions">
             <button className="btn" type="button" onClick={() => void saveEdit()} disabled={isSaving}>
@@ -256,6 +289,23 @@ export default function DashboardObjectiveRowEditor({ objective, keyResultsCount
           </div>
         ) : null}
         {error ? <p className="message danger objective-row-error">{error}</p> : null}
+      </td>
+      <td>
+        {isEditing ? (
+          <OwnerInput
+            id={`objective-owner-inline-${objective.objectiveKey}`}
+            value={owner}
+            onChange={setOwner}
+            onSelectUser={(user: OwnerSuggestion | null) => {
+              setOwnerEmail(user ? user.mail || user.principalName : "");
+            }}
+            disabled={isSaving}
+            showLabel={false}
+            inputClassName="objective-row-input"
+          />
+        ) : (
+          objective.owner || "-"
+        )}
       </td>
       <td>
         {isEditing ? (
@@ -294,19 +344,7 @@ export default function DashboardObjectiveRowEditor({ objective, keyResultsCount
         )}
       </td>
       <td>
-        {isEditing ? (
-          <input
-            className="objective-row-input"
-            type="number"
-            step="any"
-            value={progress}
-            onChange={(event) => setProgress(event.target.value)}
-            placeholder="Progress"
-            disabled={isSaving}
-          />
-        ) : (
-          Math.round(objective.progressPct)
-        )}
+        <span className={ragPillClass(objective.rag)}>{objective.rag}</span>
       </td>
       <td>
         {isEditing ? (
@@ -345,6 +383,19 @@ export default function DashboardObjectiveRowEditor({ objective, keyResultsCount
         {isEditing ? (
           <input
             className="objective-row-input"
+            value={blockers}
+            onChange={(event) => setBlockers(event.target.value)}
+            placeholder="Blockers"
+            disabled={isSaving}
+          />
+        ) : (
+          objective.blockers || "-"
+        )}
+      </td>
+      <td>
+        {isEditing ? (
+          <input
+            className="objective-row-input"
             value={keyRisksDependency}
             onChange={(event) => setKeyRisksDependency(event.target.value)}
             placeholder="Key Risks/Dependancy"
@@ -368,17 +419,7 @@ export default function DashboardObjectiveRowEditor({ objective, keyResultsCount
         )}
       </td>
       <td>
-        {isEditing ? (
-          <input
-            className="objective-row-input"
-            type="date"
-            value={lastUpdated}
-            onChange={(event) => setLastUpdated(event.target.value)}
-            disabled={isSaving}
-          />
-        ) : (
-          formatDate(objective.lastCheckinAt)
-        )}
+        {formatDate(objective.lastCheckinAt)}
       </td>
     </tr>
   );

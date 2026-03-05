@@ -5,7 +5,7 @@ import DashboardPositionRowControls from "@/app/dashboard-position-row-controls"
 import DashboardObjectiveRowEditor from "@/app/dashboard-objective-row-editor";
 import DashboardKeyResultRowEditor from "@/app/dashboard-key-result-row-editor";
 import DashboardVentureTabs from "@/app/dashboard-venture-tabs";
-import { DEMO_OWNER, getConfig, listCheckIns, listKeyResults, listObjectives, listPeriods } from "@/lib/dummy-store";
+import { getConfig, listCheckIns, listKeyResults, listObjectives, listPeriods } from "@/lib/store";
 import type { CheckIn, Objective, OkrCycle, Venture } from "@/lib/types";
 import { Fragment, type CSSProperties } from "react";
 
@@ -79,10 +79,20 @@ function isObjectiveInVenture(objective: Objective, venture: Venture): boolean {
   });
 }
 
+function getMostRecentTimestamp(primary: string | null | undefined, fallback: string | null | undefined): string | null {
+  const candidates = [primary, fallback]
+    .map((value) => (typeof value === "string" ? value : ""))
+    .filter((value) => Boolean(value))
+    .sort((left, right) => left.localeCompare(right));
+
+  return candidates.at(-1) ?? null;
+}
+
 export default async function DashboardPage({ searchParams }: DashboardPageProps): Promise<JSX.Element> {
   const resolvedSearchParams = await resolveSearchParams(searchParams);
-  const ventures = getConfig().ventures;
-  const periods = listPeriods();
+  const config = await getConfig();
+  const ventures = config.ventures;
+  const periods = await listPeriods();
   const defaultPeriod = periods.find((period) => period.status === "Active") ?? periods[0];
   const defaultCycle = defaultPeriod ? getCycleFromDate(defaultPeriod.startDate) : "Q1";
   const rootVenture = ventures.find((venture) => venture.name.toLowerCase() === "svh") ?? ventures[0];
@@ -91,7 +101,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     ? ventures.find((venture) => venture.ventureKey.toLowerCase() === requestedVentureKey.toLowerCase()) ?? rootVenture
     : rootVenture;
 
-  const allObjectives = listObjectives().filter((objective) => {
+  const allObjectives = (await listObjectives()).filter((objective) => {
     if (!selectedVenture) {
       return true;
     }
@@ -100,9 +110,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   });
 
   const objectiveKeys = new Set(allObjectives.map((objective) => objective.objectiveKey.toLowerCase()));
-  const allKeyResults = listKeyResults().filter((kr) => objectiveKeys.has(kr.objectiveKey.toLowerCase()));
+  const allKeyResults = (await listKeyResults()).filter((kr) => objectiveKeys.has(kr.objectiveKey.toLowerCase()));
 
-  const latestCheckinByKr = listCheckIns().reduce<Map<string, CheckIn>>((map, checkIn) => {
+  const latestCheckinByKr = (await listCheckIns()).reduce<Map<string, CheckIn>>((map, checkIn) => {
     if (!map.has(checkIn.krKey)) {
       map.set(checkIn.krKey, checkIn);
     }
@@ -165,7 +175,6 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               existingPositionNames={configuredPositions}
             />
           </div>
-          <span className="meta">Objective rows with Key Results</span>
         </div>
         {ownerSections.length === 0 ? (
           <p className="meta">No objectives available.</p>
@@ -196,7 +205,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                         defaultStartDate={defaultPeriod?.startDate}
                         defaultEndDate={defaultPeriod?.endDate}
                         defaultCycle={defaultCycle}
-                        defaultOwner={DEMO_OWNER}
+                        defaultOwner=""
                       />
                     </div>
                   </div>
@@ -205,11 +214,13 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                       <thead>
                         <tr>
                           <th>Objective</th>
+                          <th>Owner</th>
                           <th>Objective Type</th>
                           <th>Health</th>
-                          <th>Progress</th>
+                          <th>RAG</th>
                           <th>Progress %</th>
                           <th>OKR Cycle</th>
+                          <th>Blockers</th>
                           <th>Key Risks/Dependancy</th>
                           <th>Notes</th>
                           <th>Last updated</th>
@@ -218,7 +229,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                       <tbody>
                         {section.objectives.length === 0 ? (
                           <tr className="board-empty-row">
-                            <td colSpan={9}>No objectives yet for this position.</td>
+                            <td colSpan={11}>No objectives yet for this position.</td>
                           </tr>
                         ) : section.objectives.map((objective) => {
                           const keyResults = keyResultsByObjective.get(objective.objectiveKey) ?? [];
@@ -226,7 +237,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                             <Fragment key={objective.objectiveKey}>
                               <DashboardObjectiveRowEditor objective={objective} keyResultsCount={keyResults.length} />
                               <tr className="board-details-row">
-                                <td colSpan={9}>
+                                <td colSpan={11}>
                                   <details className="board-objective-details">
                                     <summary className="board-objective-summary">
                                       Key Results ({keyResults.length})
@@ -236,7 +247,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                                         objectiveKey={objective.objectiveKey}
                                         periodKey={objective.periodKey}
                                         defaultDueDate={objective.endDate}
-                                        defaultOwner={objective.owner || DEMO_OWNER}
+                                        defaultOwner={objective.owner || ""}
                                       />
                                       <table className="board-subtable">
                                         <thead>
@@ -247,11 +258,12 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                                             <th>Baseline Value</th>
                                             <th>Target Value</th>
                                             <th>Current Value</th>
-                                            <th>KR Progress</th>
                                             <th>KR Progress %</th>
                                             <th>KR Status</th>
                                             <th>Due Date</th>
                                             <th>Check-in Frequency</th>
+                                            <th>Blockers</th>
+                                            <th>Key Risks/Dependancy</th>
                                             <th>Notes</th>
                                             <th>Last updated</th>
                                           </tr>
@@ -259,7 +271,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                                         <tbody>
                                           {keyResults.length === 0 ? (
                                             <tr className="board-empty-row" key={`${objective.objectiveKey}-empty`}>
-                                              <td colSpan={13}>No key results for this objective yet.</td>
+                                              <td colSpan={14}>No key results for this objective yet.</td>
                                             </tr>
                                           ) : (
                                             keyResults.map((kr) => {
@@ -268,8 +280,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                                                 <DashboardKeyResultRowEditor
                                                   key={kr.krKey}
                                                   keyResult={kr}
+                                                  objectiveKeyRisksDependency={objective.keyRisksDependency}
                                                   latestUpdateNotes={latest?.updateNotes}
-                                                  latestUpdatedAt={latest?.checkInAt ?? kr.lastCheckinAt}
+                                                  latestUpdatedAt={getMostRecentTimestamp(latest?.checkInAt, kr.lastCheckinAt)}
                                                 />
                                               );
                                             })

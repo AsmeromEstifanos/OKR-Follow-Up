@@ -1,6 +1,4 @@
 import { clampPercent, computeKrProgress, computeObjectiveProgress, isMissingCheckin } from "@/lib/okr-rules";
-import fs from "node:fs";
-import path from "node:path";
 import type {
   AppConfig,
   CheckInFrequency,
@@ -46,129 +44,33 @@ type PersistedContent = {
   checkIns: CheckIn[];
 };
 
-export const DEMO_OWNER = "alex@contoso.com";
+export type StoreSnapshot = {
+  ventures: Venture[];
+  content: PersistedContent;
+};
+
+export const DEMO_OWNER = "Alex Johnson";
 
 const storeContainer = globalThis as {
   __okrDummyStore?: StoreState;
 };
 
-const venturesFilePath = path.join(process.cwd(), ".okr-ventures.json");
-const contentFilePath = path.join(process.cwd(), ".okr-content.json");
-
-function isValidVentureShape(value: unknown): value is Venture {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const venture = value as Partial<Venture>;
-  return (
-    typeof venture.ventureKey === "string" &&
-    typeof venture.name === "string" &&
-    Array.isArray(venture.departments) &&
-    venture.departments.every((department) => {
-      return (
-        department &&
-        typeof department === "object" &&
-        typeof (department as Partial<Department>).departmentKey === "string" &&
-        typeof (department as Partial<Department>).name === "string"
-      );
-    })
-  );
-}
-
 function readPersistedVentures(): Venture[] | null {
-  try {
-    if (!fs.existsSync(venturesFilePath)) {
-      return null;
-    }
-
-    const raw = fs.readFileSync(venturesFilePath, "utf8");
-    if (!raw.trim()) {
-      return null;
-    }
-
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) {
-      return null;
-    }
-
-    const ventures = parsed.filter(isValidVentureShape).map((venture) => {
-      return {
-        ventureKey: venture.ventureKey,
-        name: venture.name,
-        departments: venture.departments.map((department) => ({
-          departmentKey: department.departmentKey,
-          name: department.name
-        }))
-      };
-    });
-
-    return ventures.length > 0 ? ventures : null;
-  } catch {
-    return null;
-  }
+  // Local file persistence is intentionally disabled in SharePoint-only mode.
+  return null;
 }
 
-function persistVentures(store: StoreState): void {
-  try {
-    fs.writeFileSync(venturesFilePath, JSON.stringify(store.config.ventures, null, 2), "utf8");
-  } catch {
-    // Best-effort persistence for local dummy data.
-  }
+function persistVentures(_store: StoreState): void {
+  // Local file persistence is intentionally disabled in SharePoint-only mode.
 }
 
 function readPersistedContent(): PersistedContent | null {
-  try {
-    if (!fs.existsSync(contentFilePath)) {
-      return null;
-    }
-
-    const raw = fs.readFileSync(contentFilePath, "utf8");
-    if (!raw.trim()) {
-      return null;
-    }
-
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object") {
-      return null;
-    }
-
-    const payload = parsed as Partial<PersistedContent>;
-    if (
-      !Array.isArray(payload.periods) ||
-      !Array.isArray(payload.objectives) ||
-      !Array.isArray(payload.keyResults) ||
-      !Array.isArray(payload.checkIns)
-    ) {
-      return null;
-    }
-
-    return {
-      ragThresholds: payload.ragThresholds,
-      periods: payload.periods as Period[],
-      objectives: payload.objectives as Objective[],
-      keyResults: payload.keyResults as KeyResult[],
-      checkIns: payload.checkIns as CheckIn[]
-    };
-  } catch {
-    return null;
-  }
+  // Local file persistence is intentionally disabled in SharePoint-only mode.
+  return null;
 }
 
-function persistContent(store: StoreState): void {
-  try {
-    const payload: PersistedContent = {
-      ragThresholds: store.config.ragThresholds,
-      periods: store.periods,
-      objectives: store.objectives,
-      keyResults: store.keyResults,
-      checkIns: store.checkIns
-    };
-
-    fs.writeFileSync(contentFilePath, JSON.stringify(payload, null, 2), "utf8");
-  } catch {
-    // Best-effort persistence for local dummy data.
-  }
+function persistContent(_store: StoreState): void {
+  // Local file persistence is intentionally disabled in SharePoint-only mode.
 }
 
 function persistStore(store: StoreState): void {
@@ -202,6 +104,10 @@ function normalizeName(value: string): string {
   return value.trim();
 }
 
+function normalizeEmail(value: string): string {
+  return value.trim();
+}
+
 function toSlug(value: string): string {
   const slug = value
     .trim()
@@ -227,12 +133,111 @@ function buildUniqueKey(existingKeys: Set<string>, prefix: string, name: string)
   return `${base}-${suffix}`;
 }
 
-function normalizeObjectiveKeyPrefix(value: string): string {
-  if (/^OBJ-/i.test(value)) {
-    return `OKR-${value.slice(4)}`;
+function parseNumberedCode(value: string, prefix: string): number | null {
+  const match = new RegExp(`^${prefix}-(\\d+)$`, "i").exec(value.trim());
+  if (!match) {
+    return null;
   }
 
-  return value;
+  const parsed = Number(match[1]);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function formatNumberedCode(prefix: string, sequence: number): string {
+  const normalized = Math.max(1, Math.floor(sequence));
+  return `${prefix}-${String(normalized).padStart(3, "0")}`;
+}
+
+function findVentureForObjectiveScope(
+  store: StoreState,
+  departmentName: string,
+  ventureName: string,
+  strategicTheme: string
+): Venture | undefined {
+  const normalizedDepartment = normalizeName(departmentName).toLowerCase();
+  const normalizedVentureName = normalizeName(ventureName).toLowerCase();
+  const normalizedTheme = normalizeName(strategicTheme).toLowerCase();
+
+  if (normalizedVentureName) {
+    const byVentureName = store.config.ventures.find((venture) => venture.name.toLowerCase() === normalizedVentureName);
+    if (byVentureName) {
+      return byVentureName;
+    }
+  }
+
+  const venturesWithDepartment = store.config.ventures.filter((venture) => {
+    return venture.departments.some((department) => department.name.toLowerCase() === normalizedDepartment);
+  });
+
+  if (normalizedTheme) {
+    const exact = venturesWithDepartment.find((venture) => venture.name.toLowerCase() === normalizedTheme);
+    if (exact) {
+      return exact;
+    }
+
+    const byThemeOnly = store.config.ventures.find((venture) => venture.name.toLowerCase() === normalizedTheme);
+    if (byThemeOnly) {
+      return byThemeOnly;
+    }
+  }
+
+  return venturesWithDepartment[0];
+}
+
+function buildObjectiveScopeKey(
+  store: StoreState,
+  departmentName: string,
+  ventureName: string,
+  strategicTheme: string
+): string {
+  const venture = findVentureForObjectiveScope(store, departmentName, ventureName, strategicTheme);
+  const ventureScope = venture?.ventureKey.toLowerCase() || normalizeName(strategicTheme).toLowerCase() || "global";
+  const departmentScope = normalizeName(departmentName).toLowerCase() || "general";
+  return `${ventureScope}::${departmentScope}`;
+}
+
+function getNextObjectiveCode(store: StoreState, departmentName: string, ventureName: string, strategicTheme: string): string {
+  const scopeKey = buildObjectiveScopeKey(store, departmentName, ventureName, strategicTheme);
+  let maxSequence = 0;
+
+  store.objectives.forEach((objective) => {
+    if (
+      buildObjectiveScopeKey(store, objective.department, objective.ventureName ?? "", objective.strategicTheme) !== scopeKey
+    ) {
+      return;
+    }
+
+    const candidate = normalizeKey(objective.objectiveCode ?? objective.objectiveKey);
+    const parsed = parseNumberedCode(candidate, "OBJ");
+    if (parsed && parsed > maxSequence) {
+      maxSequence = parsed;
+    }
+  });
+
+  return formatNumberedCode("OBJ", maxSequence + 1);
+}
+
+function getNextKrCode(store: StoreState, objectiveKey: string): string {
+  const normalizedObjectiveKey = objectiveKey.toLowerCase();
+  let maxSequence = 0;
+
+  store.keyResults.forEach((kr) => {
+    if (kr.objectiveKey.toLowerCase() !== normalizedObjectiveKey) {
+      return;
+    }
+
+    const candidate = normalizeKey(kr.krCode ?? kr.krKey);
+    const parsed = parseNumberedCode(candidate, "KR");
+    if (parsed && parsed > maxSequence) {
+      maxSequence = parsed;
+    }
+  });
+
+  return formatNumberedCode("KR", maxSequence + 1);
 }
 
 function getOkrCycleFromDate(value: string): OkrCycle {
@@ -404,71 +409,29 @@ function recalcObjectiveInStore(store: StoreState, objectiveKey: string): void {
   if (objectiveKrs.length === 0) {
     objective.progressPct = 0;
     objective.rag = getRagFromProgress(0, store.config.ragThresholds);
-    objective.lastCheckinAt = null;
     return;
   }
 
   const progressPct = computeObjectiveProgress(objectiveKrs);
   objective.progressPct = progressPct;
   objective.rag = getRagFromProgress(progressPct, store.config.ragThresholds);
-
-  const latestCheckin = objectiveKrs
-    .map((kr) => kr.lastCheckinAt)
-    .filter((value): value is string => Boolean(value))
-    .sort((left, right) => left.localeCompare(right))
-    .at(-1);
-
-  objective.lastCheckinAt = latestCheckin ?? null;
 }
 
 function recalcAllObjectivesInStore(store: StoreState): void {
   store.objectives.forEach((objective) => recalcObjectiveInStore(store, objective.objectiveKey));
 }
 
-function migrateObjectiveKeyPrefixes(store: StoreState): void {
-  const existingObjectiveKeys = new Set(store.objectives.map((objective) => objective.objectiveKey.toLowerCase()));
-  const oldToNew = new Map<string, string>();
-
-  store.objectives.forEach((objective) => {
-    const nextObjectiveKey = normalizeObjectiveKeyPrefix(objective.objectiveKey);
-    if (nextObjectiveKey.toLowerCase() === objective.objectiveKey.toLowerCase()) {
-      return;
-    }
-
-    const hasCollision = existingObjectiveKeys.has(nextObjectiveKey.toLowerCase());
-    if (hasCollision) {
-      return;
-    }
-
-    existingObjectiveKeys.delete(objective.objectiveKey.toLowerCase());
-    existingObjectiveKeys.add(nextObjectiveKey.toLowerCase());
-    oldToNew.set(objective.objectiveKey.toLowerCase(), nextObjectiveKey);
-    objective.objectiveKey = nextObjectiveKey;
-  });
-
-  if (oldToNew.size === 0) {
-    return;
-  }
-
-  store.keyResults.forEach((keyResult) => {
-    const mapped = oldToNew.get(keyResult.objectiveKey.toLowerCase());
-    if (mapped) {
-      keyResult.objectiveKey = mapped;
-    }
-  });
-
-  store.checkIns.forEach((checkIn) => {
-    const mapped = oldToNew.get(checkIn.objectiveKey.toLowerCase());
-    if (mapped) {
-      checkIn.objectiveKey = mapped;
-    }
-  });
-
-  recalcAllObjectivesInStore(store);
-}
-
 function migrateObjectiveDefaults(store: StoreState): void {
   store.objectives.forEach((objective) => {
+    if (!objective.objectiveCode) {
+      objective.objectiveCode = objective.objectiveKey;
+    }
+
+    if (!objective.ventureName) {
+      const venture = findVentureForObjectiveScope(store, objective.department, "", objective.strategicTheme);
+      objective.ventureName = venture?.name ?? "";
+    }
+
     if (!objective.objectiveType) {
       objective.objectiveType = "Committed";
     }
@@ -485,6 +448,10 @@ function migrateObjectiveDefaults(store: StoreState): void {
       objective.okrCycle = getOkrCycleFromDate(objective.startDate);
     }
 
+    if (objective.blockers === undefined || objective.blockers === null) {
+      objective.blockers = "";
+    }
+
     if (!objective.keyRisksDependency) {
       objective.keyRisksDependency = "";
     }
@@ -492,19 +459,35 @@ function migrateObjectiveDefaults(store: StoreState): void {
     if (!objective.notes) {
       objective.notes = objective.description ?? "";
     }
+
+    if (typeof objective.lastCheckinAt !== "string" && objective.lastCheckinAt !== null) {
+      objective.lastCheckinAt = null;
+    }
   });
 }
 
 function migrateKrDefaults(store: StoreState): void {
   store.keyResults.forEach((kr) => {
+    if (!kr.krCode) {
+      kr.krCode = kr.krKey;
+    }
+
     if (!kr.checkInFrequency) {
       kr.checkInFrequency = "Weekly";
     }
 
     kr.metricType = normalizeMetricType(kr.metricType);
 
+    if (kr.blockers === undefined || kr.blockers === null) {
+      kr.blockers = "";
+    }
+
     if (kr.notes === undefined || kr.notes === null) {
       kr.notes = "";
+    }
+
+    if (typeof kr.lastCheckinAt !== "string" && kr.lastCheckinAt !== null) {
+      kr.lastCheckinAt = null;
     }
   });
 }
@@ -651,7 +634,7 @@ function migrateSeedVentures(store: StoreState): void {
       periodKey: activePeriod.periodKey,
       title: "Drive group governance cadence",
       description: "Improve group-level planning and executive accountability rhythms.",
-      owner: "sarah@contoso.com",
+      owner: "Sarah Rahman",
       department: "President",
       strategicTheme: "SVH",
       objectiveType: "Committed",
@@ -675,7 +658,7 @@ function migrateSeedVentures(store: StoreState): void {
       objectiveKey: "OKR-004",
       periodKey: activePeriod.periodKey,
       title: "Complete 12 monthly governance packs",
-      owner: "sarah@contoso.com",
+      owner: "Sarah Rahman",
       metricType: "Delivery",
       baselineValue: 0,
       targetValue: 12,
@@ -696,7 +679,7 @@ function migrateSeedVentures(store: StoreState): void {
       periodKey: activePeriod.periodKey,
       objectiveKey: "OKR-004",
       krKey: "KR-005",
-      owner: "sarah@contoso.com",
+      owner: "Sarah Rahman",
       status: "OnTrack",
       confidence: "Medium",
       updateNotes: "Executive review pack cadence is stable and improving.",
@@ -797,7 +780,7 @@ function buildSeedStore(): StoreState {
       periodKey: "P-CURRENT",
       title: "Lift product adoption",
       description: "Increase activation and weekly usage of core workflows.",
-      owner: "priya@contoso.com",
+      owner: "Priya Nair",
       department: "VP Product",
       strategicTheme: "EASE Engineering",
       objectiveType: "Aspirational",
@@ -837,7 +820,7 @@ function buildSeedStore(): StoreState {
       periodKey: "P-CURRENT",
       title: "Drive group governance cadence",
       description: "Improve group-level planning and executive accountability rhythms.",
-      owner: "sarah@contoso.com",
+      owner: "Sarah Rahman",
       department: "President",
       strategicTheme: "SVH",
       objectiveType: "Committed",
@@ -894,7 +877,7 @@ function buildSeedStore(): StoreState {
       objectiveKey: "OKR-002",
       periodKey: "P-CURRENT",
       title: "Increase weekly active teams to 120",
-      owner: "priya@contoso.com",
+      owner: "Priya Nair",
       metricType: "People",
       baselineValue: 70,
       targetValue: 120,
@@ -928,7 +911,7 @@ function buildSeedStore(): StoreState {
       objectiveKey: "OKR-004",
       periodKey: "P-CURRENT",
       title: "Complete 12 monthly governance packs",
-      owner: "sarah@contoso.com",
+      owner: "Sarah Rahman",
       metricType: "Delivery",
       baselineValue: 0,
       targetValue: 12,
@@ -982,7 +965,7 @@ function buildSeedStore(): StoreState {
       periodKey: "P-CURRENT",
       objectiveKey: "OKR-002",
       krKey: "KR-003",
-      owner: "priya@contoso.com",
+      owner: "Priya Nair",
       status: "AtRisk",
       confidence: "Low",
       updateNotes: "Top-of-funnel traffic is stable, but trial conversion has slowed.",
@@ -997,7 +980,7 @@ function buildSeedStore(): StoreState {
       periodKey: "P-CURRENT",
       objectiveKey: "OKR-004",
       krKey: "KR-005",
-      owner: "sarah@contoso.com",
+      owner: "Sarah Rahman",
       status: "OnTrack",
       confidence: "Medium",
       updateNotes: "Executive review pack cadence is stable and improving.",
@@ -1012,6 +995,63 @@ function buildSeedStore(): StoreState {
   const store: StoreState = { config, periods, objectives, keyResults, checkIns };
   recalcAllObjectivesInStore(store);
   return store;
+}
+
+function applyStoreMigrations(store: StoreState): void {
+  migrateSeedVentures(store);
+  migrateObjectiveDefaults(store);
+  migrateKrDefaults(store);
+  persistStore(store);
+}
+
+function toStoreSnapshot(store: StoreState): StoreSnapshot {
+  return {
+    ventures: clone(store.config.ventures),
+    content: {
+      ragThresholds: clone(store.config.ragThresholds),
+      periods: clone(store.periods),
+      objectives: clone(store.objectives),
+      keyResults: clone(store.keyResults),
+      checkIns: clone(store.checkIns)
+    }
+  };
+}
+
+function fromStoreSnapshot(snapshot: StoreSnapshot): StoreState {
+  const store = buildSeedStore();
+  store.config.ventures = clone(snapshot.ventures);
+  if (snapshot.content.ragThresholds) {
+    store.config.ragThresholds = {
+      greenMin: Number(snapshot.content.ragThresholds.greenMin),
+      amberMin: Number(snapshot.content.ragThresholds.amberMin)
+    };
+  }
+
+  store.periods = clone(snapshot.content.periods);
+  store.objectives = clone(snapshot.content.objectives);
+  store.keyResults = clone(snapshot.content.keyResults);
+  store.checkIns = clone(snapshot.content.checkIns);
+  return store;
+}
+
+export function getSeedSnapshot(): StoreSnapshot {
+  const seed = buildSeedStore();
+  applyStoreMigrations(seed);
+  return toStoreSnapshot(seed);
+}
+
+export function hydrateStoreFromSnapshot(snapshot: StoreSnapshot): void {
+  const hydrated = fromStoreSnapshot(snapshot);
+  applyStoreMigrations(hydrated);
+  storeContainer.__okrDummyStore = hydrated;
+}
+
+export function exportStoreSnapshot(): StoreSnapshot {
+  return toStoreSnapshot(getStore());
+}
+
+export function resetStoreState(): void {
+  storeContainer.__okrDummyStore = undefined;
 }
 
 function getStore(): StoreState {
@@ -1042,11 +1082,7 @@ function getStore(): StoreState {
     storeContainer.__okrDummyStore.checkIns = persistedContent.checkIns;
   }
 
-  migrateObjectiveKeyPrefixes(storeContainer.__okrDummyStore);
-  migrateSeedVentures(storeContainer.__okrDummyStore);
-  migrateObjectiveDefaults(storeContainer.__okrDummyStore);
-  migrateKrDefaults(storeContainer.__okrDummyStore);
-  persistStore(storeContainer.__okrDummyStore);
+  applyStoreMigrations(storeContainer.__okrDummyStore);
   return storeContainer.__okrDummyStore;
 }
 
@@ -1435,34 +1471,32 @@ export function getObjectiveWithContext(objectiveKey: string): ObjectiveWithCont
 
 export function createObjective(input: CreateObjectiveInput): Objective {
   const store = getStore();
-  const requestedObjectiveKey = normalizeObjectiveKeyPrefix(normalizeKey(input.objectiveKey ?? ""));
-  let objectiveKey = requestedObjectiveKey;
-
-  if (requestedObjectiveKey) {
-    if (store.objectives.some((objective) => objective.objectiveKey.toLowerCase() === requestedObjectiveKey.toLowerCase())) {
-      throw new Error(`Objective '${requestedObjectiveKey}' already exists.`);
-    }
-  } else {
-    const existingKeys = new Set(store.objectives.map((objective) => objective.objectiveKey.toLowerCase()));
-    objectiveKey = buildUniqueKey(existingKeys, "OKR", input.title);
-  }
+  const requestedObjectiveCode = normalizeKey(input.objectiveCode ?? input.objectiveKey ?? "");
+  const existingKeys = new Set(store.objectives.map((objective) => objective.objectiveKey.toLowerCase()));
+  const objectiveKey = buildUniqueKey(existingKeys, "OKR", input.title);
 
   ensurePeriodExists(store, input.periodKey);
   assertDepartmentExists(store, input.department);
   const strategicTheme = normalizeName(input.strategicTheme || "");
+  const blockers = normalizeName(input.blockers || "");
   const notes = normalizeName(input.notes || input.description || "");
   const cycle = normalizeOkrCycle(input.okrCycle);
 
   const objective: Objective = {
     objectiveKey,
+    objectiveCode:
+      requestedObjectiveCode || getNextObjectiveCode(store, input.department, input.ventureName ?? "", input.strategicTheme),
     periodKey: input.periodKey,
     title: input.title,
     description: input.description || notes,
     owner: input.owner,
+    ownerEmail: normalizeEmail(input.ownerEmail ?? "") || undefined,
     department: input.department,
+    ventureName: input.ventureName ?? findVentureForObjectiveScope(store, input.department, "", input.strategicTheme)?.name ?? "",
     strategicTheme: strategicTheme || "General",
     objectiveType: (input.objectiveType ?? "Committed") as ObjectiveType,
     okrCycle: cycle,
+    blockers,
     keyRisksDependency: input.keyRisksDependency || "",
     notes,
     status: input.status,
@@ -1471,7 +1505,7 @@ export function createObjective(input: CreateObjectiveInput): Objective {
     rag: input.rag,
     startDate: input.startDate,
     endDate: input.endDate,
-    lastCheckinAt: input.lastCheckinAt ?? null
+    lastCheckinAt: nowIso()
   };
 
   store.objectives.push(objective);
@@ -1493,6 +1527,10 @@ export function updateObjective(objectiveKey: string, patch: UpdateObjectiveInpu
     objective.periodKey = patch.periodKey;
   }
 
+  if (patch.objectiveCode !== undefined) {
+    objective.objectiveCode = normalizeKey(patch.objectiveCode) || objective.objectiveKey;
+  }
+
   if (patch.title !== undefined) {
     objective.title = normalizeName(patch.title);
   }
@@ -1505,8 +1543,16 @@ export function updateObjective(objectiveKey: string, patch: UpdateObjectiveInpu
     objective.owner = normalizeName(patch.owner);
   }
 
+  if (patch.ownerEmail !== undefined) {
+    objective.ownerEmail = normalizeEmail(patch.ownerEmail) || undefined;
+  }
+
   if (patch.department !== undefined) {
     objective.department = normalizeName(patch.department);
+  }
+
+  if (patch.ventureName !== undefined) {
+    objective.ventureName = normalizeName(patch.ventureName);
   }
 
   if (patch.strategicTheme !== undefined) {
@@ -1519,6 +1565,10 @@ export function updateObjective(objectiveKey: string, patch: UpdateObjectiveInpu
 
   if (patch.okrCycle !== undefined) {
     objective.okrCycle = normalizeOkrCycle(patch.okrCycle);
+  }
+
+  if (patch.blockers !== undefined) {
+    objective.blockers = normalizeName(patch.blockers);
   }
 
   if (patch.keyRisksDependency !== undefined) {
@@ -1550,13 +1600,11 @@ export function updateObjective(objectiveKey: string, patch: UpdateObjectiveInpu
     objective.endDate = normalizeName(patch.endDate);
   }
 
-  if (patch.lastCheckinAt !== undefined) {
-    objective.lastCheckinAt = patch.lastCheckinAt;
-  }
-
-  if (patch.progressPct === undefined && patch.lastCheckinAt === undefined) {
+  if (patch.progressPct === undefined) {
     recalcObjectiveInStore(store, objective.objectiveKey);
   }
+
+  objective.lastCheckinAt = nowIso();
 
   persistStore(store);
   return clone(objective);
@@ -1636,17 +1684,9 @@ export function getKeyResult(krKey: string): KeyResult | null {
 
 export function createKeyResult(input: CreateKeyResultInput): KeyResult {
   const store = getStore();
-  const requestedKrKey = normalizeKey(input.krKey ?? "");
-  let krKey = requestedKrKey;
-
-  if (requestedKrKey) {
-    if (store.keyResults.some((kr) => kr.krKey.toLowerCase() === requestedKrKey.toLowerCase())) {
-      throw new Error(`Key Result '${requestedKrKey}' already exists.`);
-    }
-  } else {
-    const existingKeys = new Set(store.keyResults.map((kr) => kr.krKey.toLowerCase()));
-    krKey = buildUniqueKey(existingKeys, "KR", input.title);
-  }
+  const requestedKrCode = normalizeKey(input.krCode ?? input.krKey ?? "");
+  const existingKeys = new Set(store.keyResults.map((kr) => kr.krKey.toLowerCase()));
+  const krKey = buildUniqueKey(existingKeys, "KR", input.title);
 
   const objective = ensureObjectiveExists(store, input.objectiveKey);
   ensurePeriodExists(store, input.periodKey);
@@ -1654,14 +1694,17 @@ export function createKeyResult(input: CreateKeyResultInput): KeyResult {
   const progressPct =
     input.progressPct ?? computeKrProgress(input.baselineValue, input.targetValue, input.currentValue);
   const checkInFrequency = normalizeCheckInFrequency(input.checkInFrequency);
+  const blockers = normalizeName(input.blockers ?? "");
   const notes = normalizeName(input.notes ?? "");
 
   const keyResult: KeyResult = {
     krKey,
+    krCode: requestedKrCode || getNextKrCode(store, input.objectiveKey),
     objectiveKey: input.objectiveKey,
     periodKey: input.periodKey,
     title: input.title,
     owner: input.owner,
+    ownerEmail: normalizeEmail(input.ownerEmail ?? "") || undefined,
     metricType: normalizeMetricType(input.metricType),
     baselineValue: input.baselineValue,
     targetValue: input.targetValue,
@@ -1670,14 +1713,25 @@ export function createKeyResult(input: CreateKeyResultInput): KeyResult {
     status: input.status,
     dueDate: input.dueDate,
     checkInFrequency,
+    blockers,
     notes,
-    lastCheckinAt: input.lastCheckinAt ?? null
+    lastCheckinAt: nowIso()
   };
 
   store.keyResults.push(keyResult);
   recalcObjectiveInStore(store, objective.objectiveKey);
   persistStore(store);
   return clone(keyResult);
+}
+
+export function previewNextObjectiveCode(departmentName: string, ventureName: string, strategicTheme: string): string {
+  const store = getStore();
+  return getNextObjectiveCode(store, departmentName, ventureName, strategicTheme);
+}
+
+export function previewNextKrCode(objectiveKey: string): string {
+  const store = getStore();
+  return getNextKrCode(store, objectiveKey);
 }
 
 export function updateKeyResult(krKey: string, patch: UpdateKeyResultInput): KeyResult | null {
@@ -1700,12 +1754,20 @@ export function updateKeyResult(krKey: string, patch: UpdateKeyResultInput): Key
     keyResult.objectiveKey = patch.objectiveKey;
   }
 
+  if (patch.krCode !== undefined) {
+    keyResult.krCode = normalizeKey(patch.krCode) || keyResult.krKey;
+  }
+
   if (patch.title !== undefined) {
     keyResult.title = normalizeName(patch.title);
   }
 
   if (patch.owner !== undefined) {
     keyResult.owner = normalizeName(patch.owner);
+  }
+
+  if (patch.ownerEmail !== undefined) {
+    keyResult.ownerEmail = normalizeEmail(patch.ownerEmail) || undefined;
   }
 
   if (patch.metricType !== undefined) {
@@ -1736,12 +1798,12 @@ export function updateKeyResult(krKey: string, patch: UpdateKeyResultInput): Key
     keyResult.checkInFrequency = normalizeCheckInFrequency(patch.checkInFrequency);
   }
 
-  if (patch.notes !== undefined) {
-    keyResult.notes = normalizeName(patch.notes);
+  if (patch.blockers !== undefined) {
+    keyResult.blockers = normalizeName(patch.blockers);
   }
 
-  if (patch.lastCheckinAt !== undefined) {
-    keyResult.lastCheckinAt = patch.lastCheckinAt;
+  if (patch.notes !== undefined) {
+    keyResult.notes = normalizeName(patch.notes);
   }
 
   keyResult.progressPct = computeKrProgress(keyResult.baselineValue, keyResult.targetValue, keyResult.currentValue);
@@ -1749,6 +1811,8 @@ export function updateKeyResult(krKey: string, patch: UpdateKeyResultInput): Key
   if (patch.status === undefined) {
     keyResult.status = getStatusFromProgress(keyResult.progressPct);
   }
+
+  keyResult.lastCheckinAt = nowIso();
 
   if (previousObjectiveKey.toLowerCase() !== keyResult.objectiveKey.toLowerCase()) {
     store.checkIns.forEach((checkIn) => {
@@ -1858,6 +1922,7 @@ export function createCheckIn(input: CreateCheckInInput): CheckIn {
   keyResult.currentValue = currentValueSnapshot;
   keyResult.progressPct = progressPctSnapshot;
   keyResult.status = status;
+  keyResult.blockers = normalizeName(input.blockers);
   keyResult.notes = normalizeName(input.updateNotes);
   keyResult.lastCheckinAt = checkInAt;
 

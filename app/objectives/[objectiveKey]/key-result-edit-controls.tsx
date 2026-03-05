@@ -1,11 +1,13 @@
 "use client";
 
+import OwnerInput from "@/app/owner-input";
 import type { CheckInFrequency, KeyResult, KrStatus, MetricType } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 type ObjectiveOption = {
   objectiveKey: string;
+  objectiveCode: string;
   title: string;
 };
 
@@ -16,10 +18,12 @@ type KeyResultEditControlsProps = {
 };
 
 type KeyResultDraft = {
+  krCode: string;
   objectiveKey: string;
   periodKey: string;
   title: string;
   owner: string;
+  ownerEmail: string;
   metricType: MetricType;
   baselineValue: string;
   targetValue: string;
@@ -29,12 +33,18 @@ type KeyResultDraft = {
   status: KrStatus;
   dueDate: string;
   checkInFrequency: CheckInFrequency;
+  blockers: string;
   notes: string;
-  lastCheckinAt: string;
 };
 
 type ApiError = {
   error?: string;
+};
+
+type OwnerSuggestion = {
+  displayName: string;
+  principalName: string;
+  mail: string;
 };
 
 const METRIC_TYPE_OPTIONS: MetricType[] = ["Delivery", "Financial", "Operational", "People", "Quality"];
@@ -51,10 +61,12 @@ function toDateInput(value: string | null): string {
 
 function toDraft(keyResult: KeyResult): KeyResultDraft {
   return {
+    krCode: keyResult.krCode ?? keyResult.krKey,
     objectiveKey: keyResult.objectiveKey,
     periodKey: keyResult.periodKey,
     title: keyResult.title,
     owner: keyResult.owner,
+    ownerEmail: keyResult.ownerEmail ?? (keyResult.owner.includes("@") ? keyResult.owner : ""),
     metricType: keyResult.metricType,
     baselineValue: String(keyResult.baselineValue),
     targetValue: String(keyResult.targetValue),
@@ -64,8 +76,8 @@ function toDraft(keyResult: KeyResult): KeyResultDraft {
     status: keyResult.status,
     dueDate: toDateInput(keyResult.dueDate),
     checkInFrequency: keyResult.checkInFrequency,
-    notes: keyResult.notes,
-    lastCheckinAt: toDateInput(keyResult.lastCheckinAt)
+    blockers: keyResult.blockers ?? "",
+    notes: keyResult.notes
   };
 }
 
@@ -157,10 +169,12 @@ export default function KeyResultEditControls({
         "content-type": "application/json"
       },
       body: JSON.stringify({
+        krCode: draft.krCode.trim(),
         objectiveKey: draft.objectiveKey.trim(),
         periodKey: draft.periodKey.trim(),
         title: draft.title.trim(),
         owner: draft.owner.trim(),
+        ownerEmail: draft.ownerEmail.trim(),
         metricType: draft.metricType,
         baselineValue,
         targetValue,
@@ -168,8 +182,8 @@ export default function KeyResultEditControls({
         status: draft.status,
         dueDate: draft.dueDate,
         checkInFrequency: draft.checkInFrequency,
-        notes: draft.notes.trim(),
-        lastCheckinAt: draft.lastCheckinAt ? new Date(`${draft.lastCheckinAt}T00:00:00.000Z`).toISOString() : null
+        blockers: draft.blockers.trim(),
+        notes: draft.notes.trim()
       })
     });
 
@@ -200,8 +214,12 @@ export default function KeyResultEditControls({
       <div className="kr-edit-content">
         <div className="config-grid">
           <div className="field">
-            <label htmlFor={`kr-key-${keyResult.krKey}`}>KR Key</label>
-            <input id={`kr-key-${keyResult.krKey}`} value={keyResult.krKey} readOnly />
+            <label htmlFor={`kr-code-${keyResult.krKey}`}>KR Code</label>
+            <input
+              id={`kr-code-${keyResult.krKey}`}
+              value={draft.krCode}
+              onChange={(event) => setDraft((current) => ({ ...current, krCode: event.target.value }))}
+            />
           </div>
 
           <div className="field">
@@ -213,7 +231,7 @@ export default function KeyResultEditControls({
             >
               {objectiveOptions.map((option) => (
                 <option key={option.objectiveKey} value={option.objectiveKey}>
-                  {option.title} ({option.objectiveKey})
+                  {option.title} ({option.objectiveCode})
                 </option>
               ))}
             </select>
@@ -243,13 +261,20 @@ export default function KeyResultEditControls({
             />
           </div>
 
+          <OwnerInput
+            id={`kr-owner-${keyResult.krKey}`}
+            value={draft.owner}
+            onChange={(next) => setDraft((current) => ({ ...current, owner: next }))}
+            onSelectUser={(user: OwnerSuggestion | null) => {
+              setDraft((current) => ({
+                ...current,
+                ownerEmail: user ? user.mail || user.principalName : ""
+              }));
+            }}
+          />
           <div className="field">
-            <label htmlFor={`kr-owner-${keyResult.krKey}`}>Owner</label>
-            <input
-              id={`kr-owner-${keyResult.krKey}`}
-              value={draft.owner}
-              onChange={(event) => setDraft((current) => ({ ...current, owner: event.target.value }))}
-            />
+            <label htmlFor={`kr-owner-email-${keyResult.krKey}`}>Owner Email</label>
+            <input id={`kr-owner-email-${keyResult.krKey}`} value={draft.ownerEmail} readOnly />
           </div>
 
           <div className="field">
@@ -360,15 +385,15 @@ export default function KeyResultEditControls({
             />
           </div>
 
-          <div className="field">
-            <label htmlFor={`kr-last-checkin-${keyResult.krKey}`}>Last Check-in</label>
-            <input
-              id={`kr-last-checkin-${keyResult.krKey}`}
-              type="date"
-              value={draft.lastCheckinAt}
-              onChange={(event) => setDraft((current) => ({ ...current, lastCheckinAt: event.target.value }))}
-            />
-          </div>
+        </div>
+
+        <div className="field">
+          <label htmlFor={`kr-blockers-${keyResult.krKey}`}>Blockers</label>
+          <textarea
+            id={`kr-blockers-${keyResult.krKey}`}
+            value={draft.blockers}
+            onChange={(event) => setDraft((current) => ({ ...current, blockers: event.target.value }))}
+          />
         </div>
 
         <div className="field">

@@ -1,4 +1,4 @@
-import { updatePeriod } from "@/lib/dummy-store";
+import { updatePeriod } from "@/lib/store";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ type Context = {
 export async function PATCH(request: NextRequest, context: Context): Promise<NextResponse> {
   try {
     const patch = await request.json();
-    const period = updatePeriod(context.params.periodKey, patch);
+    const period = await updatePeriod(context.params.periodKey, patch);
 
     if (!period) {
       return NextResponse.json({ error: "Period not found." }, { status: 404 });
