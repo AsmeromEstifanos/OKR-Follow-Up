@@ -1,6 +1,9 @@
 "use client";
 
 import OwnerInput from "@/app/owner-input";
+import useCurrentUserEmail from "@/app/use-current-user-email";
+import { apiPath } from "@/lib/base-path";
+import { resolveOwnerEmail, resolveOwnerName } from "@/lib/owner";
 import type { Confidence, Objective, ObjectiveStatus, ObjectiveType, OkrCycle } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -9,6 +12,9 @@ type ObjectiveEditControlsProps = {
   objective: Objective;
   periodOptions: string[];
   departmentOptions: string[];
+  objectiveTypeOptions: ObjectiveType[];
+  objectiveStatusOptions: ObjectiveStatus[];
+  objectiveCycleOptions: OkrCycle[];
 };
 
 type ObjectiveDraft = {
@@ -43,9 +49,6 @@ type OwnerSuggestion = {
   mail: string;
 };
 
-const OBJECTIVE_TYPE_OPTIONS: ObjectiveType[] = ["Aspirational", "Committed", "Learning"];
-const OKR_CYCLE_OPTIONS: OkrCycle[] = ["Q1", "Q2", "Q3", "Q4"];
-const OBJECTIVE_STATUS_OPTIONS: ObjectiveStatus[] = ["NotStarted", "OnTrack", "AtRisk", "OffTrack", "Done"];
 const CONFIDENCE_OPTIONS: Confidence[] = ["High", "Medium", "Low"];
 
 function toDateInput(value: string): string {
@@ -62,8 +65,8 @@ function toDraft(objective: Objective): ObjectiveDraft {
     objectiveCode: objective.objectiveCode ?? objective.objectiveKey,
     title: objective.title,
     description: objective.description,
-    owner: objective.owner,
-    ownerEmail: objective.ownerEmail ?? (objective.owner.includes("@") ? objective.owner : ""),
+    owner: resolveOwnerName(objective.owner),
+    ownerEmail: resolveOwnerEmail(objective.owner, objective.ownerEmail),
     department: objective.department,
     strategicTheme: objective.strategicTheme,
     objectiveType: objective.objectiveType,
@@ -83,9 +86,13 @@ function toDraft(objective: Objective): ObjectiveDraft {
 export default function ObjectiveEditControls({
   objective,
   periodOptions,
-  departmentOptions
+  departmentOptions,
+  objectiveTypeOptions,
+  objectiveStatusOptions,
+  objectiveCycleOptions
 }: ObjectiveEditControlsProps): JSX.Element {
   const router = useRouter();
+  const currentUserEmail = useCurrentUserEmail();
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [draft, setDraft] = useState<ObjectiveDraft>(() => toDraft(objective));
@@ -122,10 +129,11 @@ export default function ObjectiveEditControls({
 
     const resolvedProgressPct = hasProgressPct ? parsedProgressPct : parsedProgressValue;
 
-    const response = await fetch(`/api/objectives/${encodeURIComponent(objective.objectiveKey)}`, {
+    const response = await fetch(apiPath(`/api/objectives/${encodeURIComponent(objective.objectiveKey)}`), {
       method: "PATCH",
       headers: {
-        "content-type": "application/json"
+        "content-type": "application/json",
+        "x-user-email": currentUserEmail
       },
       body: JSON.stringify({
         periodKey: draft.periodKey.trim(),
@@ -215,6 +223,7 @@ export default function ObjectiveEditControls({
 
             <OwnerInput
               id="objective-owner-edit"
+              label="Owner (optional)"
               value={draft.owner}
               onChange={(next) => setDraft((current) => ({ ...current, owner: next }))}
               onSelectUser={(user: OwnerSuggestion | null) => {
@@ -223,6 +232,7 @@ export default function ObjectiveEditControls({
                   ownerEmail: user ? user.mail || user.principalName : ""
                 }));
               }}
+              placeholder="Owner (optional)"
             />
             <div className="field">
               <label htmlFor="objective-owner-email-edit">Owner Email</label>
@@ -260,7 +270,7 @@ export default function ObjectiveEditControls({
                 value={draft.objectiveType}
                 onChange={(event) => setDraft((current) => ({ ...current, objectiveType: event.target.value as ObjectiveType }))}
               >
-                {OBJECTIVE_TYPE_OPTIONS.map((option) => (
+                {objectiveTypeOptions.map((option) => (
                   <option key={option} value={option}>
                     {option}
                   </option>
@@ -275,7 +285,7 @@ export default function ObjectiveEditControls({
                 value={draft.okrCycle}
                 onChange={(event) => setDraft((current) => ({ ...current, okrCycle: event.target.value as OkrCycle }))}
               >
-                {OKR_CYCLE_OPTIONS.map((option) => (
+                {objectiveCycleOptions.map((option) => (
                   <option key={option} value={option}>
                     {option}
                   </option>
@@ -290,7 +300,7 @@ export default function ObjectiveEditControls({
                 value={draft.status}
                 onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value as ObjectiveStatus }))}
               >
-                {OBJECTIVE_STATUS_OPTIONS.map((option) => (
+                {objectiveStatusOptions.map((option) => (
                   <option key={option} value={option}>
                     {option}
                   </option>

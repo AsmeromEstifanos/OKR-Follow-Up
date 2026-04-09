@@ -1,3 +1,4 @@
+import { withOperationProgress } from "@/app/api/_utils/with-operation-progress";
 import { createCheckIn, listCheckIns } from "@/lib/store";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -17,12 +18,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  try {
-    const body = await request.json();
-    const checkIn = await createCheckIn(body);
-    return NextResponse.json(checkIn, { status: 201 });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to create check-in.";
-    return NextResponse.json({ error: message }, { status: 400 });
-  }
+  return withOperationProgress(request, "Saving check-in", async () => {
+    try {
+      const body = await request.json();
+      const checkIn = await createCheckIn(body);
+      return NextResponse.json(checkIn, { status: 201 });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to create check-in.";
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+  });
 }

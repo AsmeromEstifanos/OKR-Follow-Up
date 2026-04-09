@@ -1,7 +1,8 @@
 import DashboardFilters from "@/app/dashboard-filters";
+import { objectiveBelongsToVenture } from "@/lib/objective-scope";
 import { getConfig, listKeyResults, listObjectives } from "@/lib/store";
 import type { Objective, ObjectiveStatus, Venture } from "@/lib/types";
-import Link from "next/link";
+import { Fragment } from "react";
 
 export const dynamic = "force-dynamic";
 
@@ -20,20 +21,28 @@ type DashboardAnalyticsPageProps = {
 type Summary = {
   objectiveCount: number;
   keyResultCount: number;
-  onTrackCount: number;
-  atRiskCount: number;
-  offTrackCount: number;
+  statusCounts: Record<string, number>;
   avgProgress: number;
 };
 
-type VentureRow = Summary & {
-  ventureKey: string;
-  ventureName: string;
+type KrSummary = {
+  keyResultCount: number;
+  statusCounts: Record<string, number>;
+  avgProgress: number;
 };
 
-type DepartmentRow = Summary & {
+type VentureRow = {
+  ventureKey: string;
+  ventureName: string;
+  objectiveSummary: Summary;
+  krSummary: KrSummary;
+};
+
+type DepartmentRow = {
   ventureName: string;
   departmentName: string;
+  objectiveSummary: Summary;
+  krSummary: KrSummary;
 };
 
 function getSearchParamValue(value: string | string[] | undefined): string | undefined {
@@ -58,18 +67,15 @@ async function resolveSearchParams(
   return searchParams;
 }
 
-function objectiveBelongsToVenture(objective: Objective, venture: Venture): boolean {
-  return venture.departments.some((department) => department.name.toLowerCase() === objective.department.toLowerCase());
-}
-
 function computeSummary(objectives: Objective[], keyResultCountByObjective: Map<string, number>): Summary {
   const objectiveCount = objectives.length;
   const keyResultCount = objectives.reduce((total, objective) => {
     return total + (keyResultCountByObjective.get(objective.objectiveKey.toLowerCase()) ?? 0);
   }, 0);
-  const onTrackCount = objectives.filter((objective) => objective.status === "OnTrack" || objective.status === "Done").length;
-  const atRiskCount = objectives.filter((objective) => objective.status === "AtRisk").length;
-  const offTrackCount = objectives.filter((objective) => objective.status === "OffTrack").length;
+  const statusCounts = objectives.reduce<Record<string, number>>((counts, objective) => {
+    counts[objective.status] = (counts[objective.status] ?? 0) + 1;
+    return counts;
+  }, {});
   const avgProgress =
     objectiveCount > 0
       ? objectives.reduce((sum, objective) => sum + (Number.isFinite(objective.progressPct) ? objective.progressPct : 0), 0) / objectiveCount
@@ -78,9 +84,25 @@ function computeSummary(objectives: Objective[], keyResultCountByObjective: Map<
   return {
     objectiveCount,
     keyResultCount,
-    onTrackCount,
-    atRiskCount,
-    offTrackCount,
+    statusCounts,
+    avgProgress
+  };
+}
+
+function computeKrSummary(keyResults: Array<{ status: string; progressPct: number }>): KrSummary {
+  const keyResultCount = keyResults.length;
+  const statusCounts = keyResults.reduce<Record<string, number>>((counts, keyResult) => {
+    counts[keyResult.status] = (counts[keyResult.status] ?? 0) + 1;
+    return counts;
+  }, {});
+  const avgProgress =
+    keyResultCount > 0
+      ? keyResults.reduce((sum, keyResult) => sum + (Number.isFinite(keyResult.progressPct) ? keyResult.progressPct : 0), 0) / keyResultCount
+      : 0;
+
+  return {
+    keyResultCount,
+    statusCounts,
     avgProgress
   };
 }
@@ -121,12 +143,37 @@ function toStatusClass(status: ObjectiveStatus): string {
   return "analytics-status-notstarted";
 }
 
-function clampPercent(value: number): number {
-  if (!Number.isFinite(value)) {
-    return 0;
+function buildStatusCards<T extends { status: string }>(
+  items: T[],
+  statusOptions: string[]
+): Array<{
+  status: string;
+  label: string;
+  count: number;
+  className: string;
+}> {
+  return statusOptions.map((statusOption) => ({
+    status: statusOption,
+    label: formatStatus(statusOption),
+    count: items.filter((item) => item.status === statusOption).length,
+    className: toStatusClass(statusOption)
+  }));
+}
+
+function formatProgressPercent(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "0%";
   }
 
-  return Math.max(0, Math.min(100, value));
+  if (value < 1) {
+    return `${value.toFixed(2)}%`;
+  }
+
+  if (value < 10) {
+    return `${value.toFixed(1)}%`;
+  }
+
+  return `${Math.round(value)}%`;
 }
 
 export default async function DashboardAnalyticsPage({
@@ -163,18 +210,29 @@ export default async function DashboardAnalyticsPage({
   });
 
   const summary = computeSummary(filteredObjectives, keyResultCountByObjective);
+  const filteredObjectiveKeys = new Set(filteredObjectives.map((objective) => objective.objectiveKey.toLowerCase()));
+  const filteredKeyResults = allKeyResults.filter((keyResult) => filteredObjectiveKeys.has(keyResult.objectiveKey.toLowerCase()));
+  const krSummary = computeKrSummary(filteredKeyResults);
+  const tableStatusColumns = Array.from(
+    new Set([...config.fieldOptions.objectiveStatuses, ...config.fieldOptions.keyResultStatuses])
+  );
+  const objectiveStatusCards = buildStatusCards(filteredObjectives, config.fieldOptions.objectiveStatuses);
+  const keyResultStatusCards = buildStatusCards(filteredKeyResults, config.fieldOptions.keyResultStatuses);
 
   const ventureRowsAll = ventures.map<VentureRow>((venture) => {
     const scopedObjectives = filteredObjectives.filter((objective) => objectiveBelongsToVenture(objective, venture));
+    const scopedObjectiveKeys = new Set(scopedObjectives.map((objective) => objective.objectiveKey.toLowerCase()));
+    const scopedKeyResults = filteredKeyResults.filter((keyResult) => scopedObjectiveKeys.has(keyResult.objectiveKey.toLowerCase()));
     return {
       ventureKey: venture.ventureKey,
       ventureName: venture.name,
-      ...computeSummary(scopedObjectives, keyResultCountByObjective)
+      objectiveSummary: computeSummary(scopedObjectives, keyResultCountByObjective),
+      krSummary: computeKrSummary(scopedKeyResults)
     };
   });
   const ventureRows = selectedVenture
     ? ventureRowsAll.filter((row) => row.ventureKey.toLowerCase() === selectedVenture.ventureKey.toLowerCase())
-    : ventureRowsAll.filter((row) => row.objectiveCount > 0);
+    : ventureRowsAll.filter((row) => row.objectiveSummary.objectiveCount > 0 || row.krSummary.keyResultCount > 0);
 
   const departmentRowsAll = ventures.flatMap<DepartmentRow>((venture) =>
     venture.departments.map((department) => {
@@ -183,11 +241,14 @@ export default async function DashboardAnalyticsPage({
           objective.department.toLowerCase() === department.name.toLowerCase() && objectiveBelongsToVenture(objective, venture)
         );
       });
+      const scopedObjectiveKeys = new Set(scopedObjectives.map((objective) => objective.objectiveKey.toLowerCase()));
+      const scopedKeyResults = filteredKeyResults.filter((keyResult) => scopedObjectiveKeys.has(keyResult.objectiveKey.toLowerCase()));
 
       return {
         ventureName: venture.name,
         departmentName: department.name,
-        ...computeSummary(scopedObjectives, keyResultCountByObjective)
+        objectiveSummary: computeSummary(scopedObjectives, keyResultCountByObjective),
+        krSummary: computeKrSummary(scopedKeyResults)
       };
     })
   );
@@ -200,28 +261,7 @@ export default async function DashboardAnalyticsPage({
       return row.departmentName.toLowerCase() === selectedDepartment.toLowerCase();
     }
 
-    return row.objectiveCount > 0;
-  });
-
-  const statusPriority: Record<ObjectiveStatus, number> = {
-    OffTrack: 0,
-    AtRisk: 1,
-    NotStarted: 2,
-    OnTrack: 3,
-    Done: 4
-  };
-  const objectiveCards = [...filteredObjectives].sort((left, right) => {
-    const statusDelta = statusPriority[left.status] - statusPriority[right.status];
-    if (statusDelta !== 0) {
-      return statusDelta;
-    }
-
-    const progressDelta = right.progressPct - left.progressPct;
-    if (progressDelta !== 0) {
-      return progressDelta;
-    }
-
-    return left.title.localeCompare(right.title);
+    return row.objectiveSummary.objectiveCount > 0 || row.krSummary.keyResultCount > 0;
   });
 
   const scopeLabel = selectedVenture
@@ -234,37 +274,47 @@ export default async function DashboardAnalyticsPage({
 
   return (
     <div className="dashboard-page analytics-page">
+      <DashboardFilters ventures={ventures} selectedVentureKey={selectedVenture?.ventureKey} selectedDepartment={selectedDepartment} />
+
       <section className="section analytics-overview">
         <div className="section-header">
           <h2>OKR Dashboard</h2>
           <span className="meta">Scope: {scopeLabel}</span>
         </div>
 
-        <div className="analytics-summary-grid">
-          <article className="analytics-summary-card analytics-summary-ontrack">
-            <h3>On Track</h3>
-            <div className="analytics-summary-value">{summary.onTrackCount}</div>
-          </article>
-          <article className="analytics-summary-card analytics-summary-atrisk">
-            <h3>At Risk</h3>
-            <div className="analytics-summary-value">{summary.atRiskCount}</div>
-          </article>
-          <article className="analytics-summary-card analytics-summary-offtrack">
-            <h3>Off Track</h3>
-            <div className="analytics-summary-value">{summary.offTrackCount}</div>
-          </article>
-          <article className="analytics-summary-card analytics-summary-progress">
+        <div className="analytics-single-metric">
+          <article className="analytics-summary-card analytics-summary-progress analytics-single-metric-card">
             <h3>Avg Progress</h3>
-            <div className="analytics-summary-value">{Math.round(summary.avgProgress)}%</div>
+            <div className="analytics-summary-value">{formatProgressPercent(summary.avgProgress)}</div>
           </article>
         </div>
 
-        <p className="meta analytics-summary-meta">
-          {summary.objectiveCount} objective(s) and {summary.keyResultCount} key result(s)
-        </p>
-      </section>
+        <div className="section-header">
+          <h3>Objective Progress</h3>
+        </div>
+        <div className="analytics-summary-grid">
+          {objectiveStatusCards.map((card) => (
+            <article key={card.status} className={`analytics-summary-card ${card.className}`}>
+              <h3>{card.label}</h3>
+              <div className="analytics-summary-value">{card.count}</div>
+            </article>
+          ))}
+        </div>
 
-      <DashboardFilters ventures={ventures} selectedVentureKey={selectedVenture?.ventureKey} selectedDepartment={selectedDepartment} />
+        <p className="meta analytics-summary-meta">{summary.objectiveCount} objective(s)</p>
+        <div className="section-header analytics-subsection-head">
+          <h3>Key Result Progress</h3>
+        </div>
+        <div className="analytics-summary-grid">
+          {keyResultStatusCards.map((card) => (
+            <article key={card.status} className={`analytics-summary-card ${card.className}`}>
+              <h3>{card.label}</h3>
+              <div className="analytics-summary-value">{card.count}</div>
+            </article>
+          ))}
+        </div>
+        <p className="meta analytics-summary-meta">{krSummary.keyResultCount} key result(s)</p>
+      </section>
 
       <section className="section">
         <div className="section-header">
@@ -275,30 +325,40 @@ export default async function DashboardAnalyticsPage({
             <thead>
               <tr>
                 <th>Venture</th>
-                <th>Objectives</th>
-                <th>Key Results</th>
-                <th>On Track</th>
-                <th>At Risk</th>
-                <th>Off Track</th>
+                <th>Metric</th>
+                <th>Count</th>
+                {tableStatusColumns.map((statusOption) => (
+                  <th key={statusOption}>{formatStatus(statusOption)}</th>
+                ))}
                 <th>Avg Progress</th>
               </tr>
             </thead>
             <tbody>
               {ventureRows.length === 0 ? (
                 <tr>
-                  <td colSpan={7}>No venture data for the current filter.</td>
+                  <td colSpan={tableStatusColumns.length + 4}>No venture data for the current filter.</td>
                 </tr>
               ) : (
                 ventureRows.map((row) => (
-                  <tr key={row.ventureKey}>
-                    <td>{row.ventureName}</td>
-                    <td>{row.objectiveCount}</td>
-                    <td>{row.keyResultCount}</td>
-                    <td>{row.onTrackCount}</td>
-                    <td>{row.atRiskCount}</td>
-                    <td>{row.offTrackCount}</td>
-                    <td>{Math.round(row.avgProgress)}%</td>
-                  </tr>
+                  <Fragment key={row.ventureKey}>
+                    <tr>
+                      <td rowSpan={2}>{row.ventureName}</td>
+                      <td>Objectives</td>
+                      <td>{row.objectiveSummary.objectiveCount}</td>
+                      {tableStatusColumns.map((statusOption) => (
+                        <td key={statusOption}>{row.objectiveSummary.statusCounts[statusOption] ?? 0}</td>
+                      ))}
+                      <td>{formatProgressPercent(row.objectiveSummary.avgProgress)}</td>
+                    </tr>
+                    <tr>
+                      <td>Key Results</td>
+                      <td>{row.krSummary.keyResultCount}</td>
+                      {tableStatusColumns.map((statusOption) => (
+                        <td key={statusOption}>{row.krSummary.statusCounts[statusOption] ?? 0}</td>
+                      ))}
+                      <td>{formatProgressPercent(row.krSummary.avgProgress)}</td>
+                    </tr>
+                  </Fragment>
                 ))
               )}
             </tbody>
@@ -316,89 +376,47 @@ export default async function DashboardAnalyticsPage({
               <tr>
                 <th>Department</th>
                 <th>Venture</th>
-                <th>Objectives</th>
-                <th>Key Results</th>
-                <th>On Track</th>
-                <th>At Risk</th>
-                <th>Off Track</th>
+                <th>Metric</th>
+                <th>Count</th>
+                {tableStatusColumns.map((statusOption) => (
+                  <th key={statusOption}>{formatStatus(statusOption)}</th>
+                ))}
                 <th>Avg Progress</th>
               </tr>
             </thead>
             <tbody>
               {departmentRows.length === 0 ? (
                 <tr>
-                  <td colSpan={8}>No department data for the current filter.</td>
+                  <td colSpan={tableStatusColumns.length + 5}>No department data for the current filter.</td>
                 </tr>
               ) : (
                 departmentRows.map((row) => (
-                  <tr key={`${row.ventureName}::${row.departmentName}`}>
-                    <td>{row.departmentName}</td>
-                    <td>{row.ventureName}</td>
-                    <td>{row.objectiveCount}</td>
-                    <td>{row.keyResultCount}</td>
-                    <td>{row.onTrackCount}</td>
-                    <td>{row.atRiskCount}</td>
-                    <td>{row.offTrackCount}</td>
-                    <td>{Math.round(row.avgProgress)}%</td>
-                  </tr>
+                  <Fragment key={`${row.ventureName}::${row.departmentName}`}>
+                    <tr>
+                      <td rowSpan={2}>{row.departmentName}</td>
+                      <td rowSpan={2}>{row.ventureName}</td>
+                      <td>Objectives</td>
+                      <td>{row.objectiveSummary.objectiveCount}</td>
+                      {tableStatusColumns.map((statusOption) => (
+                        <td key={statusOption}>{row.objectiveSummary.statusCounts[statusOption] ?? 0}</td>
+                      ))}
+                      <td>{formatProgressPercent(row.objectiveSummary.avgProgress)}</td>
+                    </tr>
+                    <tr>
+                      <td>Key Results</td>
+                      <td>{row.krSummary.keyResultCount}</td>
+                      {tableStatusColumns.map((statusOption) => (
+                        <td key={statusOption}>{row.krSummary.statusCounts[statusOption] ?? 0}</td>
+                      ))}
+                      <td>{formatProgressPercent(row.krSummary.avgProgress)}</td>
+                    </tr>
+                  </Fragment>
                 ))
               )}
             </tbody>
           </table>
         </div>
       </section>
-
-      <section className="section">
-        <div className="section-header">
-          <h2>Objective Snapshot</h2>
-          <span className="meta">{objectiveCards.length} objective(s)</span>
-        </div>
-
-        {objectiveCards.length === 0 ? (
-          <p className="meta">No objectives match the current filter.</p>
-        ) : (
-          <div className="analytics-objective-list">
-            {objectiveCards.map((objective) => {
-              const progress = clampPercent(objective.progressPct);
-              const keyResultsCount = keyResultCountByObjective.get(objective.objectiveKey.toLowerCase()) ?? 0;
-              return (
-                <article key={objective.objectiveKey} className="analytics-objective-card">
-                  <div className="analytics-objective-head">
-                    <div>
-                      <h3>{objective.title}</h3>
-                      <p className="meta">
-                        {objective.objectiveCode ?? objective.objectiveKey} - {objective.department} -{" "}
-                        {objective.ventureName || objective.strategicTheme}
-                      </p>
-                    </div>
-                    <span className={`analytics-status-pill ${toStatusClass(objective.status)}`}>{formatStatus(objective.status)}</span>
-                  </div>
-
-                  <p className="analytics-objective-submeta">
-                    Owner: {objective.owner || "-"} - KRs: {keyResultsCount} - Cycle: {objective.okrCycle}
-                  </p>
-
-                  <div className="analytics-progress-row">
-                    <span>Progress</span>
-                    <span>{Math.round(progress)}%</span>
-                  </div>
-                  <div className="analytics-progress-track" aria-hidden="true">
-                    <span style={{ width: `${progress}%` }} />
-                  </div>
-
-                  <div className="analytics-objective-footer">
-                    <span className="meta">RAG: {objective.rag}</span>
-                    <Link className="btn-link" href={`/objectives/${objective.objectiveKey}`}>
-                      Open
-                    </Link>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
     </div>
   );
 }
-

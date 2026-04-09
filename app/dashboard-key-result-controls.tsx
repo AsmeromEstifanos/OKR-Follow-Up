@@ -1,6 +1,9 @@
 "use client";
 
 import OwnerInput from "@/app/owner-input";
+import useCurrentUserEmail from "@/app/use-current-user-email";
+import { apiPath } from "@/lib/base-path";
+import { beginOperationBatch } from "@/lib/client-operation-batch";
 import type { CheckInFrequency, KrStatus, MetricType } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -10,6 +13,11 @@ type Props = {
   periodKey: string;
   defaultDueDate: string;
   defaultOwner: string;
+  positionOwnerEmail?: string;
+  adminEmails: string[];
+  metricTypeOptions: MetricType[];
+  keyResultStatusOptions: KrStatus[];
+  checkInFrequencyOptions: CheckInFrequency[];
 };
 
 type ApiError = {
@@ -22,9 +30,20 @@ type OwnerSuggestion = {
   mail: string;
 };
 
-const METRIC_TYPE_OPTIONS: MetricType[] = ["Delivery", "Financial", "Operational", "People", "Quality"];
-const KR_STATUS_OPTIONS: KrStatus[] = ["NotStarted", "OnTrack", "AtRisk", "OffTrack", "Done"];
-const CHECKIN_FREQUENCY_OPTIONS: CheckInFrequency[] = ["Weekly", "BiWeekly", "Monthly", "AdHoc"];
+type PendingKr = {
+  title: string;
+  owner: string;
+  ownerEmail: string;
+  metricType: MetricType;
+  baselineValue: number;
+  targetValue: number;
+  currentValue: number;
+  status: KrStatus;
+  dueDate: string;
+  checkInFrequency: CheckInFrequency;
+  blockers: string;
+  notes: string;
+};
 
 async function readJson<T>(response: Response): Promise<T | null> {
   const text = await response.text();
@@ -60,13 +79,42 @@ function sanitizeDefaultOwner(value: string): string {
   return normalized;
 }
 
+function normalizeEmail(value: string | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function getNextDisplayCode(code: string, fallbackPrefix: string): string {
+  const match = /^([A-Z]+)-(\d+)$/i.exec(code.trim());
+  if (!match) {
+    return `${fallbackPrefix}-001`;
+  }
+
+  const prefix = match[1].toUpperCase();
+  const numeric = Number(match[2]);
+  if (!Number.isInteger(numeric) || numeric < 1) {
+    return `${prefix}-001`;
+  }
+
+  return `${prefix}-${String(numeric + 1).padStart(match[2].length, "0")}`;
+}
+
 export default function DashboardKeyResultControls({
   objectiveKey,
   periodKey,
   defaultDueDate,
-  defaultOwner
+  defaultOwner,
+  positionOwnerEmail,
+  adminEmails,
+  metricTypeOptions,
+  keyResultStatusOptions,
+  checkInFrequencyOptions
 }: Props): JSX.Element {
   const router = useRouter();
+  const signedInEmail = useCurrentUserEmail();
+  const normalizedUserEmail = normalizeEmail(signedInEmail);
+  const normalizedPositionOwnerEmail = normalizeEmail(positionOwnerEmail);
+  const isAdmin = adminEmails.map((entry) => normalizeEmail(entry)).includes(normalizedUserEmail);
+  const canCreate = Boolean(normalizedUserEmail) && (isAdmin || normalizedUserEmail === normalizedPositionOwnerEmail);
   const sanitizedDefaultOwner = sanitizeDefaultOwner(defaultOwner);
   const [isAdding, setIsAdding] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -74,19 +122,20 @@ export default function DashboardKeyResultControls({
   const [title, setTitle] = useState<string>("");
   const [owner, setOwner] = useState<string>(sanitizedDefaultOwner);
   const [ownerEmail, setOwnerEmail] = useState<string>("");
-  const [metricType, setMetricType] = useState<MetricType>("Operational");
+  const [metricType, setMetricType] = useState<MetricType>(metricTypeOptions[0] ?? "Operational");
   const [baselineValue, setBaselineValue] = useState<string>("0");
   const [targetValue, setTargetValue] = useState<string>("100");
   const [currentValue, setCurrentValue] = useState<string>("0");
-  const [status, setStatus] = useState<KrStatus>("NotStarted");
+  const [status, setStatus] = useState<KrStatus>(keyResultStatusOptions[0] ?? "NotStarted");
   const [dueDate, setDueDate] = useState<string>(toDateInput(defaultDueDate));
-  const [checkInFrequency, setCheckInFrequency] = useState<CheckInFrequency>("Weekly");
+  const [checkInFrequency, setCheckInFrequency] = useState<CheckInFrequency>(checkInFrequencyOptions[0] ?? "Weekly");
   const [blockers, setBlockers] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
+  const [pendingKrs, setPendingKrs] = useState<PendingKr[]>([]);
   const [error, setError] = useState<string>("");
 
   const loadKrCodePreview = async (): Promise<void> => {
-    const response = await fetch(`/api/codes/kr?objectiveKey=${encodeURIComponent(objectiveKey)}`, { cache: "no-store" });
+    const response = await fetch(apiPath(`/api/codes/kr?objectiveKey=${encodeURIComponent(objectiveKey)}`), { cache: "no-store" });
     if (!response.ok) {
       setKrCodePreview("KR-001");
       return;
@@ -102,6 +151,21 @@ export default function DashboardKeyResultControls({
     setIsAdding(true);
   };
 
+  const resetDraftForNextKr = (): void => {
+    setTitle("");
+    setOwner("");
+    setOwnerEmail("");
+    setMetricType(metricTypeOptions[0] ?? "Operational");
+    setBaselineValue("0");
+    setTargetValue("100");
+    setCurrentValue("0");
+    setStatus(keyResultStatusOptions[0] ?? "NotStarted");
+    setDueDate(toDateInput(defaultDueDate));
+    setCheckInFrequency(checkInFrequencyOptions[0] ?? "Weekly");
+    setBlockers("");
+    setNotes("");
+  };
+
   const closeAdd = (): void => {
     if (isSaving) {
       return;
@@ -113,15 +177,16 @@ export default function DashboardKeyResultControls({
     setTitle("");
     setOwner(sanitizedDefaultOwner);
     setOwnerEmail("");
-    setMetricType("Operational");
+    setMetricType(metricTypeOptions[0] ?? "Operational");
     setBaselineValue("0");
     setTargetValue("100");
     setCurrentValue("0");
-    setStatus("NotStarted");
+    setStatus(keyResultStatusOptions[0] ?? "NotStarted");
     setDueDate(toDateInput(defaultDueDate));
-    setCheckInFrequency("Weekly");
+    setCheckInFrequency(checkInFrequencyOptions[0] ?? "Weekly");
     setBlockers("");
     setNotes("");
+    setPendingKrs([]);
   };
 
   useEffect(() => {
@@ -140,15 +205,11 @@ export default function DashboardKeyResultControls({
     }
   }, [isAdding, sanitizedDefaultOwner]);
 
-  const createKr = async (): Promise<void> => {
-    if (isSaving) {
-      return;
-    }
-
+  const buildPendingKr = (): PendingKr | null => {
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
       setError("Key Result title is required.");
-      return;
+      return null;
     }
 
     const baseline = Number(baselineValue);
@@ -156,109 +217,182 @@ export default function DashboardKeyResultControls({
     const current = Number(currentValue);
     if (!Number.isFinite(baseline) || !Number.isFinite(target) || !Number.isFinite(current)) {
       setError("Baseline, target, and current values must be numbers.");
-      return;
+      return null;
     }
 
     if (!dueDate) {
       setError("Due date is required.");
+      return null;
+    }
+
+    return {
+      title: trimmedTitle,
+      owner: owner.trim(),
+      ownerEmail: ownerEmail.trim(),
+      metricType,
+      baselineValue: baseline,
+      targetValue: target,
+      currentValue: current,
+      status,
+      dueDate,
+      checkInFrequency,
+      blockers: blockers.trim(),
+      notes: notes.trim()
+    };
+  };
+
+  const queueKr = (): void => {
+    const draft = buildPendingKr();
+    if (!draft) {
       return;
     }
 
-    if (!owner.trim()) {
-      setError("Owner is required.");
+    setPendingKrs((current) => [...current, draft]);
+    resetDraftForNextKr();
+    setError("");
+    setKrCodePreview((current) => getNextDisplayCode(current, "KR"));
+  };
+
+  const removeQueuedKr = (index: number): void => {
+    setPendingKrs((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  };
+
+  const saveAllKrs = async (): Promise<void> => {
+    if (isSaving) {
+      return;
+    }
+
+    const staged = [...pendingKrs];
+    if (staged.length === 0 && title.trim()) {
+      const current = buildPendingKr();
+      if (!current) {
+        return;
+      }
+
+      staged.push(current);
+    }
+
+    if (staged.length === 0) {
+      setError("Add at least one key result first.");
       return;
     }
 
     setIsSaving(true);
     setError("");
+    const batch = beginOperationBatch("Saving key results", staged.length);
 
-    const response = await fetch("/api/krs", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json"
-      },
-      body: JSON.stringify({
-        krCode: krCodePreview || undefined,
-        objectiveKey,
-        periodKey,
-        title: trimmedTitle,
-        owner: owner.trim(),
-        ownerEmail: ownerEmail.trim(),
-        metricType,
-        baselineValue: baseline,
-        targetValue: target,
-        currentValue: current,
-        status,
-        dueDate,
-        checkInFrequency,
-        blockers: blockers.trim(),
-        notes: notes.trim()
-      })
-    });
-    const payload = await readJson<ApiError>(response);
+    try {
+      for (let index = 0; index < staged.length; index += 1) {
+        batch.setCurrentStep(index + 1);
+        const item = staged[index];
+        const response = await fetch(apiPath("/api/krs"), {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-user-email": signedInEmail
+          },
+          body: JSON.stringify({
+            objectiveKey,
+            periodKey,
+            title: item.title,
+            owner: item.owner,
+            ownerEmail: item.ownerEmail,
+            metricType: item.metricType,
+            baselineValue: item.baselineValue,
+            targetValue: item.targetValue,
+            currentValue: item.currentValue,
+            status: item.status,
+            dueDate: item.dueDate,
+            checkInFrequency: item.checkInFrequency,
+            blockers: item.blockers,
+            notes: item.notes
+          })
+        });
+        const payload = await readJson<ApiError>(response);
 
-    if (!response.ok) {
-      setError(payload?.error ?? "Failed to add key result.");
+        if (!response.ok) {
+          setError(payload?.error ?? `Failed to add key result at line ${index + 1}.`);
+          setIsSaving(false);
+          batch.finish();
+          return;
+        }
+      }
+
+      batch.finish();
+      setIsSaving(false);
+      setPendingKrs([]);
+      closeAdd();
+      setError("");
+      router.refresh();
+    } catch (error) {
+      batch.finish();
+      setError(error instanceof Error ? error.message : "Failed to save key results.");
       setIsSaving(false);
       return;
     }
-
-    setIsSaving(false);
-    closeAdd();
-    router.refresh();
   };
 
   return (
     <div className="kr-controls">
-      <button
-        className={`tab-btn tab-btn-add kr-add-btn ${isAdding ? "tab-btn-active" : ""}`}
-        type="button"
-        onClick={isAdding ? closeAdd : openAdd}
-        disabled={isSaving}
-      >
-        Add Key Result
-      </button>
+      {canCreate ? (
+        <button
+          className={`tab-btn tab-btn-add kr-add-btn ${isAdding ? "tab-btn-active" : ""}`}
+          type="button"
+          onClick={isAdding ? closeAdd : openAdd}
+          disabled={isSaving}
+        >
+          Add Key Result
+        </button>
+      ) : null}
 
-      {isAdding ? (
+      {canCreate && isAdding ? (
         <form
           className="kr-form"
           onSubmit={(event) => {
             event.preventDefault();
-            void createKr();
+            void saveAllKrs();
           }}
         >
           <div className="kr-form-grid">
             <div className="field">
               <label>KR Code</label>
-              <input value={krCodePreview} readOnly disabled={isSaving} />
+              <input name="krCode" value={krCodePreview} readOnly disabled={isSaving} />
             </div>
-            <div className="field">
+            <div className="field kr-field-wide">
               <label>Key Result</label>
-              <input
+              <textarea
+                name="krTitle"
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
-                placeholder="KR title"
+                placeholder="Key Result"
                 autoFocus
                 disabled={isSaving}
               />
             </div>
             <OwnerInput
               id={`kr-owner-${objectiveKey.replace(/[^a-zA-Z0-9_-]/g, "-")}`}
+              label="Owner (optional)"
               value={owner}
               onChange={setOwner}
               onSelectUser={(user: OwnerSuggestion | null) => {
                 setOwnerEmail(user ? user.mail || user.principalName : "");
               }}
               disabled={isSaving}
+              placeholder="Owner (optional)"
             />
             <div className="field">
               <label>Owner Email</label>
-              <input value={ownerEmail} readOnly disabled={isSaving} />
+              <input name="krOwnerEmail" value={ownerEmail} readOnly disabled={isSaving} />
             </div>
             <div className="field">
               <label>KR Metric Type</label>
-              <select value={metricType} onChange={(event) => setMetricType(event.target.value as MetricType)} disabled={isSaving}>
-                {METRIC_TYPE_OPTIONS.map((option) => (
+              <select
+                name="krMetricType"
+                value={metricType}
+                onChange={(event) => setMetricType(event.target.value as MetricType)}
+                disabled={isSaving}
+              >
+                {metricTypeOptions.map((option) => (
                   <option key={option} value={option}>
                     {option}
                   </option>
@@ -268,6 +402,7 @@ export default function DashboardKeyResultControls({
             <div className="field">
               <label>Baseline Value</label>
               <input
+                name="krBaselineValue"
                 type="number"
                 step="any"
                 value={baselineValue}
@@ -278,6 +413,7 @@ export default function DashboardKeyResultControls({
             <div className="field">
               <label>Target Value</label>
               <input
+                name="krTargetValue"
                 type="number"
                 step="any"
                 value={targetValue}
@@ -288,6 +424,7 @@ export default function DashboardKeyResultControls({
             <div className="field">
               <label>Current Value</label>
               <input
+                name="krCurrentValue"
                 type="number"
                 step="any"
                 value={currentValue}
@@ -297,8 +434,8 @@ export default function DashboardKeyResultControls({
             </div>
             <div className="field">
               <label>KR Status</label>
-              <select value={status} onChange={(event) => setStatus(event.target.value as KrStatus)} disabled={isSaving}>
-                {KR_STATUS_OPTIONS.map((option) => (
+              <select name="krStatus" value={status} onChange={(event) => setStatus(event.target.value as KrStatus)} disabled={isSaving}>
+                {keyResultStatusOptions.map((option) => (
                   <option key={option} value={option}>
                     {option}
                   </option>
@@ -307,16 +444,23 @@ export default function DashboardKeyResultControls({
             </div>
             <div className="field">
               <label>Due Date</label>
-              <input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} disabled={isSaving} />
+              <input
+                name="krDueDate"
+                type="date"
+                value={dueDate}
+                onChange={(event) => setDueDate(event.target.value)}
+                disabled={isSaving}
+              />
             </div>
             <div className="field">
               <label>Check-in Frequency</label>
               <select
+                name="krCheckInFrequency"
                 value={checkInFrequency}
                 onChange={(event) => setCheckInFrequency(event.target.value as CheckInFrequency)}
                 disabled={isSaving}
               >
-                {CHECKIN_FREQUENCY_OPTIONS.map((option) => (
+                {checkInFrequencyOptions.map((option) => (
                   <option key={option} value={option}>
                     {option}
                   </option>
@@ -325,21 +469,40 @@ export default function DashboardKeyResultControls({
             </div>
             <div className="field kr-field-wide">
               <label>Blockers</label>
-              <textarea value={blockers} onChange={(event) => setBlockers(event.target.value)} disabled={isSaving} />
+              <textarea name="krBlockers" value={blockers} onChange={(event) => setBlockers(event.target.value)} disabled={isSaving} />
             </div>
             <div className="field kr-field-wide">
               <label>Notes</label>
-              <textarea value={notes} onChange={(event) => setNotes(event.target.value)} disabled={isSaving} />
+              <textarea name="krNotes" value={notes} onChange={(event) => setNotes(event.target.value)} disabled={isSaving} />
             </div>
           </div>
           <div className="actions">
+            <button className="btn" type="button" onClick={queueKr} disabled={isSaving}>
+              Add More
+            </button>
             <button className="btn btn-add" type="submit" disabled={isSaving}>
-              Add
+              Save All{pendingKrs.length > 0 ? ` (${pendingKrs.length})` : ""}
             </button>
             <button className="tab-btn" type="button" onClick={closeAdd} disabled={isSaving}>
               Cancel
             </button>
           </div>
+          {pendingKrs.length > 0 ? (
+            <div className="field kr-field-wide">
+              <label>Pending Key Results</label>
+              <ul>
+                {pendingKrs.map((item, index) => (
+                  <li key={`${item.title}-${index}`}>
+                    {item.title}{" "}
+                    <button type="button" className="tab-btn" onClick={() => removeQueuedKr(index)} disabled={isSaving}>
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <p className="message">You have {pendingKrs.length} unsaved key result(s). Click Save All.</p>
+            </div>
+          ) : null}
         </form>
       ) : null}
       {error ? <p className="message danger">{error}</p> : null}

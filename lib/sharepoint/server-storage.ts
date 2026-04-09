@@ -1,13 +1,16 @@
-import type { CheckIn, KeyResult, Objective, Period, RagThresholds, Venture } from "@/lib/types";
+import type { ActivityLogEntry, AuthLogEntry, CheckIn, FieldOptions, KeyResult, Objective, Period, RagThresholds, Venture } from "@/lib/types";
+import { updateOperationProgress, updateOperationProgressWithSteps } from "@/lib/operation-progress";
 
 const GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0";
 const DEFAULT_LIST_PREFIX = "OKR Follow Up Store";
 const LEGACY_VENTURES_RECORD_KEY = "ventures";
 const LEGACY_CONTENT_RECORD_KEY = "content";
 const RAG_CONFIG_KEY = "ragThresholds";
+const FIELD_OPTIONS_CONFIG_KEY = "fieldOptions";
 
 type PersistedContent = {
   ragThresholds?: RagThresholds;
+  fieldOptions?: FieldOptions;
   periods: Period[];
   objectives: Objective[];
   keyResults: KeyResult[];
@@ -82,7 +85,27 @@ type AtomicListName =
   | "objectives"
   | "keyResults"
   | "checkIns"
-  | "config";
+  | "config"
+  | "roles"
+  | "authLogs"
+  | "activityLogs";
+
+type SnapshotListName = Exclude<AtomicListName, "roles" | "authLogs" | "activityLogs">;
+
+type AtomicCapabilities = {
+  hasDepartmentOwnerColumn: boolean;
+  hasDepartmentOwnerEmailColumn: boolean;
+  hasObjectiveCodeColumn: boolean;
+  hasObjectiveVentureColumn: boolean;
+  hasObjectiveOwnerEmailColumn: boolean;
+  hasObjectiveBlockersColumn: boolean;
+  hasKrCodeColumn: boolean;
+  hasKrOwnerEmailColumn: boolean;
+  hasKrBlockersColumn: boolean;
+  hasConfigValueJsonColumn: boolean;
+};
+
+type AtomicRowSets = Record<SnapshotListName, Array<Record<string, unknown>>>;
 
 const LIST_DEFS: Record<AtomicListName, ListDefinition> = {
   ventures: {
@@ -99,7 +122,9 @@ const LIST_DEFS: Record<AtomicListName, ListDefinition> = {
     columns: [
       { name: "DepartmentKey", type: "text" },
       { name: "VentureKey", type: "text" },
-      { name: "DepartmentName", type: "text" }
+      { name: "DepartmentName", type: "text" },
+      { name: "Owner", type: "text", optional: true },
+      { name: "OwnerEmail", type: "text", optional: true }
     ]
   },
   periods: {
@@ -190,11 +215,68 @@ const LIST_DEFS: Record<AtomicListName, ListDefinition> = {
     keyField: "ConfigKey",
     columns: [
       { name: "ConfigKey", type: "text" },
-      { name: "GreenMin", type: "number" },
-      { name: "AmberMin", type: "number" }
+      { name: "GreenMin", type: "number", optional: true },
+      { name: "AmberMin", type: "number", optional: true },
+      { name: "ValueJson", type: "multilineText", optional: true }
+    ]
+  },
+  roles: {
+    suffix: "Roles",
+    keyField: "UserEmail",
+    columns: [
+      { name: "UserEmail", type: "text" },
+      { name: "Role", type: "text" }
+    ]
+  },
+  authLogs: {
+    suffix: "Auth Logs",
+    keyField: "AuthLogKey",
+    columns: [
+      { name: "AuthLogKey", type: "text" },
+      { name: "UserEmail", type: "text" },
+      { name: "DisplayName", type: "text", optional: true },
+      { name: "SignedInAt", type: "text" }
+    ]
+  },
+  activityLogs: {
+    suffix: "Activity Logs",
+    keyField: "ActivityLogKey",
+    columns: [
+      { name: "ActivityLogKey", type: "text" },
+      { name: "UserEmail", type: "text" },
+      { name: "ActivityName", type: "text" },
+      { name: "HttpMethod", type: "text" },
+      { name: "RoutePath", type: "text" },
+      { name: "OccurredAt", type: "text" },
+      { name: "EntityType", type: "text", optional: true },
+      { name: "EntityKey", type: "text", optional: true },
+      { name: "EntityLabel", type: "text", optional: true },
+      { name: "DetailsJson", type: "multilineText", optional: true }
     ]
   }
 };
+
+const SNAPSHOT_LIST_ORDER: SnapshotListName[] = [
+  "ventures",
+  "departments",
+  "periods",
+  "objectives",
+  "keyResults",
+  "checkIns",
+  "config"
+];
+
+const SNAPSHOT_LIST_LABELS: Record<SnapshotListName, string> = {
+  ventures: "Syncing ventures",
+  departments: "Syncing positions",
+  periods: "Syncing periods",
+  objectives: "Syncing objectives",
+  keyResults: "Syncing key results",
+  checkIns: "Syncing check-ins",
+  config: "Saving configuration"
+};
+
+const KEY_FILTER_CHUNK_SIZE = 20;
 
 const cache = globalThis as {
   __okrSharePointAppToken?: {
@@ -551,6 +633,81 @@ function asNumber(value: unknown, fallback = 0): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function parseConfigJson(value: unknown): unknown {
+  const raw = asString(value).trim();
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+const DEFAULT_FIELD_OPTIONS: FieldOptions = {
+  objectiveTypes: ["Aspirational", "Committed", "Learning"],
+  objectiveStatuses: ["NotStarted", "OnTrack", "AtRisk", "OffTrack", "Done"],
+  objectiveCycles: ["Q1", "Q2", "Q3", "Q4"],
+  keyResultMetricTypes: ["Delivery", "Financial", "Operational", "People", "Quality"],
+  keyResultStatuses: ["NotStarted", "OnTrack", "AtRisk", "OffTrack", "Done"],
+  checkInFrequencies: ["Weekly", "BiWeekly", "Monthly", "AdHoc"]
+};
+
+function normalizeUniqueOptionList(input: unknown, fallback: readonly string[]): string[] {
+  if (!Array.isArray(input)) {
+    return [...fallback];
+  }
+
+  const next: string[] = [];
+  input.forEach((value) => {
+    if (typeof value !== "string") {
+      return;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed || next.some((item) => item.toLowerCase() === trimmed.toLowerCase())) {
+      return;
+    }
+
+    next.push(trimmed);
+  });
+
+  return next.length > 0 ? next : [...fallback];
+}
+
+function normalizeFieldOptions(input: unknown): FieldOptions {
+  const source = (input && typeof input === "object" ? (input as Partial<FieldOptions>) : {}) as Partial<FieldOptions>;
+
+  return {
+    objectiveTypes: normalizeUniqueOptionList(
+      source.objectiveTypes,
+      DEFAULT_FIELD_OPTIONS.objectiveTypes
+    ),
+    objectiveStatuses: normalizeUniqueOptionList(
+      source.objectiveStatuses,
+      DEFAULT_FIELD_OPTIONS.objectiveStatuses
+    ),
+    objectiveCycles: normalizeUniqueOptionList(
+      source.objectiveCycles,
+      DEFAULT_FIELD_OPTIONS.objectiveCycles
+    ),
+    keyResultMetricTypes: normalizeUniqueOptionList(
+      source.keyResultMetricTypes,
+      DEFAULT_FIELD_OPTIONS.keyResultMetricTypes
+    ),
+    keyResultStatuses: normalizeUniqueOptionList(
+      source.keyResultStatuses,
+      DEFAULT_FIELD_OPTIONS.keyResultStatuses
+    ),
+    checkInFrequencies: normalizeUniqueOptionList(
+      source.checkInFrequencies,
+      DEFAULT_FIELD_OPTIONS.checkInFrequencies
+    )
+  };
+}
+
 function toFieldRecord(fields: Record<string, unknown>): Record<string, string | number | null> {
   const output: Record<string, string | number | null> = {};
 
@@ -577,10 +734,20 @@ async function listItems(
   config: SharePointStorageConfig,
   siteId: string,
   listId: string,
-  selectFields: string[]
+  selectFields: string[],
+  options?: {
+    filter?: string;
+  }
 ): Promise<GraphListItem[]> {
   const query = new URLSearchParams();
-  query.set("$expand", `fields($select=${selectFields.join(",")})`);
+  if (selectFields.length > 0) {
+    query.set("$expand", `fields($select=${selectFields.join(",")})`);
+  } else {
+    query.set("$expand", "fields");
+  }
+  if (options?.filter) {
+    query.set("$filter", options.filter);
+  }
   query.set("$top", "999");
 
   let nextUrl = `${GRAPH_BASE_URL}/sites/${siteId}/lists/${listId}/items?${query.toString()}`;
@@ -600,6 +767,47 @@ async function listItems(
   }
 
   return items;
+}
+
+async function listItemsByKeys(
+  config: SharePointStorageConfig,
+  siteId: string,
+  listId: string,
+  keyField: string,
+  keys: string[]
+): Promise<GraphListItem[]> {
+  const uniqueKeys = Array.from(
+    new Set(
+      keys
+        .map((key) => key.trim())
+        .filter((key) => key.length > 0)
+    )
+  );
+  if (uniqueKeys.length === 0) {
+    return [];
+  }
+
+  try {
+    const items: GraphListItem[] = [];
+    for (let index = 0; index < uniqueKeys.length; index += KEY_FILTER_CHUNK_SIZE) {
+      const chunk = uniqueKeys.slice(index, index + KEY_FILTER_CHUNK_SIZE);
+      const filter = chunk.map((key) => `fields/${keyField} eq '${escapeFilterString(key)}'`).join(" or ");
+      items.push(...(await listItems(config, siteId, listId, [keyField], { filter })));
+    }
+
+    return items;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    const isNonIndexedFilterError =
+      message.includes("cannot be referenced in filter or orderby") || message.includes("HonorNonIndexedQueriesWarningMayFailRandomly");
+    if (!isNonIndexedFilterError) {
+      throw error;
+    }
+  }
+
+  const keySet = new Set(uniqueKeys);
+  const allItems = await listItems(config, siteId, listId, [keyField]);
+  return allItems.filter((item) => keySet.has(asString(item.fields?.[keyField]).trim()));
 }
 
 async function createItem(
@@ -642,18 +850,26 @@ async function replaceListItems(
   siteId: string,
   listId: string,
   keyField: string,
-  rows: Array<Record<string, unknown>>
+  rows: Array<Record<string, unknown>>,
+  progress?: {
+    basePercent: number;
+    endPercent: number;
+    stage: string;
+  }
 ): Promise<void> {
   const existingItems = await listItems(config, siteId, listId, [keyField]);
-  const existingByKey = new Map<string, string>();
+  const existingByKey = new Map<string, string[]>();
 
   for (const item of existingItems) {
     const key = asString(item.fields?.[keyField]).trim();
     if (key) {
-      existingByKey.set(key, item.id);
+      const current = existingByKey.get(key) ?? [];
+      current.push(item.id);
+      existingByKey.set(key, current);
     }
   }
 
+  const uniqueRows: Array<Record<string, unknown>> = [];
   const seen = new Set<string>();
   for (const row of rows) {
     const key = asString(row[keyField]).trim();
@@ -662,19 +878,376 @@ async function replaceListItems(
     }
 
     seen.add(key);
-    const existingId = existingByKey.get(key);
+    uniqueRows.push(row);
+  }
+
+  let orphanCount = 0;
+  for (const orphanIds of existingByKey.values()) {
+    orphanCount += orphanIds.length;
+  }
+
+  const totalSteps = uniqueRows.length + orphanCount;
+  let processedSteps = 0;
+  if (progress && totalSteps > 1) {
+    updateOperationProgressWithSteps(progress.basePercent, progress.stage, {
+      currentStep: 0,
+      totalSteps
+    });
+  }
+
+  for (const row of uniqueRows) {
+    const key = asString(row[keyField]).trim();
+    if (!key) {
+      continue;
+    }
+
+    const existingIds = existingByKey.get(key) ?? [];
+    const existingId = existingIds[0];
     const fields = toFieldRecord(row);
 
     if (existingId) {
       await updateItem(config, siteId, listId, existingId, fields);
-      existingByKey.delete(key);
+      existingByKey.set(key, existingIds.slice(1));
     } else {
       await createItem(config, siteId, listId, fields);
     }
+
+    processedSteps += 1;
+    if (progress && totalSteps > 1) {
+      const percent = progress.basePercent + ((progress.endPercent - progress.basePercent) * processedSteps) / totalSteps;
+      updateOperationProgressWithSteps(percent, progress.stage, {
+        currentStep: processedSteps,
+        totalSteps
+      });
+    }
   }
 
-  for (const orphanId of existingByKey.values()) {
-    await deleteItem(config, siteId, listId, orphanId);
+  for (const orphanIds of existingByKey.values()) {
+    for (const orphanId of orphanIds) {
+      await deleteItem(config, siteId, listId, orphanId);
+      processedSteps += 1;
+      if (progress && totalSteps > 1) {
+        const percent = progress.basePercent + ((progress.endPercent - progress.basePercent) * processedSteps) / totalSteps;
+        updateOperationProgressWithSteps(percent, progress.stage, {
+          currentStep: processedSteps,
+          totalSteps
+        });
+      }
+    }
+  }
+}
+
+function getRowKey(row: Record<string, unknown>, keyField: string): string {
+  return asString(row[keyField]).trim();
+}
+
+function uniqueRowsByKey(rows: Array<Record<string, unknown>>, keyField: string): Array<Record<string, unknown>> {
+  const uniqueRows: Array<Record<string, unknown>> = [];
+  const seen = new Set<string>();
+
+  for (const row of rows) {
+    const key = getRowKey(row, keyField);
+    if (!key || seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    uniqueRows.push(row);
+  }
+
+  return uniqueRows;
+}
+
+function serializeComparableRow(row: Record<string, unknown>): string {
+  const normalized = toFieldRecord(row);
+  const sortedEntries = Object.keys(normalized)
+    .sort()
+    .map((key) => [key, normalized[key]]);
+  return JSON.stringify(sortedEntries);
+}
+
+function diffRowsByKey(
+  previousRows: Array<Record<string, unknown>>,
+  nextRows: Array<Record<string, unknown>>,
+  keyField: string
+): {
+  changedRows: Array<Record<string, unknown>>;
+  removedKeys: string[];
+} {
+  const previousMap = new Map<string, Record<string, unknown>>();
+  const nextMap = new Map<string, Record<string, unknown>>();
+
+  uniqueRowsByKey(previousRows, keyField).forEach((row) => {
+    previousMap.set(getRowKey(row, keyField), row);
+  });
+  uniqueRowsByKey(nextRows, keyField).forEach((row) => {
+    nextMap.set(getRowKey(row, keyField), row);
+  });
+
+  const changedRows: Array<Record<string, unknown>> = [];
+  nextMap.forEach((row, key) => {
+    const previous = previousMap.get(key);
+    if (!previous || serializeComparableRow(previous) !== serializeComparableRow(row)) {
+      changedRows.push(row);
+    }
+  });
+
+  const removedKeys: string[] = [];
+  previousMap.forEach((_row, key) => {
+    if (!nextMap.has(key)) {
+      removedKeys.push(key);
+    }
+  });
+
+  return {
+    changedRows,
+    removedKeys
+  };
+}
+
+async function loadAtomicCapabilities(
+  config: SharePointStorageConfig,
+  siteId: string,
+  listIds: Record<AtomicListName, string>
+): Promise<AtomicCapabilities> {
+  return {
+    hasDepartmentOwnerColumn: await listHasColumn(config, siteId, listIds.departments, "Owner"),
+    hasDepartmentOwnerEmailColumn: await listHasColumn(config, siteId, listIds.departments, "OwnerEmail"),
+    hasObjectiveCodeColumn: await listHasColumn(config, siteId, listIds.objectives, "ObjectiveCode"),
+    hasObjectiveVentureColumn: await listHasColumn(config, siteId, listIds.objectives, "VentureName"),
+    hasObjectiveOwnerEmailColumn: await listHasColumn(config, siteId, listIds.objectives, "OwnerEmail"),
+    hasObjectiveBlockersColumn: await listHasColumn(config, siteId, listIds.objectives, "Blockers"),
+    hasKrCodeColumn: await listHasColumn(config, siteId, listIds.keyResults, "KrCode"),
+    hasKrOwnerEmailColumn: await listHasColumn(config, siteId, listIds.keyResults, "OwnerEmail"),
+    hasKrBlockersColumn: await listHasColumn(config, siteId, listIds.keyResults, "Blockers"),
+    hasConfigValueJsonColumn: await listHasColumn(config, siteId, listIds.config, "ValueJson")
+  };
+}
+
+function buildAtomicRows(snapshot: SharePointStoreSnapshot, capabilities: AtomicCapabilities): AtomicRowSets {
+  const ventures = snapshot.ventures.map((venture) => ({
+    VentureKey: venture.ventureKey,
+    VentureName: venture.name
+  }));
+
+  const departments = snapshot.ventures.flatMap((venture) =>
+    venture.departments.map((department) => ({
+      DepartmentKey: department.departmentKey,
+      VentureKey: venture.ventureKey,
+      DepartmentName: department.name,
+      ...(capabilities.hasDepartmentOwnerColumn ? { Owner: department.owner ?? "" } : {}),
+      ...(capabilities.hasDepartmentOwnerEmailColumn ? { OwnerEmail: department.ownerEmail ?? "" } : {})
+    }))
+  );
+
+  const periods = snapshot.content.periods.map((period) => ({
+    PeriodKey: period.periodKey,
+    PeriodName: period.name,
+    StartDate: period.startDate,
+    EndDate: period.endDate,
+    Status: period.status
+  }));
+
+  const objectives = snapshot.content.objectives.map((objective) => ({
+    ObjectiveKey: objective.objectiveKey,
+    ...(capabilities.hasObjectiveCodeColumn ? { ObjectiveCode: objective.objectiveCode ?? objective.objectiveKey } : {}),
+    PeriodKey: objective.periodKey,
+    ObjectiveTitle: objective.title,
+    Description: objective.description,
+    Owner: objective.owner ?? "",
+    ...(capabilities.hasObjectiveOwnerEmailColumn ? { OwnerEmail: objective.ownerEmail ?? "" } : {}),
+    Department: objective.department,
+    ...(capabilities.hasObjectiveVentureColumn ? { VentureName: objective.ventureName ?? "" } : {}),
+    StrategicTheme: objective.strategicTheme,
+    ObjectiveType: objective.objectiveType,
+    OkrCycle: objective.okrCycle,
+    ...(capabilities.hasObjectiveBlockersColumn ? { Blockers: objective.blockers ?? "" } : {}),
+    KeyRisksDependency: objective.keyRisksDependency,
+    Notes: objective.notes,
+    Status: objective.status,
+    ProgressPct: objective.progressPct,
+    Confidence: objective.confidence,
+    Rag: objective.rag,
+    StartDate: objective.startDate,
+    EndDate: objective.endDate,
+    LastCheckinAt: objective.lastCheckinAt ?? ""
+  }));
+
+  const keyResults = snapshot.content.keyResults.map((kr) => ({
+    KrKey: kr.krKey,
+    ...(capabilities.hasKrCodeColumn ? { KrCode: kr.krCode ?? kr.krKey } : {}),
+    ObjectiveKey: kr.objectiveKey,
+    PeriodKey: kr.periodKey,
+    KrTitle: kr.title,
+    Owner: kr.owner ?? "",
+    ...(capabilities.hasKrOwnerEmailColumn ? { OwnerEmail: kr.ownerEmail ?? "" } : {}),
+    MetricType: kr.metricType,
+    BaselineValue: kr.baselineValue,
+    TargetValue: kr.targetValue,
+    CurrentValue: kr.currentValue,
+    ProgressPct: kr.progressPct,
+    Status: kr.status,
+    DueDate: kr.dueDate,
+    CheckInFrequency: kr.checkInFrequency,
+    ...(capabilities.hasKrBlockersColumn ? { Blockers: kr.blockers ?? "" } : {}),
+    Notes: kr.notes,
+    LastCheckinAt: kr.lastCheckinAt ?? ""
+  }));
+
+  const checkIns = snapshot.content.checkIns.map((checkIn) => ({
+    CheckInKey: buildCheckInKey(checkIn),
+    CheckInAt: checkIn.checkInAt,
+    PeriodKey: checkIn.periodKey,
+    ObjectiveKey: checkIn.objectiveKey,
+    KrKey: checkIn.krKey,
+    Owner: checkIn.owner,
+    Status: checkIn.status,
+    Confidence: checkIn.confidence,
+    UpdateNotes: checkIn.updateNotes,
+    Blockers: checkIn.blockers,
+    SupportNeeded: checkIn.supportNeeded,
+    CurrentValueSnapshot: checkIn.currentValueSnapshot,
+    ProgressPctSnapshot: checkIn.progressPctSnapshot,
+    AttachmentsJson: JSON.stringify(checkIn.attachments ?? [])
+  }));
+
+  const config: Array<Record<string, unknown>> = [];
+  if (snapshot.content.ragThresholds) {
+    config.push({
+      ConfigKey: RAG_CONFIG_KEY,
+      GreenMin: snapshot.content.ragThresholds.greenMin,
+      AmberMin: snapshot.content.ragThresholds.amberMin,
+      ...(capabilities.hasConfigValueJsonColumn ? { ValueJson: "" } : {})
+    });
+  }
+
+  config.push({
+    ConfigKey: FIELD_OPTIONS_CONFIG_KEY,
+    GreenMin: null,
+    AmberMin: null,
+    ...(capabilities.hasConfigValueJsonColumn
+      ? { ValueJson: JSON.stringify(normalizeFieldOptions(snapshot.content.fieldOptions)) }
+      : {})
+  });
+
+  return {
+    ventures,
+    departments,
+    periods,
+    objectives,
+    keyResults,
+    checkIns,
+    config
+  };
+}
+
+async function syncListItemChanges(
+  config: SharePointStorageConfig,
+  siteId: string,
+  listId: string,
+  keyField: string,
+  changedRows: Array<Record<string, unknown>>,
+  removedKeys: string[],
+  progress: {
+    basePercent: number;
+    endPercent: number;
+    stage: string;
+  }
+): Promise<void> {
+  const uniqueChangedRows = uniqueRowsByKey(changedRows, keyField);
+  const uniqueRemovedKeys = Array.from(new Set(removedKeys.map((key) => key.trim()).filter((key) => key.length > 0)));
+  const relevantKeys = Array.from(new Set([...uniqueChangedRows.map((row) => getRowKey(row, keyField)), ...uniqueRemovedKeys]));
+
+  if (relevantKeys.length === 0) {
+    updateOperationProgress(progress.endPercent, progress.stage);
+    return;
+  }
+
+  const existingItems = await listItemsByKeys(config, siteId, listId, keyField, relevantKeys);
+  const existingByKey = new Map<string, string[]>();
+  for (const item of existingItems) {
+    const key = asString(item.fields?.[keyField]).trim();
+    if (!key) {
+      continue;
+    }
+
+    const current = existingByKey.get(key) ?? [];
+    current.push(item.id);
+    existingByKey.set(key, current);
+  }
+
+  let totalSteps = 0;
+  uniqueChangedRows.forEach((row) => {
+    const key = getRowKey(row, keyField);
+    if (!key) {
+      return;
+    }
+
+    const existingIds = existingByKey.get(key) ?? [];
+    totalSteps += 1 + Math.max(0, existingIds.length - 1);
+  });
+  uniqueRemovedKeys.forEach((key) => {
+    totalSteps += (existingByKey.get(key) ?? []).length;
+  });
+
+  if (totalSteps === 0) {
+    updateOperationProgress(progress.endPercent, progress.stage);
+    return;
+  }
+
+  if (totalSteps > 1) {
+    updateOperationProgressWithSteps(progress.basePercent, progress.stage, {
+      currentStep: 0,
+      totalSteps
+    });
+  } else {
+    updateOperationProgress(progress.basePercent, progress.stage);
+  }
+
+  let processedSteps = 0;
+  const advanceProgress = (): void => {
+    processedSteps += 1;
+    const percent = progress.basePercent + ((progress.endPercent - progress.basePercent) * processedSteps) / totalSteps;
+    if (totalSteps > 1) {
+      updateOperationProgressWithSteps(percent, progress.stage, {
+        currentStep: processedSteps,
+        totalSteps
+      });
+      return;
+    }
+
+    updateOperationProgress(percent, progress.stage);
+  };
+
+  for (const row of uniqueChangedRows) {
+    const key = getRowKey(row, keyField);
+    if (!key) {
+      continue;
+    }
+
+    const existingIds = existingByKey.get(key) ?? [];
+    const fields = toFieldRecord(row);
+    const primaryId = existingIds[0];
+
+    if (primaryId) {
+      await updateItem(config, siteId, listId, primaryId, fields);
+    } else {
+      await createItem(config, siteId, listId, fields);
+    }
+    advanceProgress();
+
+    for (const duplicateId of existingIds.slice(1)) {
+      await deleteItem(config, siteId, listId, duplicateId);
+      advanceProgress();
+    }
+  }
+
+  for (const key of uniqueRemovedKeys) {
+    const existingIds = existingByKey.get(key) ?? [];
+    for (const existingId of existingIds) {
+      await deleteItem(config, siteId, listId, existingId);
+      advanceProgress();
+    }
   }
 }
 
@@ -714,6 +1287,8 @@ function parseSnapshotRecord(value: string | null): unknown {
 
 async function loadAtomicSnapshot(config: SharePointStorageConfig): Promise<SharePointStoreSnapshot | null> {
   const { siteId, listIds } = await ensureAtomicTargets(config);
+  const hasDepartmentOwnerColumn = await listHasColumn(config, siteId, listIds.departments, "Owner");
+  const hasDepartmentOwnerEmailColumn = await listHasColumn(config, siteId, listIds.departments, "OwnerEmail");
   const hasObjectiveCodeColumn = await listHasColumn(config, siteId, listIds.objectives, "ObjectiveCode");
   const hasObjectiveVentureColumn = await listHasColumn(config, siteId, listIds.objectives, "VentureName");
   const hasObjectiveOwnerEmailColumn = await listHasColumn(config, siteId, listIds.objectives, "OwnerEmail");
@@ -721,6 +1296,7 @@ async function loadAtomicSnapshot(config: SharePointStorageConfig): Promise<Shar
   const hasKrCodeColumn = await listHasColumn(config, siteId, listIds.keyResults, "KrCode");
   const hasKrOwnerEmailColumn = await listHasColumn(config, siteId, listIds.keyResults, "OwnerEmail");
   const hasKrBlockersColumn = await listHasColumn(config, siteId, listIds.keyResults, "Blockers");
+  const hasConfigValueJsonColumn = await listHasColumn(config, siteId, listIds.config, "ValueJson");
   const objectiveSelectFields = [
     "ObjectiveKey",
     ...(hasObjectiveCodeColumn ? ["ObjectiveCode"] : []),
@@ -768,7 +1344,13 @@ async function loadAtomicSnapshot(config: SharePointStorageConfig): Promise<Shar
 
   const [ventureItems, departmentItems, periodItems, objectiveItems, krItems, checkInItems, configItems] = await Promise.all([
     listItems(config, siteId, listIds.ventures, ["VentureKey", "VentureName"]),
-    listItems(config, siteId, listIds.departments, ["DepartmentKey", "VentureKey", "DepartmentName"]),
+    listItems(config, siteId, listIds.departments, [
+      "DepartmentKey",
+      "VentureKey",
+      "DepartmentName",
+      ...(hasDepartmentOwnerColumn ? ["Owner"] : []),
+      ...(hasDepartmentOwnerEmailColumn ? ["OwnerEmail"] : [])
+    ]),
     listItems(config, siteId, listIds.periods, ["PeriodKey", "PeriodName", "StartDate", "EndDate", "Status"]),
     listItems(config, siteId, listIds.objectives, objectiveSelectFields),
     listItems(config, siteId, listIds.keyResults, keyResultSelectFields),
@@ -787,7 +1369,12 @@ async function loadAtomicSnapshot(config: SharePointStorageConfig): Promise<Shar
       "ProgressPctSnapshot",
       "AttachmentsJson"
     ]),
-    listItems(config, siteId, listIds.config, ["ConfigKey", "GreenMin", "AmberMin"])
+    listItems(
+      config,
+      siteId,
+      listIds.config,
+      ["ConfigKey", "GreenMin", "AmberMin", ...(hasConfigValueJsonColumn ? ["ValueJson"] : [])]
+    )
   ]);
 
   const hasAnyData =
@@ -828,7 +1415,12 @@ async function loadAtomicSnapshot(config: SharePointStorageConfig): Promise<Shar
 
     const venture = ventureByKey.get(ventureKey);
     if (venture) {
-      venture.departments.push({ departmentKey, name: asString(item.fields?.DepartmentName) });
+      venture.departments.push({
+        departmentKey,
+        name: asString(item.fields?.DepartmentName),
+        owner: asString(item.fields?.Owner) || undefined,
+        ownerEmail: asOwnerEmail(item.fields?.OwnerEmail, item.fields?.Owner) || undefined
+      });
     }
   }
 
@@ -856,16 +1448,16 @@ async function loadAtomicSnapshot(config: SharePointStorageConfig): Promise<Shar
         return null;
       }
 
-      return {
-        objectiveKey,
-        objectiveCode: asString(item.fields?.ObjectiveCode) || objectiveKey,
-        periodKey: asString(item.fields?.PeriodKey),
-        title: asString(item.fields?.ObjectiveTitle),
-        description: asString(item.fields?.Description),
-        owner: asString(item.fields?.Owner),
-        ownerEmail: asOwnerEmail(item.fields?.OwnerEmail, item.fields?.Owner),
-        department: asString(item.fields?.Department),
-        ventureName: asString(item.fields?.VentureName),
+        return {
+          objectiveKey,
+          objectiveCode: asString(item.fields?.ObjectiveCode) || objectiveKey,
+          periodKey: asString(item.fields?.PeriodKey),
+          title: asString(item.fields?.ObjectiveTitle),
+          description: asString(item.fields?.Description),
+          owner: asString(item.fields?.Owner) || undefined,
+          ownerEmail: asOwnerEmail(item.fields?.OwnerEmail, item.fields?.Owner) || undefined,
+          department: asString(item.fields?.Department),
+          ventureName: asString(item.fields?.VentureName),
         strategicTheme: asString(item.fields?.StrategicTheme),
         objectiveType: asString(item.fields?.ObjectiveType) as Objective["objectiveType"],
         okrCycle: asString(item.fields?.OkrCycle) as Objective["okrCycle"],
@@ -890,15 +1482,15 @@ async function loadAtomicSnapshot(config: SharePointStorageConfig): Promise<Shar
         return null;
       }
 
-      return {
-        krKey,
-        krCode: asString(item.fields?.KrCode) || krKey,
-        objectiveKey: asString(item.fields?.ObjectiveKey),
-        periodKey: asString(item.fields?.PeriodKey),
-        title: asString(item.fields?.KrTitle),
-        owner: asString(item.fields?.Owner),
-        ownerEmail: asOwnerEmail(item.fields?.OwnerEmail, item.fields?.Owner),
-        metricType: asString(item.fields?.MetricType) as KeyResult["metricType"],
+        return {
+          krKey,
+          krCode: asString(item.fields?.KrCode) || krKey,
+          objectiveKey: asString(item.fields?.ObjectiveKey),
+          periodKey: asString(item.fields?.PeriodKey),
+          title: asString(item.fields?.KrTitle),
+          owner: asString(item.fields?.Owner) || undefined,
+          ownerEmail: asOwnerEmail(item.fields?.OwnerEmail, item.fields?.Owner) || undefined,
+          metricType: asString(item.fields?.MetricType) as KeyResult["metricType"],
         baselineValue: asNumber(item.fields?.BaselineValue, 0),
         targetValue: asNumber(item.fields?.TargetValue, 0),
         currentValue: asNumber(item.fields?.CurrentValue, 0),
@@ -942,6 +1534,9 @@ async function loadAtomicSnapshot(config: SharePointStorageConfig): Promise<Shar
   const ragItem =
     configItems.find((item) => asString(item.fields?.ConfigKey).trim().toLowerCase() === RAG_CONFIG_KEY.toLowerCase()) ??
     configItems[0];
+  const fieldOptionsItem = configItems.find(
+    (item) => asString(item.fields?.ConfigKey).trim().toLowerCase() === FIELD_OPTIONS_CONFIG_KEY.toLowerCase()
+  );
 
   const ragThresholds = ragItem
     ? {
@@ -949,11 +1544,15 @@ async function loadAtomicSnapshot(config: SharePointStorageConfig): Promise<Shar
         amberMin: asNumber(ragItem.fields?.AmberMin, 0)
       }
     : undefined;
+  const fieldOptions = fieldOptionsItem
+    ? normalizeFieldOptions(parseConfigJson(fieldOptionsItem.fields?.ValueJson))
+    : normalizeFieldOptions(undefined);
 
   return {
     ventures,
     content: {
       ragThresholds,
+      fieldOptions,
       periods,
       objectives,
       keyResults,
@@ -963,116 +1562,104 @@ async function loadAtomicSnapshot(config: SharePointStorageConfig): Promise<Shar
 }
 
 async function saveAtomicSnapshot(config: SharePointStorageConfig, snapshot: SharePointStoreSnapshot): Promise<void> {
+  updateOperationProgress(44, "Preparing SharePoint lists");
   const { siteId, listIds } = await ensureAtomicTargets(config);
-  const hasObjectiveCodeColumn = await listHasColumn(config, siteId, listIds.objectives, "ObjectiveCode");
-  const hasObjectiveVentureColumn = await listHasColumn(config, siteId, listIds.objectives, "VentureName");
-  const hasObjectiveOwnerEmailColumn = await listHasColumn(config, siteId, listIds.objectives, "OwnerEmail");
-  const hasObjectiveBlockersColumn = await listHasColumn(config, siteId, listIds.objectives, "Blockers");
-  const hasKrCodeColumn = await listHasColumn(config, siteId, listIds.keyResults, "KrCode");
-  const hasKrOwnerEmailColumn = await listHasColumn(config, siteId, listIds.keyResults, "OwnerEmail");
-  const hasKrBlockersColumn = await listHasColumn(config, siteId, listIds.keyResults, "Blockers");
+  updateOperationProgress(50, "Checking SharePoint columns");
+  const capabilities = await loadAtomicCapabilities(config, siteId, listIds);
+  const rows = buildAtomicRows(snapshot, capabilities);
 
-  const ventureRows = snapshot.ventures.map((venture) => ({
-    VentureKey: venture.ventureKey,
-    VentureName: venture.name
-  }));
+  updateOperationProgress(58, SNAPSHOT_LIST_LABELS.ventures);
+  await replaceListItems(config, siteId, listIds.ventures, LIST_DEFS.ventures.keyField, rows.ventures, {
+    basePercent: 58,
+    endPercent: 66,
+    stage: SNAPSHOT_LIST_LABELS.ventures
+  });
+  updateOperationProgress(66, SNAPSHOT_LIST_LABELS.departments);
+  await replaceListItems(config, siteId, listIds.departments, LIST_DEFS.departments.keyField, rows.departments, {
+    basePercent: 66,
+    endPercent: 72,
+    stage: SNAPSHOT_LIST_LABELS.departments
+  });
+  updateOperationProgress(72, SNAPSHOT_LIST_LABELS.periods);
+  await replaceListItems(config, siteId, listIds.periods, LIST_DEFS.periods.keyField, rows.periods, {
+    basePercent: 72,
+    endPercent: 80,
+    stage: SNAPSHOT_LIST_LABELS.periods
+  });
+  updateOperationProgress(80, SNAPSHOT_LIST_LABELS.objectives);
+  await replaceListItems(config, siteId, listIds.objectives, LIST_DEFS.objectives.keyField, rows.objectives, {
+    basePercent: 80,
+    endPercent: 88,
+    stage: SNAPSHOT_LIST_LABELS.objectives
+  });
+  updateOperationProgress(88, SNAPSHOT_LIST_LABELS.keyResults);
+  await replaceListItems(config, siteId, listIds.keyResults, LIST_DEFS.keyResults.keyField, rows.keyResults, {
+    basePercent: 88,
+    endPercent: 94,
+    stage: SNAPSHOT_LIST_LABELS.keyResults
+  });
+  updateOperationProgress(94, SNAPSHOT_LIST_LABELS.checkIns);
+  await replaceListItems(config, siteId, listIds.checkIns, LIST_DEFS.checkIns.keyField, rows.checkIns, {
+    basePercent: 94,
+    endPercent: 98,
+    stage: SNAPSHOT_LIST_LABELS.checkIns
+  });
+  updateOperationProgress(98, SNAPSHOT_LIST_LABELS.config);
+  await replaceListItems(config, siteId, listIds.config, LIST_DEFS.config.keyField, rows.config, {
+    basePercent: 98,
+    endPercent: 100,
+    stage: SNAPSHOT_LIST_LABELS.config
+  });
+}
 
-  const departmentRows = snapshot.ventures.flatMap((venture) =>
-    venture.departments.map((department) => ({
-      DepartmentKey: department.departmentKey,
-      VentureKey: venture.ventureKey,
-      DepartmentName: department.name
-    }))
-  );
+async function saveAtomicSnapshotDelta(
+  config: SharePointStorageConfig,
+  previousSnapshot: SharePointStoreSnapshot,
+  nextSnapshot: SharePointStoreSnapshot
+): Promise<void> {
+  updateOperationProgress(44, "Preparing SharePoint lists");
+  const { siteId, listIds } = await ensureAtomicTargets(config);
+  updateOperationProgress(50, "Checking SharePoint columns");
+  const capabilities = await loadAtomicCapabilities(config, siteId, listIds);
+  const previousRows = buildAtomicRows(previousSnapshot, capabilities);
+  const nextRows = buildAtomicRows(nextSnapshot, capabilities);
 
-  const periodRows = snapshot.content.periods.map((period) => ({
-    PeriodKey: period.periodKey,
-    PeriodName: period.name,
-    StartDate: period.startDate,
-    EndDate: period.endDate,
-    Status: period.status
-  }));
+  const activePlans = SNAPSHOT_LIST_ORDER.map((listName) => {
+    const { changedRows, removedKeys } = diffRowsByKey(previousRows[listName], nextRows[listName], LIST_DEFS[listName].keyField);
+    return {
+      listName,
+      changedRows,
+      removedKeys
+    };
+  }).filter((plan) => plan.changedRows.length > 0 || plan.removedKeys.length > 0);
 
-  const objectiveRows = snapshot.content.objectives.map((objective) => ({
-    ObjectiveKey: objective.objectiveKey,
-    ...(hasObjectiveCodeColumn ? { ObjectiveCode: objective.objectiveCode ?? objective.objectiveKey } : {}),
-    PeriodKey: objective.periodKey,
-    ObjectiveTitle: objective.title,
-    Description: objective.description,
-    Owner: objective.owner,
-    ...(hasObjectiveOwnerEmailColumn ? { OwnerEmail: objective.ownerEmail ?? "" } : {}),
-    Department: objective.department,
-    ...(hasObjectiveVentureColumn ? { VentureName: objective.ventureName ?? "" } : {}),
-    StrategicTheme: objective.strategicTheme,
-    ObjectiveType: objective.objectiveType,
-    OkrCycle: objective.okrCycle,
-    ...(hasObjectiveBlockersColumn ? { Blockers: objective.blockers ?? "" } : {}),
-    KeyRisksDependency: objective.keyRisksDependency,
-    Notes: objective.notes,
-    Status: objective.status,
-    ProgressPct: objective.progressPct,
-    Confidence: objective.confidence,
-    Rag: objective.rag,
-    StartDate: objective.startDate,
-    EndDate: objective.endDate,
-    LastCheckinAt: objective.lastCheckinAt ?? ""
-  }));
+  if (activePlans.length === 0) {
+    updateOperationProgress(98, "No SharePoint changes");
+    return;
+  }
 
-  const keyResultRows = snapshot.content.keyResults.map((kr) => ({
-    KrKey: kr.krKey,
-    ...(hasKrCodeColumn ? { KrCode: kr.krCode ?? kr.krKey } : {}),
-    ObjectiveKey: kr.objectiveKey,
-    PeriodKey: kr.periodKey,
-    KrTitle: kr.title,
-    Owner: kr.owner,
-    ...(hasKrOwnerEmailColumn ? { OwnerEmail: kr.ownerEmail ?? "" } : {}),
-    MetricType: kr.metricType,
-    BaselineValue: kr.baselineValue,
-    TargetValue: kr.targetValue,
-    CurrentValue: kr.currentValue,
-    ProgressPct: kr.progressPct,
-    Status: kr.status,
-    DueDate: kr.dueDate,
-    CheckInFrequency: kr.checkInFrequency,
-    ...(hasKrBlockersColumn ? { Blockers: kr.blockers ?? "" } : {}),
-    Notes: kr.notes,
-    LastCheckinAt: kr.lastCheckinAt ?? ""
-  }));
+  const progressStart = 58;
+  const progressEnd = 98;
+  for (let index = 0; index < activePlans.length; index += 1) {
+    const plan = activePlans[index];
+    const basePercent = progressStart + ((progressEnd - progressStart) * index) / activePlans.length;
+    const endPercent = progressStart + ((progressEnd - progressStart) * (index + 1)) / activePlans.length;
+    const stage = SNAPSHOT_LIST_LABELS[plan.listName];
 
-  const checkInRows = snapshot.content.checkIns.map((checkIn) => ({
-    CheckInKey: buildCheckInKey(checkIn),
-    CheckInAt: checkIn.checkInAt,
-    PeriodKey: checkIn.periodKey,
-    ObjectiveKey: checkIn.objectiveKey,
-    KrKey: checkIn.krKey,
-    Owner: checkIn.owner,
-    Status: checkIn.status,
-    Confidence: checkIn.confidence,
-    UpdateNotes: checkIn.updateNotes,
-    Blockers: checkIn.blockers,
-    SupportNeeded: checkIn.supportNeeded,
-    CurrentValueSnapshot: checkIn.currentValueSnapshot,
-    ProgressPctSnapshot: checkIn.progressPctSnapshot,
-    AttachmentsJson: JSON.stringify(checkIn.attachments ?? [])
-  }));
-
-  const configRows = snapshot.content.ragThresholds
-    ? [
-        {
-          ConfigKey: RAG_CONFIG_KEY,
-          GreenMin: snapshot.content.ragThresholds.greenMin,
-          AmberMin: snapshot.content.ragThresholds.amberMin
-        }
-      ]
-    : [];
-
-  await replaceListItems(config, siteId, listIds.ventures, LIST_DEFS.ventures.keyField, ventureRows);
-  await replaceListItems(config, siteId, listIds.departments, LIST_DEFS.departments.keyField, departmentRows);
-  await replaceListItems(config, siteId, listIds.periods, LIST_DEFS.periods.keyField, periodRows);
-  await replaceListItems(config, siteId, listIds.objectives, LIST_DEFS.objectives.keyField, objectiveRows);
-  await replaceListItems(config, siteId, listIds.keyResults, LIST_DEFS.keyResults.keyField, keyResultRows);
-  await replaceListItems(config, siteId, listIds.checkIns, LIST_DEFS.checkIns.keyField, checkInRows);
-  await replaceListItems(config, siteId, listIds.config, LIST_DEFS.config.keyField, configRows);
+    await syncListItemChanges(
+      config,
+      siteId,
+      listIds[plan.listName],
+      LIST_DEFS[plan.listName].keyField,
+      plan.changedRows,
+      plan.removedKeys,
+      {
+        basePercent,
+        endPercent,
+        stage
+      }
+    );
+  }
 }
 
 async function resolveLegacyListIdIfExists(config: SharePointStorageConfig, siteId: string): Promise<string | null> {
@@ -1167,6 +1754,7 @@ async function loadLegacySnapshot(config: SharePointStorageConfig): Promise<Shar
     ventures: venturesData as Venture[],
     content: {
       ragThresholds: typedContent.ragThresholds,
+      fieldOptions: typedContent.fieldOptions,
       periods: typedContent.periods as Period[],
       objectives: typedContent.objectives as Objective[],
       keyResults: typedContent.keyResults as KeyResult[],
@@ -1206,18 +1794,7 @@ export async function loadSharePointSnapshot(): Promise<SharePointStoreSnapshot 
     return null;
   }
 
-  const atomic = await loadAtomicSnapshot(config);
-  if (atomic) {
-    return atomic;
-  }
-
-  const legacy = await loadLegacySnapshot(config);
-  if (!legacy) {
-    return null;
-  }
-
-  await saveAtomicSnapshot(config, legacy);
-  return legacy;
+  return loadAtomicSnapshot(config);
 }
 
 export async function saveSharePointSnapshot(snapshot: SharePointStoreSnapshot): Promise<void> {
@@ -1227,4 +1804,235 @@ export async function saveSharePointSnapshot(snapshot: SharePointStoreSnapshot):
   }
 
   await saveAtomicSnapshot(config, snapshot);
+}
+
+export async function saveSharePointSnapshotDelta(
+  previousSnapshot: SharePointStoreSnapshot,
+  nextSnapshot: SharePointStoreSnapshot
+): Promise<void> {
+  const config = getStorageConfig();
+  if (!config.enabled) {
+    return;
+  }
+
+  await saveAtomicSnapshotDelta(config, previousSnapshot, nextSnapshot);
+}
+
+export type RoleAssignment = {
+  userEmail: string;
+  role: string;
+  displayName?: string;
+};
+
+function looksLikeEmail(value: string): boolean {
+  return value.includes("@");
+}
+
+function getRoleAssignmentDisplayName(fields: Record<string, unknown> | undefined): string {
+  const title = asString(fields?.Title).trim();
+  if (!title || looksLikeEmail(title.toLowerCase())) {
+    return "";
+  }
+
+  return title;
+}
+
+function getRoleAssignmentEmail(fields: Record<string, unknown> | undefined): string {
+  const explicit = asString(fields?.UserEmail).trim().toLowerCase();
+  if (explicit) {
+    return explicit;
+  }
+
+  const fallback = asString(fields?.Title).trim().toLowerCase();
+  return looksLikeEmail(fallback) ? fallback : "";
+}
+
+export async function listRoleAssignments(): Promise<RoleAssignment[]> {
+  const config = getStorageConfig();
+  if (!config.enabled) {
+    return [];
+  }
+
+  const { siteId, listIds } = await ensureAtomicTargets(config);
+  const items = await listItems(config, siteId, listIds.roles, []);
+
+  return items
+    .map((item) => {
+      const userEmail = getRoleAssignmentEmail(item.fields);
+      const role = asString(item.fields?.Role).trim();
+      const displayName = getRoleAssignmentDisplayName(item.fields);
+      if (!userEmail || !role) {
+        return null;
+      }
+
+      return {
+        userEmail,
+        role,
+        ...(displayName ? { displayName } : {})
+      };
+    })
+    .filter((entry): entry is RoleAssignment => Boolean(entry));
+}
+
+async function findRoleItemByEmail(
+  config: SharePointStorageConfig,
+  siteId: string,
+  listId: string,
+  email: string
+): Promise<GraphListItem | null> {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  const items = await listItems(config, siteId, listId, []);
+  return items.find((item) => getRoleAssignmentEmail(item.fields) === normalized) ?? null;
+}
+
+export async function setRoleAssignment(userEmail: string, role: string, title?: string): Promise<void> {
+  const config = getStorageConfig();
+  if (!config.enabled) {
+    return;
+  }
+
+  const normalizedEmail = userEmail.trim().toLowerCase();
+  const normalizedRole = role.trim();
+  const normalizedTitle = title?.trim() || normalizedEmail;
+  if (!normalizedEmail || !normalizedRole) {
+    throw new Error("UserEmail and role are required.");
+  }
+
+  const { siteId, listIds } = await ensureAtomicTargets(config);
+  updateOperationProgress(34, "Checking admin record");
+  const hasUserEmailColumn = await listHasColumn(config, siteId, listIds.roles, "UserEmail");
+  const existing = await findRoleItemByEmail(config, siteId, listIds.roles, normalizedEmail);
+  const fields = {
+    Title: hasUserEmailColumn ? normalizedTitle : normalizedEmail,
+    ...(hasUserEmailColumn ? { UserEmail: normalizedEmail } : {}),
+    Role: normalizedRole
+  };
+
+  if (!existing) {
+    updateOperationProgress(70, "Creating admin record");
+    await createItem(config, siteId, listIds.roles, fields);
+    return;
+  }
+
+  updateOperationProgress(70, "Updating admin record");
+  await updateItem(config, siteId, listIds.roles, existing.id, fields);
+}
+
+export async function deleteRoleAssignment(userEmail: string): Promise<void> {
+  const config = getStorageConfig();
+  if (!config.enabled) {
+    return;
+  }
+
+  const normalizedEmail = userEmail.trim().toLowerCase();
+  if (!normalizedEmail) {
+    throw new Error("UserEmail is required.");
+  }
+
+  const { siteId, listIds } = await ensureAtomicTargets(config);
+  updateOperationProgress(34, "Checking admin record");
+  const existing = await findRoleItemByEmail(config, siteId, listIds.roles, normalizedEmail);
+  if (!existing) {
+    return;
+  }
+
+  updateOperationProgress(70, "Removing admin record");
+  await deleteItem(config, siteId, listIds.roles, existing.id);
+}
+
+export async function appendAuthLogEntry(userEmail: string, displayName?: string): Promise<AuthLogEntry | null> {
+  const config = getStorageConfig();
+  if (!config.enabled) {
+    return null;
+  }
+
+  const normalizedEmail = userEmail.trim().toLowerCase();
+  const normalizedDisplayName = displayName?.trim() ?? "";
+  if (!normalizedEmail) {
+    throw new Error("UserEmail is required.");
+  }
+
+  const signedInAt = new Date().toISOString();
+  const authLogKey = `${normalizedEmail}::${signedInAt}`;
+  const { siteId, listIds } = await ensureAtomicTargets(config);
+
+  await createItem(config, siteId, listIds.authLogs, {
+    Title: normalizedDisplayName || normalizedEmail,
+    AuthLogKey: authLogKey,
+    UserEmail: normalizedEmail,
+    DisplayName: normalizedDisplayName,
+    SignedInAt: signedInAt
+  });
+
+  return {
+    authLogKey,
+    userEmail: normalizedEmail,
+    ...(normalizedDisplayName ? { displayName: normalizedDisplayName } : {}),
+    signedInAt
+  };
+}
+
+export async function appendActivityLogEntry(input: {
+  userEmail: string;
+  activityName: string;
+  httpMethod: string;
+  routePath: string;
+  occurredAt?: string;
+  entityType?: string;
+  entityKey?: string;
+  entityLabel?: string;
+  detailsJson?: string;
+}): Promise<ActivityLogEntry | null> {
+  const config = getStorageConfig();
+  if (!config.enabled) {
+    return null;
+  }
+
+  const normalizedEmail = input.userEmail.trim().toLowerCase();
+  const activityName = input.activityName.trim();
+  const httpMethod = input.httpMethod.trim().toUpperCase();
+  const routePath = input.routePath.trim();
+  const occurredAt = (input.occurredAt ?? new Date().toISOString()).trim();
+  const entityType = input.entityType?.trim() ?? "";
+  const entityKey = input.entityKey?.trim() ?? "";
+  const entityLabel = input.entityLabel?.trim() ?? "";
+  const detailsJson = input.detailsJson?.trim() ?? "";
+
+  if (!normalizedEmail || !activityName || !httpMethod || !routePath || !occurredAt) {
+    throw new Error("Activity log input is incomplete.");
+  }
+
+  const activityLogKey = `${normalizedEmail}::${occurredAt}::${activityName}`;
+  const { siteId, listIds } = await ensureAtomicTargets(config);
+
+  await createItem(config, siteId, listIds.activityLogs, {
+    Title: activityName,
+    ActivityLogKey: activityLogKey,
+    UserEmail: normalizedEmail,
+    ActivityName: activityName,
+    HttpMethod: httpMethod,
+    RoutePath: routePath,
+    OccurredAt: occurredAt,
+    EntityType: entityType,
+    EntityKey: entityKey,
+    EntityLabel: entityLabel,
+    DetailsJson: detailsJson
+  });
+
+  return {
+    activityLogKey,
+    userEmail: normalizedEmail,
+    activityName,
+    httpMethod,
+    routePath,
+    occurredAt,
+    ...(entityType ? { entityType } : {}),
+    ...(entityKey ? { entityKey } : {}),
+    ...(entityLabel ? { entityLabel } : {}),
+    ...(detailsJson ? { detailsJson } : {})
+  };
 }

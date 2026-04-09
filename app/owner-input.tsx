@@ -1,5 +1,6 @@
 "use client";
 
+import { apiPath } from "@/lib/base-path";
 import { useEffect, useState } from "react";
 
 type UserSuggestion = {
@@ -20,6 +21,7 @@ type Props = {
   value: string;
   onChange: (next: string) => void;
   onSelectUser?: (user: UserSuggestion | null) => void;
+  selectValue?: "displayName" | "email";
   disabled?: boolean;
   placeholder?: string;
   className?: string;
@@ -93,6 +95,7 @@ export default function OwnerInput({
   value,
   onChange,
   onSelectUser,
+  selectValue = "displayName",
   disabled = false,
   placeholder = "Type a user name",
   className = "",
@@ -113,7 +116,7 @@ export default function OwnerInput({
     }
 
     const controller = new AbortController();
-    void fetch("/api/users/suggest?all=1", {
+    void fetch(apiPath("/api/users/suggest?all=1"), {
       cache: "no-store",
       signal: controller.signal
     })
@@ -175,7 +178,7 @@ export default function OwnerInput({
 
     const controller = new AbortController();
     const timeout = setTimeout(() => {
-      void fetch("/api/users/suggest", {
+      void fetch(apiPath("/api/users/suggest"), {
         cache: "no-store",
         signal: controller.signal
       })
@@ -242,7 +245,7 @@ export default function OwnerInput({
                   className="owner-suggest-item"
                   onMouseDown={(event) => {
                     event.preventDefault();
-                    onChange(user.displayName);
+                    onChange(selectValue === "email" ? user.mail || user.principalName : user.displayName);
                     onSelectUser?.(user);
                     setIsOpen(false);
                   }}

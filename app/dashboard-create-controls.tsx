@@ -13,6 +13,7 @@ import type {
   Period,
   KrStatus
 } from "@/lib/types";
+import { apiPath } from "@/lib/base-path";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
@@ -236,7 +237,7 @@ export default function DashboardCreateControls(): JSX.Element {
     setExistingKrsLoading(true);
     setExistingKrsError("");
 
-    const response = await fetch(`/api/krs?objectiveKey=${encodeURIComponent(objectiveKey)}`, { cache: "no-store" });
+    const response = await fetch(apiPath(`/api/krs?objectiveKey=${encodeURIComponent(objectiveKey)}`), { cache: "no-store" });
     const payload = await readJson<KeyResult[] & ApiError>(response);
 
     if (!response.ok || !payload || !Array.isArray(payload)) {
@@ -262,7 +263,7 @@ export default function DashboardCreateControls(): JSX.Element {
       strategicTheme: objectiveStrategicTheme.trim()
     });
 
-    const response = await fetch(`/api/codes/objective?${params.toString()}`, { cache: "no-store" });
+    const response = await fetch(apiPath(`/api/codes/objective?${params.toString()}`), { cache: "no-store" });
     if (!response.ok) {
       setObjectiveCodePreview("OBJ-001");
       return;
@@ -278,7 +279,7 @@ export default function DashboardCreateControls(): JSX.Element {
       return;
     }
 
-    const response = await fetch(`/api/codes/kr?objectiveKey=${encodeURIComponent(krObjectiveKey)}`, { cache: "no-store" });
+    const response = await fetch(apiPath(`/api/codes/kr?objectiveKey=${encodeURIComponent(krObjectiveKey)}`), { cache: "no-store" });
     if (!response.ok) {
       setKrCodePreview("KR-001");
       return;
@@ -290,9 +291,9 @@ export default function DashboardCreateControls(): JSX.Element {
 
   const loadData = async (): Promise<void> => {
     const [periodResp, objectiveResp, configResp] = await Promise.all([
-      fetch("/api/periods", { cache: "no-store" }),
-      fetch("/api/objectives", { cache: "no-store" }),
-      fetch("/api/config", { cache: "no-store" })
+      fetch(apiPath("/api/periods"), { cache: "no-store" }),
+      fetch(apiPath("/api/objectives"), { cache: "no-store" }),
+      fetch(apiPath("/api/config"), { cache: "no-store" })
     ]);
 
     const [periodPayload, objectivePayload, configPayload] = await Promise.all([
@@ -368,8 +369,13 @@ export default function DashboardCreateControls(): JSX.Element {
   }, [mode, krObjectiveKey]);
 
   const createObjective = async (): Promise<void> => {
-    if (!objectiveTitle.trim()) {
-      setError("Objective title is required.");
+    const objectiveTitles = objectiveTitle
+      .split("\n")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+
+    if (objectiveTitles.length === 0) {
+      setError("Objective title is required (you can add one per line).");
       return;
     }
 
@@ -385,11 +391,6 @@ export default function DashboardCreateControls(): JSX.Element {
 
     if (!objectiveDepartment.trim()) {
       setError("Department is required.");
-      return;
-    }
-
-    if (!objectiveOwner.trim()) {
-      setError("Owner is required.");
       return;
     }
 
@@ -436,40 +437,42 @@ export default function DashboardCreateControls(): JSX.Element {
     setError("");
     setMessage("");
 
-    const response = await fetch("/api/objectives", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json"
-      },
-      body: JSON.stringify({
-        objectiveCode: objectiveCodePreview || undefined,
-        periodKey: period.periodKey,
-        title: objectiveTitle.trim(),
-        description: objectiveNotes.trim(),
-        owner: objectiveOwner.trim(),
-        ownerEmail: objectiveOwnerEmail.trim(),
-        department: objectiveDepartment.trim(),
-        ventureName: objectiveVenture.trim(),
-        strategicTheme: objectiveStrategicTheme.trim(),
-        objectiveType,
-        okrCycle: objectiveCycle,
-        progressPct: clampProgressPct(resolvedObjectiveProgressPct),
-        blockers: objectiveBlockers.trim(),
-        keyRisksDependency: objectiveKeyRisksDependency.trim(),
-        notes: objectiveNotes.trim(),
-        status: objectiveStatus,
-        confidence: "Medium",
-        rag: "Amber",
-        startDate,
-        endDate
-      })
-    });
+    for (let index = 0; index < objectiveTitles.length; index += 1) {
+      const response = await fetch(apiPath("/api/objectives"), {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          objectiveCode: objectiveTitles.length === 1 ? objectiveCodePreview || undefined : undefined,
+          periodKey: period.periodKey,
+          title: objectiveTitles[index],
+          description: objectiveNotes.trim(),
+          owner: objectiveOwner.trim(),
+          ownerEmail: objectiveOwnerEmail.trim(),
+          department: objectiveDepartment.trim(),
+          ventureName: objectiveVenture.trim(),
+          strategicTheme: objectiveStrategicTheme.trim(),
+          objectiveType,
+          okrCycle: objectiveCycle,
+          progressPct: clampProgressPct(resolvedObjectiveProgressPct),
+          blockers: objectiveBlockers.trim(),
+          keyRisksDependency: objectiveKeyRisksDependency.trim(),
+          notes: objectiveNotes.trim(),
+          status: objectiveStatus,
+          confidence: "Medium",
+          rag: "Amber",
+          startDate,
+          endDate
+        })
+      });
 
-    const payload = await readJson<ApiError>(response);
-    if (!response.ok) {
-      setError(payload?.error ?? "Failed to create objective.");
-      setIsBusy(false);
-      return;
+      const payload = await readJson<ApiError>(response);
+      if (!response.ok) {
+        setError(payload?.error ?? `Failed to create objective at line ${index + 1}.`);
+        setIsBusy(false);
+        return;
+      }
     }
 
     setObjectiveCodePreview("");
@@ -493,13 +496,13 @@ export default function DashboardCreateControls(): JSX.Element {
       return;
     }
 
-    if (!krTitle.trim()) {
-      setError("KR title is required.");
-      return;
-    }
+    const krTitles = krTitle
+      .split("\n")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
 
-    if (!krOwner.trim()) {
-      setError("Owner is required.");
+    if (krTitles.length === 0) {
+      setError("KR title is required (you can add one per line).");
       return;
     }
 
@@ -528,35 +531,37 @@ export default function DashboardCreateControls(): JSX.Element {
     setError("");
     setMessage("");
 
-    const response = await fetch("/api/krs", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json"
-      },
-      body: JSON.stringify({
-        krCode: krCodePreview || undefined,
-        objectiveKey: selectedObjective.objectiveKey,
-        periodKey: selectedObjective.periodKey,
-        title: krTitle.trim(),
-        owner: krOwner.trim(),
-        ownerEmail: krOwnerEmail.trim(),
-        metricType: "Operational" as MetricType,
-        baselineValue,
-        targetValue,
-        currentValue,
-        status: krStatus,
-        dueDate: selectedObjective.endDate,
-        checkInFrequency: krCheckInFrequency,
-        blockers: krBlockers.trim(),
-        notes: krNotes.trim()
-      })
-    });
+    for (let index = 0; index < krTitles.length; index += 1) {
+      const response = await fetch(apiPath("/api/krs"), {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          krCode: krTitles.length === 1 ? krCodePreview || undefined : undefined,
+          objectiveKey: selectedObjective.objectiveKey,
+          periodKey: selectedObjective.periodKey,
+          title: krTitles[index],
+          owner: krOwner.trim(),
+          ownerEmail: krOwnerEmail.trim(),
+          metricType: "Operational" as MetricType,
+          baselineValue,
+          targetValue,
+          currentValue,
+          status: krStatus,
+          dueDate: selectedObjective.endDate,
+          checkInFrequency: krCheckInFrequency,
+          blockers: krBlockers.trim(),
+          notes: krNotes.trim()
+        })
+      });
 
-    const payload = await readJson<ApiError>(response);
-    if (!response.ok) {
-      setError(payload?.error ?? "Failed to create KR.");
-      setIsBusy(false);
-      return;
+      const payload = await readJson<ApiError>(response);
+      if (!response.ok) {
+        setError(payload?.error ?? `Failed to create KR at line ${index + 1}.`);
+        setIsBusy(false);
+        return;
+      }
     }
 
     setKrCodePreview("");
@@ -613,19 +618,22 @@ export default function DashboardCreateControls(): JSX.Element {
             </div>
             <div className="field">
               <label htmlFor="quick-objective-title">Objectives</label>
-              <input
+              <textarea
                 id="quick-objective-title"
                 value={objectiveTitle}
                 onChange={(event) => setObjectiveTitle(event.target.value)}
+                placeholder="One objective per line"
               />
             </div>
             <OwnerInput
               id="quick-objective-owner"
+              label="Owner (optional)"
               value={objectiveOwner}
               onChange={setObjectiveOwner}
               onSelectUser={(user: OwnerSuggestion | null) => {
                 setObjectiveOwnerEmail(user ? user.mail || user.principalName : "");
               }}
+              placeholder="Owner (optional)"
             />
             <div className="field">
               <label htmlFor="quick-objective-owner-email">Owner Email</label>
@@ -787,15 +795,22 @@ export default function DashboardCreateControls(): JSX.Element {
             </div>
             <div className="field">
               <label htmlFor="quick-kr-title">KR</label>
-              <input id="quick-kr-title" value={krTitle} onChange={(event) => setKrTitle(event.target.value)} />
+              <textarea
+                id="quick-kr-title"
+                value={krTitle}
+                onChange={(event) => setKrTitle(event.target.value)}
+                placeholder="One key result per line"
+              />
             </div>
             <OwnerInput
               id="quick-kr-owner"
+              label="Owner (optional)"
               value={krOwner}
               onChange={setKrOwner}
               onSelectUser={(user: OwnerSuggestion | null) => {
                 setKrOwnerEmail(user ? user.mail || user.principalName : "");
               }}
+              placeholder="Owner (optional)"
             />
             <div className="field">
               <label htmlFor="quick-kr-owner-email">Owner Email</label>
@@ -922,7 +937,7 @@ export default function DashboardCreateControls(): JSX.Element {
                           {kr.title}
                           <div className="meta">{kr.krCode || kr.krKey}</div>
                         </td>
-                        <td>{kr.owner}</td>
+                        <td>{kr.owner || "-"}</td>
                         <td>{parentObjective?.strategicTheme || "-"}</td>
                         <td>{parentObjective?.objectiveType || "-"}</td>
                         <td>{parentObjective ? formatStatusLabel(parentObjective.status) : "-"}</td>

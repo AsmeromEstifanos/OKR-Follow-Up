@@ -69,7 +69,14 @@ export default async function ObjectiveDetailPage({ params }: Props): Promise<JS
           <h2>Objective Details</h2>
         </div>
         <p className="meta">Objective code: {objective.objectiveCode ?? objective.objectiveKey}</p>
-        <ObjectiveEditControls objective={objective} periodOptions={periodOptions} departmentOptions={departmentOptions} />
+        <ObjectiveEditControls
+          objective={objective}
+          periodOptions={periodOptions}
+          departmentOptions={departmentOptions}
+          objectiveTypeOptions={config.fieldOptions.objectiveTypes}
+          objectiveStatusOptions={config.fieldOptions.objectiveStatuses}
+          objectiveCycleOptions={config.fieldOptions.objectiveCycles}
+        />
       </section>
 
       <section className="card-grid">
@@ -127,7 +134,7 @@ export default async function ObjectiveDetailPage({ params }: Props): Promise<JS
                         {kr.title}
                         <div className="meta">{kr.krCode ?? kr.krKey}</div>
                       </td>
-                      <td>{kr.owner}</td>
+                      <td>{kr.owner || "-"}</td>
                       <td>
                         {kr.progressPct}% ({kr.currentValue}/{kr.targetValue})
                       </td>
@@ -155,6 +162,9 @@ export default async function ObjectiveDetailPage({ params }: Props): Promise<JS
                 keyResult={kr}
                 periodOptions={periodOptions}
                 objectiveOptions={objectiveOptions}
+                metricTypeOptions={config.fieldOptions.keyResultMetricTypes}
+                keyResultStatusOptions={config.fieldOptions.keyResultStatuses}
+                checkInFrequencyOptions={config.fieldOptions.checkInFrequencies}
               />
             ))}
           </div>

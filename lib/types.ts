@@ -1,12 +1,12 @@
 export type PeriodStatus = "Planned" | "Active" | "Closed";
-export type ObjectiveStatus = "NotStarted" | "OnTrack" | "AtRisk" | "OffTrack" | "Done";
-export type ObjectiveType = "Aspirational" | "Committed" | "Learning";
-export type OkrCycle = "Q1" | "Q2" | "Q3" | "Q4";
-export type KrStatus = "NotStarted" | "OnTrack" | "AtRisk" | "OffTrack" | "Done";
-export type CheckInFrequency = "Weekly" | "BiWeekly" | "Monthly" | "AdHoc";
+export type ObjectiveStatus = string;
+export type ObjectiveType = string;
+export type OkrCycle = string;
+export type KrStatus = string;
+export type CheckInFrequency = string;
 export type Confidence = "High" | "Medium" | "Low";
 export type Rag = "Green" | "Amber" | "Red";
-export type MetricType = "Delivery" | "Financial" | "Operational" | "People" | "Quality";
+export type MetricType = string;
 
 export interface RagThresholds {
   greenMin: number;
@@ -16,6 +16,8 @@ export interface RagThresholds {
 export interface Department {
   departmentKey: string;
   name: string;
+  owner?: string;
+  ownerEmail?: string;
 }
 
 export interface Venture {
@@ -26,7 +28,17 @@ export interface Venture {
 
 export interface AppConfig {
   ragThresholds: RagThresholds;
+  fieldOptions: FieldOptions;
   ventures: Venture[];
+}
+
+export interface FieldOptions {
+  objectiveTypes: string[];
+  objectiveStatuses: string[];
+  objectiveCycles: string[];
+  keyResultMetricTypes: string[];
+  keyResultStatuses: string[];
+  checkInFrequencies: string[];
 }
 
 export interface Period {
@@ -43,7 +55,7 @@ export interface Objective {
   periodKey: string;
   title: string;
   description: string;
-  owner: string;
+  owner?: string;
   ownerEmail?: string;
   department: string;
   ventureName?: string;
@@ -68,7 +80,7 @@ export interface KeyResult {
   objectiveKey: string;
   periodKey: string;
   title: string;
-  owner: string;
+  owner?: string;
   ownerEmail?: string;
   metricType: MetricType;
   baselineValue: number;
@@ -105,6 +117,26 @@ export interface DashboardMe {
   myKeyResults: KeyResult[];
   missingCheckIns: KeyResult[];
   atRiskObjectives: Objective[];
+}
+
+export interface AuthLogEntry {
+  authLogKey: string;
+  userEmail: string;
+  displayName?: string;
+  signedInAt: string;
+}
+
+export interface ActivityLogEntry {
+  activityLogKey: string;
+  userEmail: string;
+  activityName: string;
+  httpMethod: string;
+  routePath: string;
+  occurredAt: string;
+  entityType?: string;
+  entityKey?: string;
+  entityLabel?: string;
+  detailsJson?: string;
 }
 
 export interface ObjectiveWithContext {
@@ -188,6 +220,8 @@ export type CreateVentureInput = {
   departments?: Array<{
     departmentKey?: string;
     name: string;
+    owner?: string;
+    ownerEmail?: string;
   }>;
 };
 
@@ -196,6 +230,8 @@ export type UpdateVentureInput = Partial<Pick<Venture, "name">>;
 export type CreateDepartmentInput = {
   departmentKey?: string;
   name: string;
+  owner?: string;
+  ownerEmail?: string;
 };
 
-export type UpdateDepartmentInput = Partial<Pick<Department, "name">>;
+export type UpdateDepartmentInput = Partial<Pick<Department, "name" | "owner" | "ownerEmail">>;

@@ -1,6 +1,9 @@
 "use client";
 
 import OwnerInput from "@/app/owner-input";
+import useCurrentUserEmail from "@/app/use-current-user-email";
+import { apiPath } from "@/lib/base-path";
+import { resolveOwnerEmail, resolveOwnerName } from "@/lib/owner";
 import type { CheckInFrequency, KeyResult, KrStatus, MetricType } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -15,6 +18,9 @@ type KeyResultEditControlsProps = {
   keyResult: KeyResult;
   periodOptions: string[];
   objectiveOptions: ObjectiveOption[];
+  metricTypeOptions: MetricType[];
+  keyResultStatusOptions: KrStatus[];
+  checkInFrequencyOptions: CheckInFrequency[];
 };
 
 type KeyResultDraft = {
@@ -47,10 +53,6 @@ type OwnerSuggestion = {
   mail: string;
 };
 
-const METRIC_TYPE_OPTIONS: MetricType[] = ["Delivery", "Financial", "Operational", "People", "Quality"];
-const KR_STATUS_OPTIONS: KrStatus[] = ["NotStarted", "OnTrack", "AtRisk", "OffTrack", "Done"];
-const CHECKIN_FREQUENCY_OPTIONS: CheckInFrequency[] = ["Weekly", "BiWeekly", "Monthly", "AdHoc"];
-
 function toDateInput(value: string | null): string {
   if (!value) {
     return "";
@@ -65,8 +67,8 @@ function toDraft(keyResult: KeyResult): KeyResultDraft {
     objectiveKey: keyResult.objectiveKey,
     periodKey: keyResult.periodKey,
     title: keyResult.title,
-    owner: keyResult.owner,
-    ownerEmail: keyResult.ownerEmail ?? (keyResult.owner.includes("@") ? keyResult.owner : ""),
+    owner: resolveOwnerName(keyResult.owner),
+    ownerEmail: resolveOwnerEmail(keyResult.owner, keyResult.ownerEmail),
     metricType: keyResult.metricType,
     baselineValue: String(keyResult.baselineValue),
     targetValue: String(keyResult.targetValue),
@@ -103,9 +105,13 @@ function parseProgressValue(value: string): { current: number; target: number } 
 export default function KeyResultEditControls({
   keyResult,
   periodOptions,
-  objectiveOptions
+  objectiveOptions,
+  metricTypeOptions,
+  keyResultStatusOptions,
+  checkInFrequencyOptions
 }: KeyResultEditControlsProps): JSX.Element {
   const router = useRouter();
+  const currentUserEmail = useCurrentUserEmail();
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [draft, setDraft] = useState<KeyResultDraft>(() => toDraft(keyResult));
   const [message, setMessage] = useState<string>("");
@@ -163,10 +169,11 @@ export default function KeyResultEditControls({
       currentValue = baselineValue + ((targetValue - baselineValue) * progressPctValue) / 100;
     }
 
-    const response = await fetch(`/api/krs/${encodeURIComponent(keyResult.krKey)}`, {
+    const response = await fetch(apiPath(`/api/krs/${encodeURIComponent(keyResult.krKey)}`), {
       method: "PATCH",
       headers: {
-        "content-type": "application/json"
+        "content-type": "application/json",
+        "x-user-email": currentUserEmail
       },
       body: JSON.stringify({
         krCode: draft.krCode.trim(),
@@ -263,6 +270,7 @@ export default function KeyResultEditControls({
 
           <OwnerInput
             id={`kr-owner-${keyResult.krKey}`}
+            label="Owner (optional)"
             value={draft.owner}
             onChange={(next) => setDraft((current) => ({ ...current, owner: next }))}
             onSelectUser={(user: OwnerSuggestion | null) => {
@@ -271,6 +279,7 @@ export default function KeyResultEditControls({
                 ownerEmail: user ? user.mail || user.principalName : ""
               }));
             }}
+            placeholder="Owner (optional)"
           />
           <div className="field">
             <label htmlFor={`kr-owner-email-${keyResult.krKey}`}>Owner Email</label>
@@ -284,7 +293,7 @@ export default function KeyResultEditControls({
               value={draft.metricType}
               onChange={(event) => setDraft((current) => ({ ...current, metricType: event.target.value as MetricType }))}
             >
-              {METRIC_TYPE_OPTIONS.map((option) => (
+              {metricTypeOptions.map((option) => (
                 <option key={option} value={option}>
                   {option}
                 </option>
@@ -332,7 +341,7 @@ export default function KeyResultEditControls({
               value={draft.status}
               onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value as KrStatus }))}
             >
-              {KR_STATUS_OPTIONS.map((option) => (
+              {keyResultStatusOptions.map((option) => (
                 <option key={option} value={option}>
                   {option}
                 </option>
@@ -367,7 +376,7 @@ export default function KeyResultEditControls({
               value={draft.checkInFrequency}
               onChange={(event) => setDraft((current) => ({ ...current, checkInFrequency: event.target.value as CheckInFrequency }))}
             >
-              {CHECKIN_FREQUENCY_OPTIONS.map((option) => (
+              {checkInFrequencyOptions.map((option) => (
                 <option key={option} value={option}>
                   {option}
                 </option>

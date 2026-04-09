@@ -1,6 +1,8 @@
 "use client";
 
 import type { CheckIn, Confidence, KeyResult, KrStatus } from "@/lib/types";
+import { apiPath } from "@/lib/base-path";
+import useCurrentUserEmail from "@/app/use-current-user-email";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -15,6 +17,7 @@ const CONFIDENCE_OPTIONS: Confidence[] = ["High", "Medium", "Low"];
 export default function CheckInPage(): JSX.Element {
   const router = useRouter();
   const params = useParams();
+  const currentUserEmail = useCurrentUserEmail();
   const rawKrKey = params.krKey;
   const krKey = useMemo(() => {
     if (Array.isArray(rawKrKey)) {
@@ -41,7 +44,7 @@ export default function CheckInPage(): JSX.Element {
 
     let cancelled = false;
     const load = async (): Promise<void> => {
-      const response = await fetch(`/api/krs/${krKey}`, { cache: "no-store" });
+      const response = await fetch(apiPath(`/api/krs/${krKey}`), { cache: "no-store" });
       if (!response.ok) {
         const payload = (await response.json()) as ApiError;
         if (!cancelled) {
@@ -53,7 +56,7 @@ export default function CheckInPage(): JSX.Element {
       const payload = (await response.json()) as KeyResult;
       let latestCheckIn: CheckIn | null = null;
 
-      const checkInResponse = await fetch(`/api/checkins?krKey=${encodeURIComponent(krKey)}`, { cache: "no-store" });
+      const checkInResponse = await fetch(apiPath(`/api/checkins?krKey=${encodeURIComponent(krKey)}`), { cache: "no-store" });
       if (checkInResponse.ok) {
         const checkInsPayload = (await checkInResponse.json()) as CheckIn[];
         if (Array.isArray(checkInsPayload) && checkInsPayload.length > 0) {
@@ -95,16 +98,17 @@ export default function CheckInPage(): JSX.Element {
     setIsSubmitting(true);
     setMessage("");
 
-    const response = await fetch("/api/checkins", {
+    const response = await fetch(apiPath("/api/checkins"), {
       method: "POST",
       headers: {
-        "content-type": "application/json"
+        "content-type": "application/json",
+        "x-user-email": currentUserEmail
       },
       body: JSON.stringify({
         periodKey: kr.periodKey,
         objectiveKey: kr.objectiveKey,
         krKey: kr.krKey,
-        owner: kr.owner,
+        owner: kr.owner ?? "",
         status,
         confidence,
         updateNotes,

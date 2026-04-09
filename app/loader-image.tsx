@@ -9,7 +9,7 @@ type Props = {
 export default function LoaderImage({
   size = 64,
   className = "",
-  src = "/SVH.GIF",
+  src = "/okr/SVH.GIF",
 }: Props): JSX.Element {
   const aspectRatio = 320 / 432;
 

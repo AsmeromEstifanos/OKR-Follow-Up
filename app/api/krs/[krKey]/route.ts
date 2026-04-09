@@ -1,5 +1,6 @@
 import { deleteKeyResult, getKeyResult, updateKeyResult } from "@/lib/store";
-import type { CheckInFrequency, KrStatus, MetricType, UpdateKeyResultInput } from "@/lib/types";
+import type { UpdateKeyResultInput } from "@/lib/types";
+import { withOperationProgress } from "@/app/api/_utils/with-operation-progress";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -11,9 +12,6 @@ type Context = {
   };
 };
 
-const METRIC_TYPE_VALUES = new Set<MetricType>(["Delivery", "Financial", "Operational", "People", "Quality"]);
-const KR_STATUS_VALUES = new Set<KrStatus>(["NotStarted", "OnTrack", "AtRisk", "OffTrack", "Done"]);
-const CHECKIN_FREQUENCY_VALUES = new Set<CheckInFrequency>(["Weekly", "BiWeekly", "Monthly", "AdHoc"]);
 const ALLOWED_PATCH_FIELDS = new Set([
   "krCode",
   "objectiveKey",
@@ -53,15 +51,6 @@ function expectNumber(raw: Record<string, unknown>, field: string): number {
   }
 
   return value;
-}
-
-function expectEnum<T extends string>(raw: Record<string, unknown>, field: string, values: Set<T>): T {
-  const value = raw[field];
-  if (typeof value !== "string" || !values.has(value as T)) {
-    throw new Error(`Invalid ${field}.`);
-  }
-
-  return value as T;
 }
 
 function parseKrPatch(body: unknown): UpdateKeyResultInput {
@@ -104,7 +93,7 @@ function parseKrPatch(body: unknown): UpdateKeyResultInput {
   }
 
   if (raw.owner !== undefined) {
-    patch.owner = expectString(raw, "owner");
+    patch.owner = expectString(raw, "owner", true);
   }
 
   if (raw.ownerEmail !== undefined) {
@@ -112,7 +101,7 @@ function parseKrPatch(body: unknown): UpdateKeyResultInput {
   }
 
   if (raw.metricType !== undefined) {
-    patch.metricType = expectEnum(raw, "metricType", METRIC_TYPE_VALUES);
+    patch.metricType = expectString(raw, "metricType");
   }
 
   if (raw.baselineValue !== undefined) {
@@ -128,7 +117,7 @@ function parseKrPatch(body: unknown): UpdateKeyResultInput {
   }
 
   if (raw.status !== undefined) {
-    patch.status = expectEnum(raw, "status", KR_STATUS_VALUES);
+    patch.status = expectString(raw, "status");
   }
 
   if (raw.dueDate !== undefined) {
@@ -136,7 +125,7 @@ function parseKrPatch(body: unknown): UpdateKeyResultInput {
   }
 
   if (raw.checkInFrequency !== undefined) {
-    patch.checkInFrequency = expectEnum(raw, "checkInFrequency", CHECKIN_FREQUENCY_VALUES);
+    patch.checkInFrequency = expectString(raw, "checkInFrequency");
   }
 
   if (raw.blockers !== undefined) {
@@ -161,28 +150,32 @@ export async function GET(_request: NextRequest, context: Context): Promise<Next
 }
 
 export async function PATCH(request: NextRequest, context: Context): Promise<NextResponse> {
-  try {
-    const body = await request.json();
-    const patch = parseKrPatch(body);
-    const keyResult = await updateKeyResult(context.params.krKey, patch);
+  return withOperationProgress(request, "Updating key result", async () => {
+    try {
+      const body = await request.json();
+      const patch = parseKrPatch(body);
+      const keyResult = await updateKeyResult(context.params.krKey, patch);
 
-    if (!keyResult) {
+      if (!keyResult) {
+        return NextResponse.json({ error: "Key result not found." }, { status: 404 });
+      }
+
+      return NextResponse.json(keyResult);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to update key result.";
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+  });
+}
+
+export async function DELETE(request: NextRequest, context: Context): Promise<NextResponse> {
+  return withOperationProgress(request, "Deleting key result", async () => {
+    const deleted = await deleteKeyResult(context.params.krKey);
+
+    if (!deleted) {
       return NextResponse.json({ error: "Key result not found." }, { status: 404 });
     }
 
-    return NextResponse.json(keyResult);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to update key result.";
-    return NextResponse.json({ error: message }, { status: 400 });
-  }
-}
-
-export async function DELETE(_request: NextRequest, context: Context): Promise<NextResponse> {
-  const deleted = await deleteKeyResult(context.params.krKey);
-
-  if (!deleted) {
-    return NextResponse.json({ error: "Key result not found." }, { status: 404 });
-  }
-
-  return NextResponse.json(deleted);
+    return NextResponse.json(deleted);
+  });
 }

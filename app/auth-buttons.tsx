@@ -1,6 +1,7 @@
 "use client";
 
 import LoaderImage from "@/app/loader-image";
+import { apiPath } from "@/lib/base-path";
 import { useMsal } from "@azure/msal-react";
 import { useState } from "react";
 import { ensureActiveAccount, initializeMsal, loginRequest, msalConfigError } from "@/lib/auth/msal-client";
@@ -9,6 +10,10 @@ type Props = {
   compact?: boolean;
   onAuthChanged?: () => void;
 };
+
+function normalizeEmail(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
 
 export default function AuthButtons({ compact = false, onAuthChanged }: Props): JSX.Element {
   const { instance, accounts } = useMsal();
@@ -28,10 +33,37 @@ export default function AuthButtons({ compact = false, onAuthChanged }: Props): 
     try {
       await initializeMsal();
       const response = await instance.loginPopup(loginRequest);
+      const activeAccount = response.account ?? ensureActiveAccount();
       if (response.account) {
         instance.setActiveAccount(response.account);
-      } else {
-        ensureActiveAccount();
+      }
+
+      if (activeAccount) {
+        const claims = activeAccount.idTokenClaims as { preferred_username?: unknown; email?: unknown; name?: unknown } | undefined;
+        const email =
+          normalizeEmail(typeof claims?.email === "string" ? claims.email : "") ||
+          normalizeEmail(typeof claims?.preferred_username === "string" ? claims.preferred_username : "") ||
+          normalizeEmail(activeAccount.username);
+        const displayName =
+          (typeof claims?.name === "string" ? claims.name : activeAccount.name ?? "").trim();
+
+        if (email) {
+          try {
+            await fetch(apiPath("/api/auth/logins"), {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "x-user-email": email
+              },
+              body: JSON.stringify({
+                email,
+                displayName
+              })
+            });
+          } catch {
+            // Auth logging should not block sign-in.
+          }
+        }
       }
 
       onAuthChanged?.();

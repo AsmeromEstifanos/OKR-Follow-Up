@@ -1,5 +1,6 @@
 import { deleteObjective, getObjectiveWithContext, updateObjective } from "@/lib/store";
-import type { Confidence, ObjectiveStatus, ObjectiveType, OkrCycle, UpdateObjectiveInput } from "@/lib/types";
+import type { Confidence, UpdateObjectiveInput } from "@/lib/types";
+import { withOperationProgress } from "@/app/api/_utils/with-operation-progress";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -11,9 +12,6 @@ type Context = {
   };
 };
 
-const OBJECTIVE_TYPE_VALUES = new Set<ObjectiveType>(["Aspirational", "Committed", "Learning"]);
-const OKR_CYCLE_VALUES = new Set<OkrCycle>(["Q1", "Q2", "Q3", "Q4"]);
-const OBJECTIVE_STATUS_VALUES = new Set<ObjectiveStatus>(["NotStarted", "OnTrack", "AtRisk", "OffTrack", "Done"]);
 const CONFIDENCE_VALUES = new Set<Confidence>(["High", "Medium", "Low"]);
 
 const ALLOWED_PATCH_FIELDS = new Set([
@@ -109,7 +107,7 @@ function parseObjectivePatch(body: unknown): UpdateObjectiveInput {
   }
 
   if (raw.owner !== undefined) {
-    patch.owner = expectString(raw, "owner");
+    patch.owner = expectString(raw, "owner", true);
   }
 
   if (raw.ownerEmail !== undefined) {
@@ -125,11 +123,11 @@ function parseObjectivePatch(body: unknown): UpdateObjectiveInput {
   }
 
   if (raw.objectiveType !== undefined) {
-    patch.objectiveType = expectEnum(raw, "objectiveType", OBJECTIVE_TYPE_VALUES);
+    patch.objectiveType = expectString(raw, "objectiveType");
   }
 
   if (raw.okrCycle !== undefined) {
-    patch.okrCycle = expectEnum(raw, "okrCycle", OKR_CYCLE_VALUES);
+    patch.okrCycle = expectString(raw, "okrCycle");
   }
 
   if (raw.blockers !== undefined) {
@@ -145,7 +143,7 @@ function parseObjectivePatch(body: unknown): UpdateObjectiveInput {
   }
 
   if (raw.status !== undefined) {
-    patch.status = expectEnum(raw, "status", OBJECTIVE_STATUS_VALUES);
+    patch.status = expectString(raw, "status");
   }
 
   if (raw.confidence !== undefined) {
@@ -178,28 +176,32 @@ export async function GET(_request: NextRequest, context: Context): Promise<Next
 }
 
 export async function PATCH(request: NextRequest, context: Context): Promise<NextResponse> {
-  try {
-    const body = await request.json();
-    const patch = parseObjectivePatch(body);
-    const objective = await updateObjective(context.params.objectiveKey, patch);
+  return withOperationProgress(request, "Updating objective", async () => {
+    try {
+      const body = await request.json();
+      const patch = parseObjectivePatch(body);
+      const objective = await updateObjective(context.params.objectiveKey, patch);
 
-    if (!objective) {
+      if (!objective) {
+        return NextResponse.json({ error: "Objective not found." }, { status: 404 });
+      }
+
+      return NextResponse.json(objective);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to update objective.";
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+  });
+}
+
+export async function DELETE(request: NextRequest, context: Context): Promise<NextResponse> {
+  return withOperationProgress(request, "Deleting objective", async () => {
+    const deleted = await deleteObjective(context.params.objectiveKey);
+
+    if (!deleted) {
       return NextResponse.json({ error: "Objective not found." }, { status: 404 });
     }
 
-    return NextResponse.json(objective);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to update objective.";
-    return NextResponse.json({ error: message }, { status: 400 });
-  }
-}
-
-export async function DELETE(_request: NextRequest, context: Context): Promise<NextResponse> {
-  const deleted = await deleteObjective(context.params.objectiveKey);
-
-  if (!deleted) {
-    return NextResponse.json({ error: "Objective not found." }, { status: 404 });
-  }
-
-  return NextResponse.json(deleted);
+    return NextResponse.json(deleted);
+  });
 }

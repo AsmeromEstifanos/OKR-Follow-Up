@@ -1,7 +1,21 @@
+function normalizeBasePath(input) {
+  const raw = String(input ?? "").trim();
+  if (!raw || raw === "/") {
+    return "";
+  }
+
+  const withLeadingSlash = raw.startsWith("/") ? raw : `/${raw}`;
+  return withLeadingSlash.replace(/\/+$/, "");
+}
+
+const basePath = normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  ...(basePath ? { basePath } : {}),
   env: {
+    NEXT_PUBLIC_BASE_PATH: basePath,
     NEXT_PUBLIC_AZURE_CLIENT_ID:
       process.env.NEXT_PUBLIC_AZURE_CLIENT_ID ?? process.env.REACT_APP_AZURE_CLIENT_ID ?? "",
     NEXT_PUBLIC_AAD_TENANT_ID:

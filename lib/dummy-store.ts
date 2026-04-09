@@ -1,3 +1,4 @@
+import { objectiveBelongsToVenture } from "@/lib/objective-scope";
 import { clampPercent, computeKrProgress, computeObjectiveProgress, isMissingCheckin } from "@/lib/okr-rules";
 import type {
   AppConfig,
@@ -11,6 +12,7 @@ import type {
   CreateVentureInput,
   DashboardMe,
   Department,
+  FieldOptions,
   KeyResult,
   KrStatus,
   MetricType,
@@ -38,6 +40,7 @@ type StoreState = {
 
 type PersistedContent = {
   ragThresholds?: RagThresholds;
+  fieldOptions?: FieldOptions;
   periods: Period[];
   objectives: Objective[];
   keyResults: KeyResult[];
@@ -50,6 +53,15 @@ export type StoreSnapshot = {
 };
 
 export const DEMO_OWNER = "Alex Johnson";
+
+const DEFAULT_FIELD_OPTIONS: FieldOptions = {
+  objectiveTypes: ["Aspirational", "Committed", "Learning"],
+  objectiveStatuses: ["NotStarted", "OnTrack", "AtRisk", "OffTrack", "Done"],
+  objectiveCycles: ["Q1", "Q2", "Q3", "Q4"],
+  keyResultMetricTypes: ["Delivery", "Financial", "Operational", "People", "Quality"],
+  keyResultStatuses: ["NotStarted", "OnTrack", "AtRisk", "OffTrack", "Done"],
+  checkInFrequencies: ["Weekly", "BiWeekly", "Monthly", "AdHoc"]
+};
 
 const storeContainer = globalThis as {
   __okrDummyStore?: StoreState;
@@ -80,12 +92,6 @@ function persistStore(store: StoreState): void {
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
-}
-
-function addDays(date: Date, days: number): Date {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
 }
 
 function toDateOnly(date: Date): string {
@@ -131,6 +137,27 @@ function buildUniqueKey(existingKeys: Set<string>, prefix: string, name: string)
   }
 
   return `${base}-${suffix}`;
+}
+
+function buildDepartmentKey(existingKeys: Set<string>, ventureKey: string, departmentName: string): string {
+  return buildUniqueKey(existingKeys, "DEP", `${ventureKey}-${departmentName}`);
+}
+
+function getNextNumericKey(existingKeys: string[]): string {
+  let maxValue = 0;
+
+  existingKeys.forEach((key) => {
+    const parsed = Number(key.trim());
+    if (!Number.isInteger(parsed) || parsed < 1) {
+      return;
+    }
+
+    if (parsed > maxValue) {
+      maxValue = parsed;
+    }
+  });
+
+  return String(maxValue + 1);
 }
 
 function parseNumberedCode(value: string, prefix: string): number | null {
@@ -305,6 +332,57 @@ function normalizeMetricType(value?: string): MetricType {
   return "Operational";
 }
 
+function normalizeUniqueOptionList(input: string[] | undefined, fallback: readonly string[]): string[] {
+  if (!Array.isArray(input)) {
+    return [...fallback];
+  }
+
+  const next: string[] = [];
+  input.forEach((value) => {
+    if (typeof value !== "string") {
+      return;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed || next.some((item) => item.toLowerCase() === trimmed.toLowerCase())) {
+      return;
+    }
+
+    next.push(trimmed);
+  });
+
+  return next.length > 0 ? next : [...fallback];
+}
+
+function normalizeFieldOptions(input?: Partial<FieldOptions>): FieldOptions {
+  return {
+    objectiveTypes: normalizeUniqueOptionList(
+      input?.objectiveTypes as string[] | undefined,
+      DEFAULT_FIELD_OPTIONS.objectiveTypes
+    ),
+    objectiveStatuses: normalizeUniqueOptionList(
+      input?.objectiveStatuses as string[] | undefined,
+      DEFAULT_FIELD_OPTIONS.objectiveStatuses
+    ),
+    objectiveCycles: normalizeUniqueOptionList(
+      input?.objectiveCycles as string[] | undefined,
+      DEFAULT_FIELD_OPTIONS.objectiveCycles
+    ),
+    keyResultMetricTypes: normalizeUniqueOptionList(
+      input?.keyResultMetricTypes as string[] | undefined,
+      DEFAULT_FIELD_OPTIONS.keyResultMetricTypes
+    ),
+    keyResultStatuses: normalizeUniqueOptionList(
+      input?.keyResultStatuses as string[] | undefined,
+      DEFAULT_FIELD_OPTIONS.keyResultStatuses
+    ),
+    checkInFrequencies: normalizeUniqueOptionList(
+      input?.checkInFrequencies as string[] | undefined,
+      DEFAULT_FIELD_OPTIONS.checkInFrequencies
+    )
+  };
+}
+
 function validateRagThresholds(input: RagThresholds): void {
   const greenMin = Number(input.greenMin);
   const amberMin = Number(input.amberMin);
@@ -421,6 +499,23 @@ function recalcAllObjectivesInStore(store: StoreState): void {
   store.objectives.forEach((objective) => recalcObjectiveInStore(store, objective.objectiveKey));
 }
 
+function ensureUniqueDepartmentKeys(store: StoreState): void {
+  const seen = new Set<string>();
+
+  store.config.ventures.forEach((venture) => {
+    venture.departments.forEach((department) => {
+      const currentKey = normalizeKey(department.departmentKey ?? "");
+      const normalizedKey = currentKey.toLowerCase();
+
+      if (!currentKey || seen.has(normalizedKey)) {
+        department.departmentKey = buildDepartmentKey(seen, venture.ventureKey, department.name);
+      }
+
+      seen.add(department.departmentKey.toLowerCase());
+    });
+  });
+}
+
 function migrateObjectiveDefaults(store: StoreState): void {
   store.objectives.forEach((objective) => {
     if (!objective.objectiveCode) {
@@ -492,513 +587,29 @@ function migrateKrDefaults(store: StoreState): void {
   });
 }
 
-function migrateSeedVentures(store: StoreState): void {
-  const upsertVenture = (
-    ventureKey: string,
-    name: string,
-    departments: Department[],
-    aliases: string[]
-  ): void => {
-    const canonicalKey = ventureKey.toLowerCase();
-    const canonicalName = name.toLowerCase();
-    const defaultDepartments = departments.map((department) => ({ ...department }));
-    const aliasSet = new Set([name.toLowerCase(), ventureKey.toLowerCase(), ...aliases.map((alias) => alias.toLowerCase())]);
-
-    const existing = store.config.ventures.find((venture) => {
-      return aliasSet.has(venture.name.toLowerCase()) || aliasSet.has(venture.ventureKey.toLowerCase());
-    });
-
-    if (existing) {
-      const keyMatches = existing.ventureKey.toLowerCase() === canonicalKey;
-      const nameMatches = existing.name.toLowerCase() === canonicalName;
-
-      existing.ventureKey = ventureKey;
-      existing.name = name;
-
-      if (keyMatches && nameMatches) {
-        const mergedDepartments = [...existing.departments];
-        const existingNames = new Set(mergedDepartments.map((department) => department.name.toLowerCase()));
-
-        defaultDepartments.forEach((department) => {
-          if (!existingNames.has(department.name.toLowerCase())) {
-            mergedDepartments.push({ ...department });
-          }
-        });
-
-        existing.departments = mergedDepartments;
-      } else {
-        // Legacy venture names/keys are normalized to the new defaults.
-        existing.departments = defaultDepartments;
-      }
-
-      return;
-    }
-
-    store.config.ventures.push({
-      ventureKey,
-      name,
-      departments: defaultDepartments
-    });
-  };
-
-  upsertVenture(
-    "VENT-SVH",
-    "SVH",
-    [
-      { departmentKey: "POS-SVH-PRES", name: "President" },
-      { departmentKey: "POS-SVH-CFO", name: "CFO" },
-      { departmentKey: "POS-SVH-CIO", name: "CIO" }
-    ],
-    []
-  );
-  upsertVenture(
-    "VENT-EASE",
-    "EASE Engineering",
-    [
-      { departmentKey: "POS-EASE-CTO", name: "CTO" },
-      { departmentKey: "POS-EASE-VPE", name: "VP Engineering" },
-      { departmentKey: "POS-EASE-VPP", name: "VP Product" }
-    ],
-    ["core platform", "vent-core"]
-  );
-  upsertVenture(
-    "VENT-SINO",
-    "Sino-Africa",
-    [
-      { departmentKey: "POS-SINO-MD", name: "Managing Director" },
-      { departmentKey: "POS-SINO-COMM", name: "Commercial Director" },
-      { departmentKey: "POS-SINO-PART", name: "Partnerships Director" }
-    ],
-    ["go to market", "vent-gtm"]
-  );
-
-  const seenVentureKeys = new Set<string>();
-  store.config.ventures = store.config.ventures.filter((venture) => {
-    const normalizedName = venture.name.toLowerCase();
-    if (normalizedName === "core platform" || normalizedName === "go to market") {
-      return false;
-    }
-
-    const normalizedKey = venture.ventureKey.toLowerCase();
-    if (seenVentureKeys.has(normalizedKey)) {
-      return false;
-    }
-
-    seenVentureKeys.add(normalizedKey);
-    return true;
-  });
-
-  store.objectives.forEach((objective) => {
-    if (objective.strategicTheme.toLowerCase() === "core platform") {
-      objective.strategicTheme = "EASE Engineering";
-    }
-
-    if (objective.strategicTheme.toLowerCase() === "go to market") {
-      objective.strategicTheme = "Sino-Africa";
-    }
-
-    const normalizedDepartment = objective.department.toLowerCase();
-    if (normalizedDepartment === "engineering") {
-      objective.department = "VP Engineering";
-    }
-
-    if (normalizedDepartment === "product") {
-      objective.department = "VP Product";
-    }
-
-    if (normalizedDepartment === "marketing") {
-      objective.department = "Commercial Director";
-    }
-
-    if (normalizedDepartment === "sales") {
-      objective.department = "Partnerships Director";
-    }
-
-    if (normalizedDepartment === "corporate strategy" || normalizedDepartment === "executive office") {
-      objective.department = "President";
-    }
-  });
-
-  const activePeriod = store.periods.find((period) => period.status === "Active") ?? store.periods[0];
-  if (!activePeriod) {
-    return;
-  }
-
-  const hasSvhObjective = store.objectives.some((objective) => {
-    return objective.department.toLowerCase() === "president" || objective.objectiveKey.toLowerCase() === "okr-004";
-  });
-
-  if (!hasSvhObjective) {
-    store.objectives.push({
-      objectiveKey: "OKR-004",
-      periodKey: activePeriod.periodKey,
-      title: "Drive group governance cadence",
-      description: "Improve group-level planning and executive accountability rhythms.",
-      owner: "Sarah Rahman",
-      department: "President",
-      strategicTheme: "SVH",
-      objectiveType: "Committed",
-      okrCycle: getOkrCycleFromDate(activePeriod.startDate),
-      keyRisksDependency: "Cross-team planning input is still inconsistent.",
-      notes: "Track monthly governance packs and decision turnaround.",
-      status: "OnTrack",
-      progressPct: 0,
-      confidence: "High",
-      rag: "Green",
-      startDate: activePeriod.startDate,
-      endDate: activePeriod.endDate,
-      lastCheckinAt: null
-    });
-  }
-
-  const hasSvhKr = store.keyResults.some((kr) => kr.krKey.toLowerCase() === "kr-005");
-  if (!hasSvhKr) {
-    store.keyResults.push({
-      krKey: "KR-005",
-      objectiveKey: "OKR-004",
-      periodKey: activePeriod.periodKey,
-      title: "Complete 12 monthly governance packs",
-      owner: "Sarah Rahman",
-      metricType: "Delivery",
-      baselineValue: 0,
-      targetValue: 12,
-      currentValue: 8,
-      progressPct: computeKrProgress(0, 12, 8),
-      status: "OnTrack",
-      dueDate: activePeriod.endDate,
-      checkInFrequency: "Monthly",
-      notes: "Board-level packs delivered with status and decisions.",
-      lastCheckinAt: addDays(new Date(), -5).toISOString()
-    });
-  }
-
-  const hasSvhCheckin = store.checkIns.some((checkIn) => checkIn.krKey.toLowerCase() === "kr-005");
-  if (!hasSvhCheckin) {
-    store.checkIns.push({
-      checkInAt: addDays(new Date(), -5).toISOString(),
-      periodKey: activePeriod.periodKey,
-      objectiveKey: "OKR-004",
-      krKey: "KR-005",
-      owner: "Sarah Rahman",
-      status: "OnTrack",
-      confidence: "Medium",
-      updateNotes: "Executive review pack cadence is stable and improving.",
-      blockers: "",
-      supportNeeded: "Need timely input from two departments before each board meeting.",
-      currentValueSnapshot: 8,
-      progressPctSnapshot: computeKrProgress(0, 12, 8),
-      attachments: []
-    });
-  }
-
-  recalcAllObjectivesInStore(store);
-}
-
 function buildSeedStore(): StoreState {
-  const now = new Date();
-  const activePeriodStart = toDateOnly(addDays(now, -20));
-  const activePeriodEnd = toDateOnly(addDays(now, 70));
-  const plannedPeriodStart = toDateOnly(addDays(now, 71));
-  const plannedPeriodEnd = toDateOnly(addDays(now, 160));
-
-  const config: AppConfig = {
-    ragThresholds: {
-      greenMin: 70,
-      amberMin: 40
+  const store: StoreState = {
+    config: {
+      ragThresholds: {
+        greenMin: 70,
+        amberMin: 40
+      },
+      fieldOptions: clone(DEFAULT_FIELD_OPTIONS),
+      ventures: []
     },
-    ventures: [
-      {
-        ventureKey: "VENT-SVH",
-        name: "SVH",
-        departments: [
-          { departmentKey: "POS-SVH-PRES", name: "President" },
-          { departmentKey: "POS-SVH-CFO", name: "CFO" },
-          { departmentKey: "POS-SVH-CIO", name: "CIO" }
-        ]
-      },
-      {
-        ventureKey: "VENT-EASE",
-        name: "EASE Engineering",
-        departments: [
-          { departmentKey: "POS-EASE-CTO", name: "CTO" },
-          { departmentKey: "POS-EASE-VPE", name: "VP Engineering" },
-          { departmentKey: "POS-EASE-VPP", name: "VP Product" }
-        ]
-      },
-      {
-        ventureKey: "VENT-SINO",
-        name: "Sino-Africa",
-        departments: [
-          { departmentKey: "POS-SINO-MD", name: "Managing Director" },
-          { departmentKey: "POS-SINO-COMM", name: "Commercial Director" },
-          { departmentKey: "POS-SINO-PART", name: "Partnerships Director" }
-        ]
-      }
-    ]
+    periods: [],
+    objectives: [],
+    keyResults: [],
+    checkIns: []
   };
 
-  const periods: Period[] = [
-    {
-      periodKey: "P-CURRENT",
-      name: "Current Period",
-      startDate: activePeriodStart,
-      endDate: activePeriodEnd,
-      status: "Active"
-    },
-    {
-      periodKey: "P-NEXT",
-      name: "Next Period",
-      startDate: plannedPeriodStart,
-      endDate: plannedPeriodEnd,
-      status: "Planned"
-    }
-  ];
-
-  const objectives: Objective[] = [
-    {
-      objectiveKey: "OKR-001",
-      periodKey: "P-CURRENT",
-      title: "Improve release reliability",
-      description: "Reduce production incidents and improve rollback confidence.",
-      owner: DEMO_OWNER,
-      department: "VP Engineering",
-      strategicTheme: "EASE Engineering",
-      objectiveType: "Committed",
-      okrCycle: "Q1",
-      keyRisksDependency: "Large dependency upgrade still pending.",
-      notes: "Focus on release safety and rollback confidence.",
-      status: "OnTrack",
-      progressPct: 0,
-      confidence: "High",
-      rag: "Green",
-      startDate: activePeriodStart,
-      endDate: activePeriodEnd,
-      lastCheckinAt: null
-    },
-    {
-      objectiveKey: "OKR-002",
-      periodKey: "P-CURRENT",
-      title: "Lift product adoption",
-      description: "Increase activation and weekly usage of core workflows.",
-      owner: "Priya Nair",
-      department: "VP Product",
-      strategicTheme: "EASE Engineering",
-      objectiveType: "Aspirational",
-      okrCycle: "Q1",
-      keyRisksDependency: "Onboarding flow needs design rework.",
-      notes: "Prioritize conversion and activation experiments.",
-      status: "AtRisk",
-      progressPct: 0,
-      confidence: "Medium",
-      rag: "Amber",
-      startDate: activePeriodStart,
-      endDate: activePeriodEnd,
-      lastCheckinAt: null
-    },
-    {
-      objectiveKey: "OKR-003",
-      periodKey: "P-NEXT",
-      title: "Prepare next quarter GTM launch",
-      description: "Coordinate sales readiness and launch assets.",
-      owner: DEMO_OWNER,
-      department: "Commercial Director",
-      strategicTheme: "Sino-Africa",
-      objectiveType: "Learning",
-      okrCycle: "Q2",
-      keyRisksDependency: "",
-      notes: "Collect GTM learnings ahead of launch window.",
-      status: "NotStarted",
-      progressPct: 0,
-      confidence: "Medium",
-      rag: "Amber",
-      startDate: plannedPeriodStart,
-      endDate: plannedPeriodEnd,
-      lastCheckinAt: null
-    },
-    {
-      objectiveKey: "OKR-004",
-      periodKey: "P-CURRENT",
-      title: "Drive group governance cadence",
-      description: "Improve group-level planning and executive accountability rhythms.",
-      owner: "Sarah Rahman",
-      department: "President",
-      strategicTheme: "SVH",
-      objectiveType: "Committed",
-      okrCycle: "Q1",
-      keyRisksDependency: "Cross-team planning input is still inconsistent.",
-      notes: "Track monthly governance packs and decision turnaround.",
-      status: "OnTrack",
-      progressPct: 0,
-      confidence: "High",
-      rag: "Green",
-      startDate: activePeriodStart,
-      endDate: activePeriodEnd,
-      lastCheckinAt: null
-    }
-  ];
-
-  const keyResults: KeyResult[] = [
-    {
-      krKey: "KR-001",
-      objectiveKey: "OKR-001",
-      periodKey: "P-CURRENT",
-      title: "Cut Sev-1 incidents by 40%",
-      owner: DEMO_OWNER,
-      metricType: "Delivery",
-      baselineValue: 0,
-      targetValue: 40,
-      currentValue: 21,
-      progressPct: 0,
-      status: "OnTrack",
-      dueDate: toDateOnly(addDays(now, 40)),
-      checkInFrequency: "Weekly",
-      notes: "Primary indicator for production reliability improvements.",
-      lastCheckinAt: addDays(now, -3).toISOString()
-    },
-    {
-      krKey: "KR-002",
-      objectiveKey: "OKR-001",
-      periodKey: "P-CURRENT",
-      title: "Reach 95% deployment success rate",
-      owner: DEMO_OWNER,
-      metricType: "Delivery",
-      baselineValue: 60,
-      targetValue: 95,
-      currentValue: 74,
-      progressPct: 0,
-      status: "AtRisk",
-      dueDate: toDateOnly(addDays(now, 55)),
-      checkInFrequency: "Weekly",
-      notes: "Track release quality trend from deployment pipeline data.",
-      lastCheckinAt: addDays(now, -10).toISOString()
-    },
-    {
-      krKey: "KR-003",
-      objectiveKey: "OKR-002",
-      periodKey: "P-CURRENT",
-      title: "Increase weekly active teams to 120",
-      owner: "Priya Nair",
-      metricType: "People",
-      baselineValue: 70,
-      targetValue: 120,
-      currentValue: 84,
-      progressPct: 0,
-      status: "AtRisk",
-      dueDate: toDateOnly(addDays(now, 35)),
-      checkInFrequency: "BiWeekly",
-      notes: "Monitor adoption against onboarding and activation improvements.",
-      lastCheckinAt: addDays(now, -6).toISOString()
-    },
-    {
-      krKey: "KR-004",
-      objectiveKey: "OKR-003",
-      periodKey: "P-NEXT",
-      title: "Publish 10 launch-ready assets",
-      owner: DEMO_OWNER,
-      metricType: "Delivery",
-      baselineValue: 0,
-      targetValue: 10,
-      currentValue: 0,
-      progressPct: 0,
-      status: "NotStarted",
-      dueDate: toDateOnly(addDays(now, 115)),
-      checkInFrequency: "Monthly",
-      notes: "Launch asset production tracker.",
-      lastCheckinAt: null
-    },
-    {
-      krKey: "KR-005",
-      objectiveKey: "OKR-004",
-      periodKey: "P-CURRENT",
-      title: "Complete 12 monthly governance packs",
-      owner: "Sarah Rahman",
-      metricType: "Delivery",
-      baselineValue: 0,
-      targetValue: 12,
-      currentValue: 8,
-      progressPct: 0,
-      status: "OnTrack",
-      dueDate: toDateOnly(addDays(now, 62)),
-      checkInFrequency: "Monthly",
-      notes: "Board-level packs delivered with status and decisions.",
-      lastCheckinAt: addDays(now, -5).toISOString()
-    }
-  ];
-
-  keyResults.forEach((kr) => {
-    kr.progressPct = computeKrProgress(kr.baselineValue, kr.targetValue, kr.currentValue);
-  });
-
-  const checkIns: CheckIn[] = [
-    {
-      checkInAt: addDays(now, -3).toISOString(),
-      periodKey: "P-CURRENT",
-      objectiveKey: "OKR-001",
-      krKey: "KR-001",
-      owner: DEMO_OWNER,
-      status: "OnTrack",
-      confidence: "High",
-      updateNotes: "Rollbacks are fully automated in staging and partially in production.",
-      blockers: "",
-      supportNeeded: "Need SRE support for one final runbook.",
-      currentValueSnapshot: 21,
-      progressPctSnapshot: computeKrProgress(0, 40, 21),
-      attachments: []
-    },
-    {
-      checkInAt: addDays(now, -10).toISOString(),
-      periodKey: "P-CURRENT",
-      objectiveKey: "OKR-001",
-      krKey: "KR-002",
-      owner: DEMO_OWNER,
-      status: "AtRisk",
-      confidence: "Medium",
-      updateNotes: "Deployment quality improved but incident trend still volatile.",
-      blockers: "Large dependency upgrade still pending.",
-      supportNeeded: "Prioritize platform migration window.",
-      currentValueSnapshot: 74,
-      progressPctSnapshot: computeKrProgress(60, 95, 74),
-      attachments: []
-    },
-    {
-      checkInAt: addDays(now, -6).toISOString(),
-      periodKey: "P-CURRENT",
-      objectiveKey: "OKR-002",
-      krKey: "KR-003",
-      owner: "Priya Nair",
-      status: "AtRisk",
-      confidence: "Low",
-      updateNotes: "Top-of-funnel traffic is stable, but trial conversion has slowed.",
-      blockers: "Onboarding flow needs design rework.",
-      supportNeeded: "Design team support for experiment turnaround.",
-      currentValueSnapshot: 84,
-      progressPctSnapshot: computeKrProgress(70, 120, 84),
-      attachments: []
-    },
-    {
-      checkInAt: addDays(now, -5).toISOString(),
-      periodKey: "P-CURRENT",
-      objectiveKey: "OKR-004",
-      krKey: "KR-005",
-      owner: "Sarah Rahman",
-      status: "OnTrack",
-      confidence: "Medium",
-      updateNotes: "Executive review pack cadence is stable and improving.",
-      blockers: "",
-      supportNeeded: "Need timely input from two departments before each board meeting.",
-      currentValueSnapshot: 8,
-      progressPctSnapshot: computeKrProgress(0, 12, 8),
-      attachments: []
-    }
-  ];
-
-  const store: StoreState = { config, periods, objectives, keyResults, checkIns };
   recalcAllObjectivesInStore(store);
   return store;
 }
 
 function applyStoreMigrations(store: StoreState): void {
-  migrateSeedVentures(store);
+  store.config.fieldOptions = normalizeFieldOptions(store.config.fieldOptions);
+  ensureUniqueDepartmentKeys(store);
   migrateObjectiveDefaults(store);
   migrateKrDefaults(store);
   persistStore(store);
@@ -1009,6 +620,7 @@ function toStoreSnapshot(store: StoreState): StoreSnapshot {
     ventures: clone(store.config.ventures),
     content: {
       ragThresholds: clone(store.config.ragThresholds),
+      fieldOptions: clone(store.config.fieldOptions),
       periods: clone(store.periods),
       objectives: clone(store.objectives),
       keyResults: clone(store.keyResults),
@@ -1025,6 +637,9 @@ function fromStoreSnapshot(snapshot: StoreSnapshot): StoreState {
       greenMin: Number(snapshot.content.ragThresholds.greenMin),
       amberMin: Number(snapshot.content.ragThresholds.amberMin)
     };
+  }
+  if (snapshot.content.fieldOptions) {
+    store.config.fieldOptions = normalizeFieldOptions(snapshot.content.fieldOptions);
   }
 
   store.periods = clone(snapshot.content.periods);
@@ -1073,6 +688,10 @@ function getStore(): StoreState {
       };
     }
 
+    if (persistedContent.fieldOptions) {
+      storeContainer.__okrDummyStore.config.fieldOptions = normalizeFieldOptions(persistedContent.fieldOptions);
+    }
+
     if (persistedContent.periods.length > 0) {
       storeContainer.__okrDummyStore.periods = persistedContent.periods;
     }
@@ -1111,12 +730,12 @@ function ensureKrExists(store: StoreState, krKey: string): KeyResult {
   return kr;
 }
 
-function isMatch(value: string, expected?: string): boolean {
+function isMatch(value: string | undefined, expected?: string): boolean {
   if (!expected) {
     return true;
   }
 
-  return value.toLowerCase() === expected.toLowerCase();
+  return (value ?? "").toLowerCase() === expected.toLowerCase();
 }
 
 function sortByDateDescending<T>(items: T[], selector: (item: T) => string): T[] {
@@ -1137,6 +756,17 @@ export function updateRagThresholds(input: RagThresholds): AppConfig {
   };
 
   recalcAllObjectivesInStore(store);
+  persistStore(store);
+  return clone(store.config);
+}
+
+export function updateFieldOptions(input: Partial<FieldOptions>): AppConfig {
+  const store = getStore();
+  store.config.fieldOptions = normalizeFieldOptions({
+    ...store.config.fieldOptions,
+    ...input
+  });
+
   persistStore(store);
   return clone(store.config);
 }
@@ -1169,11 +799,13 @@ export function addVenture(input: CreateVentureInput): Venture {
 
   const departments: Department[] = [];
   const rawDepartments = input.departments ?? [];
-  const departmentKeys = new Set<string>();
+  const departmentKeys = new Set<string>(store.config.ventures.flatMap((venture) => venture.departments.map((department) => department.departmentKey.toLowerCase())));
   const departmentNames = new Set<string>();
 
   rawDepartments.forEach((department) => {
     const departmentName = normalizeName(department.name);
+    const departmentOwner = normalizeName(department.owner ?? "");
+    const departmentOwnerEmail = normalizeEmail(department.ownerEmail ?? "") || undefined;
     const requestedDepartmentKey = normalizeKey(department.departmentKey ?? "");
     let departmentKey = requestedDepartmentKey;
 
@@ -1190,12 +822,17 @@ export function addVenture(input: CreateVentureInput): Venture {
         throw new Error(`Duplicate department key '${requestedDepartmentKey}' in venture payload.`);
       }
     } else {
-      departmentKey = buildUniqueKey(departmentKeys, "DEP", departmentName);
+      departmentKey = buildDepartmentKey(departmentKeys, ventureKey, departmentName);
     }
 
     departmentKeys.add(departmentKey.toLowerCase());
     departmentNames.add(departmentName.toLowerCase());
-    departments.push({ departmentKey, name: departmentName });
+    departments.push({
+      departmentKey,
+      name: departmentName,
+      owner: departmentOwner || undefined,
+      ownerEmail: departmentOwnerEmail
+    });
   });
 
   const venture: Venture = {
@@ -1231,7 +868,20 @@ export function updateVenture(ventureKey: string, patch: UpdateVentureInput): Ve
       throw new Error(`Venture '${name}' already exists.`);
     }
 
+    const oldName = venture.name;
     venture.name = name;
+    store.objectives.forEach((objective) => {
+      const normalizedObjectiveVentureName = normalizeName(objective.ventureName ?? "").toLowerCase();
+      const normalizedTheme = normalizeName(objective.strategicTheme).toLowerCase();
+      if (normalizedObjectiveVentureName === oldName.toLowerCase()) {
+        objective.ventureName = name;
+        return;
+      }
+
+      if (!normalizedObjectiveVentureName && normalizedTheme === oldName.toLowerCase()) {
+        objective.ventureName = name;
+      }
+    });
   }
 
   persistStore(store);
@@ -1249,10 +899,9 @@ export function deleteVenture(ventureKey: string): boolean {
   }
 
   const venture = store.config.ventures[index];
-  const ventureDepartments = new Set(venture.departments.map((department) => department.name.toLowerCase()));
   const removedObjectiveKeys = new Set(
     store.objectives
-      .filter((objective) => ventureDepartments.has(objective.department.toLowerCase()))
+      .filter((objective) => objectiveBelongsToVenture(objective, venture))
       .map((objective) => objective.objectiveKey.toLowerCase())
   );
   const removedKrKeys = new Set(
@@ -1281,6 +930,8 @@ export function addDepartmentToVenture(ventureKey: string, input: CreateDepartme
   }
 
   const name = normalizeName(input.name);
+  const owner = normalizeName(input.owner ?? "");
+  const ownerEmail = normalizeEmail(input.ownerEmail ?? "") || undefined;
   const requestedDepartmentKey = normalizeKey(input.departmentKey ?? "");
   let departmentKey = requestedDepartmentKey;
 
@@ -1293,16 +944,23 @@ export function addDepartmentToVenture(ventureKey: string, input: CreateDepartme
     throw new Error(`Department '${name}' already exists in venture '${venture.name}'.`);
   }
 
-  const existingDepartmentKeys = new Set(venture.departments.map((department) => department.departmentKey.toLowerCase()));
+  const existingDepartmentKeys = new Set(
+    store.config.ventures.flatMap((item) => item.departments.map((department) => department.departmentKey.toLowerCase()))
+  );
   if (requestedDepartmentKey) {
     if (existingDepartmentKeys.has(requestedDepartmentKey.toLowerCase())) {
-      throw new Error(`Department '${requestedDepartmentKey}' already exists in venture '${venture.ventureKey}'.`);
+      throw new Error(`Department key '${requestedDepartmentKey}' already exists.`);
     }
   } else {
-    departmentKey = buildUniqueKey(existingDepartmentKeys, "DEP", name);
+    departmentKey = buildDepartmentKey(existingDepartmentKeys, venture.ventureKey, name);
   }
 
-  venture.departments.push({ departmentKey, name });
+  venture.departments.push({
+    departmentKey,
+    name,
+    owner: owner || undefined,
+    ownerEmail
+  });
   persistStore(store);
   return clone(venture);
 }
@@ -1344,10 +1002,21 @@ export function updateDepartmentInVenture(
     department.name = name;
 
     store.objectives.forEach((objective) => {
-      if (objective.department.toLowerCase() === oldName.toLowerCase()) {
+      if (
+        objective.department.toLowerCase() === oldName.toLowerCase() &&
+        objectiveBelongsToVenture(objective, venture)
+      ) {
         objective.department = name;
       }
     });
+  }
+
+  if (patch.owner !== undefined) {
+    department.owner = normalizeName(patch.owner) || undefined;
+  }
+
+  if (patch.ownerEmail !== undefined) {
+    department.ownerEmail = normalizeEmail(patch.ownerEmail) || undefined;
   }
 
   persistStore(store);
@@ -1371,8 +1040,28 @@ export function deleteDepartmentFromVenture(ventureKey: string, departmentKey: s
   }
 
   const department = venture.departments[index];
-  ensureNoObjectiveUsesDepartment(store, department.name);
+  const removedObjectiveKeys = new Set(
+    store.objectives
+      .filter((objective) => {
+        return (
+          objective.department.toLowerCase() === department.name.toLowerCase() &&
+          objectiveBelongsToVenture(objective, venture)
+        );
+      })
+      .map((objective) => objective.objectiveKey.toLowerCase())
+  );
+  const removedKrKeys = new Set(
+    store.keyResults
+      .filter((keyResult) => removedObjectiveKeys.has(keyResult.objectiveKey.toLowerCase()))
+      .map((keyResult) => keyResult.krKey.toLowerCase())
+  );
+
   venture.departments.splice(index, 1);
+  store.objectives = store.objectives.filter((objective) => !removedObjectiveKeys.has(objective.objectiveKey.toLowerCase()));
+  store.keyResults = store.keyResults.filter((keyResult) => !removedKrKeys.has(keyResult.krKey.toLowerCase()));
+  store.checkIns = store.checkIns.filter((checkIn) => {
+    return !removedObjectiveKeys.has(checkIn.objectiveKey.toLowerCase()) && !removedKrKeys.has(checkIn.krKey.toLowerCase());
+  });
 
   persistStore(store);
   return clone(venture);
@@ -1472,8 +1161,7 @@ export function getObjectiveWithContext(objectiveKey: string): ObjectiveWithCont
 export function createObjective(input: CreateObjectiveInput): Objective {
   const store = getStore();
   const requestedObjectiveCode = normalizeKey(input.objectiveCode ?? input.objectiveKey ?? "");
-  const existingKeys = new Set(store.objectives.map((objective) => objective.objectiveKey.toLowerCase()));
-  const objectiveKey = buildUniqueKey(existingKeys, "OKR", input.title);
+  const objectiveKey = getNextNumericKey(store.objectives.map((objective) => objective.objectiveKey));
 
   ensurePeriodExists(store, input.periodKey);
   assertDepartmentExists(store, input.department);
@@ -1489,7 +1177,7 @@ export function createObjective(input: CreateObjectiveInput): Objective {
     periodKey: input.periodKey,
     title: input.title,
     description: input.description || notes,
-    owner: input.owner,
+    owner: normalizeName(input.owner ?? "") || undefined,
     ownerEmail: normalizeEmail(input.ownerEmail ?? "") || undefined,
     department: input.department,
     ventureName: input.ventureName ?? findVentureForObjectiveScope(store, input.department, "", input.strategicTheme)?.name ?? "",
@@ -1540,7 +1228,7 @@ export function updateObjective(objectiveKey: string, patch: UpdateObjectiveInpu
   }
 
   if (patch.owner !== undefined) {
-    objective.owner = normalizeName(patch.owner);
+    objective.owner = normalizeName(patch.owner) || undefined;
   }
 
   if (patch.ownerEmail !== undefined) {
@@ -1685,8 +1373,7 @@ export function getKeyResult(krKey: string): KeyResult | null {
 export function createKeyResult(input: CreateKeyResultInput): KeyResult {
   const store = getStore();
   const requestedKrCode = normalizeKey(input.krCode ?? input.krKey ?? "");
-  const existingKeys = new Set(store.keyResults.map((kr) => kr.krKey.toLowerCase()));
-  const krKey = buildUniqueKey(existingKeys, "KR", input.title);
+  const krKey = getNextNumericKey(store.keyResults.map((kr) => kr.krKey));
 
   const objective = ensureObjectiveExists(store, input.objectiveKey);
   ensurePeriodExists(store, input.periodKey);
@@ -1703,7 +1390,7 @@ export function createKeyResult(input: CreateKeyResultInput): KeyResult {
     objectiveKey: input.objectiveKey,
     periodKey: input.periodKey,
     title: input.title,
-    owner: input.owner,
+    owner: normalizeName(input.owner ?? "") || undefined,
     ownerEmail: normalizeEmail(input.ownerEmail ?? "") || undefined,
     metricType: normalizeMetricType(input.metricType),
     baselineValue: input.baselineValue,
@@ -1763,7 +1450,7 @@ export function updateKeyResult(krKey: string, patch: UpdateKeyResultInput): Key
   }
 
   if (patch.owner !== undefined) {
-    keyResult.owner = normalizeName(patch.owner);
+    keyResult.owner = normalizeName(patch.owner) || undefined;
   }
 
   if (patch.ownerEmail !== undefined) {
@@ -1931,10 +1618,6 @@ export function createCheckIn(input: CreateCheckInInput): CheckIn {
   return clone(checkIn);
 }
 
-function isDepartmentInVenture(venture: Venture, departmentName: string): boolean {
-  return venture.departments.some((department) => department.name.toLowerCase() === departmentName.toLowerCase());
-}
-
 export function getDashboardForOwner(owner: string = DEMO_OWNER, filters: DashboardFilters = {}): DashboardMe {
   const store = getStore();
   const normalizedOwner = owner.toLowerCase();
@@ -1951,7 +1634,7 @@ export function getDashboardForOwner(owner: string = DEMO_OWNER, filters: Dashbo
       return false;
     }
 
-    if (selectedVenture && !isDepartmentInVenture(selectedVenture, objective.department)) {
+    if (selectedVenture && !objectiveBelongsToVenture(objective, selectedVenture)) {
       return false;
     }
 
@@ -1959,7 +1642,7 @@ export function getDashboardForOwner(owner: string = DEMO_OWNER, filters: Dashbo
   };
 
   const myObjectives = store.objectives.filter((objective) => {
-    if (objective.owner.toLowerCase() !== normalizedOwner) {
+    if ((objective.owner ?? "").toLowerCase() !== normalizedOwner) {
       return false;
     }
 
@@ -1971,7 +1654,7 @@ export function getDashboardForOwner(owner: string = DEMO_OWNER, filters: Dashbo
   );
 
   const myKeyResults = store.keyResults.filter((kr) => {
-    if (kr.owner.toLowerCase() !== normalizedOwner) {
+    if ((kr.owner ?? "").toLowerCase() !== normalizedOwner) {
       return false;
     }
 

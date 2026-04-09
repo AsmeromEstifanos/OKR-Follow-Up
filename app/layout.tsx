@@ -5,11 +5,18 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "OKR Follow-Up (Dummy Data)",
-  description: "Internal OKR follow-up MVP running on local in-memory data."
+  title: "OKR Follow-Up",
+  description: "Internal OKR follow-up",
+  icons: {
+    icon: "/okr/sol-ventures.png",
+  },
 };
 
-export default function RootLayout({ children }: { children: ReactNode }): JSX.Element {
+export default function RootLayout({
+  children,
+}: {
+  children: ReactNode;
+}): JSX.Element {
   return (
     <html lang="en">
       <body>

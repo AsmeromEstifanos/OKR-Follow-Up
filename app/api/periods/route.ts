@@ -1,3 +1,4 @@
+import { withOperationProgress } from "@/app/api/_utils/with-operation-progress";
 import { createPeriod, listPeriods } from "@/lib/store";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -9,12 +10,14 @@ export async function GET(): Promise<NextResponse> {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  try {
-    const body = await request.json();
-    const period = await createPeriod(body);
-    return NextResponse.json(period, { status: 201 });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to create period.";
-    return NextResponse.json({ error: message }, { status: 400 });
-  }
+  return withOperationProgress(request, "Creating period", async () => {
+    try {
+      const body = await request.json();
+      const period = await createPeriod(body);
+      return NextResponse.json(period, { status: 201 });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to create period.";
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+  });
 }

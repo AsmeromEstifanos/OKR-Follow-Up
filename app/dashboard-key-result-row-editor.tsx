@@ -1,6 +1,9 @@
 "use client";
 
 import OwnerInput from "@/app/owner-input";
+import useCurrentUserEmail from "@/app/use-current-user-email";
+import { apiPath } from "@/lib/base-path";
+import { resolveOwnerEmail, resolveOwnerName } from "@/lib/owner";
 import type { CheckInFrequency, KeyResult, KrStatus, MetricType } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -10,6 +13,11 @@ type Props = {
   objectiveKeyRisksDependency: string;
   latestUpdateNotes?: string;
   latestUpdatedAt?: string | null;
+  positionOwnerEmail?: string;
+  adminEmails: string[];
+  metricTypeOptions: MetricType[];
+  keyResultStatusOptions: KrStatus[];
+  checkInFrequencyOptions: CheckInFrequency[];
 };
 
 type ApiError = {
@@ -21,10 +29,6 @@ type OwnerSuggestion = {
   principalName: string;
   mail: string;
 };
-
-const METRIC_TYPE_OPTIONS: MetricType[] = ["Delivery", "Financial", "Operational", "People", "Quality"];
-const KR_STATUS_OPTIONS: KrStatus[] = ["NotStarted", "OnTrack", "AtRisk", "OffTrack", "Done"];
-const CHECKIN_FREQUENCY_OPTIONS: CheckInFrequency[] = ["Weekly", "BiWeekly", "Monthly", "AdHoc"];
 
 function formatStatus(value: KrStatus): string {
   if (value === "OnTrack") {
@@ -91,13 +95,23 @@ async function readJson<T>(response: Response): Promise<T | null> {
   }
 }
 
+function normalizeEmail(value: string | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
 export default function DashboardKeyResultRowEditor({
   keyResult,
   objectiveKeyRisksDependency,
   latestUpdateNotes,
-  latestUpdatedAt
+  latestUpdatedAt,
+  positionOwnerEmail,
+  adminEmails,
+  metricTypeOptions,
+  keyResultStatusOptions,
+  checkInFrequencyOptions
 }: Props): JSX.Element {
   const router = useRouter();
+  const signedInEmail = useCurrentUserEmail();
   const krCode = keyResult.krCode ?? keyResult.krKey;
 
   const [isEditing, setIsEditing] = useState<boolean>(false);
@@ -106,8 +120,8 @@ export default function DashboardKeyResultRowEditor({
 
   const [code, setCode] = useState<string>(krCode);
   const [title, setTitle] = useState<string>(keyResult.title);
-  const [owner, setOwner] = useState<string>(keyResult.owner);
-  const [ownerEmail, setOwnerEmail] = useState<string>(keyResult.ownerEmail ?? (keyResult.owner.includes("@") ? keyResult.owner : ""));
+  const [owner, setOwner] = useState<string>(resolveOwnerName(keyResult.owner));
+  const [ownerEmail, setOwnerEmail] = useState<string>(resolveOwnerEmail(keyResult.owner, keyResult.ownerEmail));
   const [metricType, setMetricType] = useState<MetricType>(keyResult.metricType);
   const [baselineValue, setBaselineValue] = useState<string>(String(keyResult.baselineValue));
   const [targetValue, setTargetValue] = useState<string>(String(keyResult.targetValue));
@@ -118,12 +132,19 @@ export default function DashboardKeyResultRowEditor({
   const [checkInFrequency, setCheckInFrequency] = useState<CheckInFrequency>(keyResult.checkInFrequency);
   const [blockers, setBlockers] = useState<string>(keyResult.blockers ?? "");
   const [notes, setNotes] = useState<string>(keyResult.notes || latestUpdateNotes || "");
+  const normalizedOwnerEmail = normalizeEmail(resolveOwnerEmail(keyResult.owner, keyResult.ownerEmail));
+  const normalizedPositionOwnerEmail = normalizeEmail(positionOwnerEmail);
+  const normalizedUserEmail = normalizeEmail(signedInEmail);
+  const isAdmin = adminEmails.map((entry) => normalizeEmail(entry)).includes(normalizedUserEmail);
+  const canEdit =
+    Boolean(normalizedUserEmail) &&
+    (isAdmin || normalizedOwnerEmail === normalizedUserEmail || normalizedPositionOwnerEmail === normalizedUserEmail);
 
   useEffect(() => {
     setCode(krCode);
     setTitle(keyResult.title);
-    setOwner(keyResult.owner);
-    setOwnerEmail(keyResult.ownerEmail ?? (keyResult.owner.includes("@") ? keyResult.owner : ""));
+    setOwner(resolveOwnerName(keyResult.owner));
+    setOwnerEmail(resolveOwnerEmail(keyResult.owner, keyResult.ownerEmail));
     setMetricType(keyResult.metricType);
     setBaselineValue(String(keyResult.baselineValue));
     setTargetValue(String(keyResult.targetValue));
@@ -139,8 +160,8 @@ export default function DashboardKeyResultRowEditor({
   const resetDraft = (): void => {
     setCode(krCode);
     setTitle(keyResult.title);
-    setOwner(keyResult.owner);
-    setOwnerEmail(keyResult.ownerEmail ?? (keyResult.owner.includes("@") ? keyResult.owner : ""));
+    setOwner(resolveOwnerName(keyResult.owner));
+    setOwnerEmail(resolveOwnerEmail(keyResult.owner, keyResult.ownerEmail));
     setMetricType(keyResult.metricType);
     setBaselineValue(String(keyResult.baselineValue));
     setTargetValue(String(keyResult.targetValue));
@@ -198,10 +219,11 @@ export default function DashboardKeyResultRowEditor({
     setIsSaving(true);
     setError("");
 
-    const response = await fetch(`/api/krs/${encodeURIComponent(keyResult.krKey)}`, {
+    const response = await fetch(apiPath(`/api/krs/${encodeURIComponent(keyResult.krKey)}`), {
       method: "PATCH",
       headers: {
-        "content-type": "application/json"
+        "content-type": "application/json",
+        "x-user-email": signedInEmail
       },
       body: JSON.stringify({
         title: title.trim(),
@@ -245,8 +267,11 @@ export default function DashboardKeyResultRowEditor({
     setIsSaving(true);
     setError("");
 
-    const response = await fetch(`/api/krs/${encodeURIComponent(keyResult.krKey)}`, {
-      method: "DELETE"
+    const response = await fetch(apiPath(`/api/krs/${encodeURIComponent(keyResult.krKey)}`), {
+      method: "DELETE",
+      headers: {
+        "x-user-email": signedInEmail
+      }
     });
 
     if (!response.ok) {
@@ -277,7 +302,7 @@ export default function DashboardKeyResultRowEditor({
           ) : (
             <span className="objective-title-text">{keyResult.title}</span>
           )}
-          {!isEditing ? (
+          {!isEditing && canEdit ? (
             <button
               type="button"
               className="objective-edit-trigger"
@@ -296,7 +321,7 @@ export default function DashboardKeyResultRowEditor({
           ) : null}
         </div>
         <div className="board-meta">{krCode}</div>
-        {isEditing ? (
+        {isEditing && canEdit ? (
           <input
             className="objective-row-input"
             value={code}
@@ -305,7 +330,7 @@ export default function DashboardKeyResultRowEditor({
             disabled={isSaving}
           />
         ) : null}
-        {isEditing ? (
+        {isEditing && canEdit ? (
           <div className="objective-row-actions">
             <button className="btn" type="button" onClick={() => void saveEdit()} disabled={isSaving}>
               Save
@@ -321,7 +346,7 @@ export default function DashboardKeyResultRowEditor({
         {error ? <p className="message danger objective-row-error">{error}</p> : null}
       </td>
       <td>
-        {isEditing ? (
+        {isEditing && canEdit ? (
           <>
             <OwnerInput
               id={`kr-owner-inline-${keyResult.krKey}`}
@@ -333,6 +358,7 @@ export default function DashboardKeyResultRowEditor({
               disabled={isSaving}
               showLabel={false}
               inputClassName="objective-row-input"
+              placeholder="Owner (optional)"
             />
             <input
               className="objective-row-input"
@@ -343,18 +369,18 @@ export default function DashboardKeyResultRowEditor({
             />
           </>
         ) : (
-          keyResult.owner
+          keyResult.owner || "-"
         )}
       </td>
       <td>
-        {isEditing ? (
+        {isEditing && canEdit ? (
           <select
             className="objective-row-select"
             value={metricType}
             onChange={(event) => setMetricType(event.target.value as MetricType)}
             disabled={isSaving}
           >
-            {METRIC_TYPE_OPTIONS.map((option) => (
+            {metricTypeOptions.map((option) => (
               <option key={option} value={option}>
                 {option}
               </option>
@@ -365,7 +391,7 @@ export default function DashboardKeyResultRowEditor({
         )}
       </td>
       <td>
-        {isEditing ? (
+        {isEditing && canEdit ? (
           <input
             className="objective-row-input"
             type="number"
@@ -379,7 +405,7 @@ export default function DashboardKeyResultRowEditor({
         )}
       </td>
       <td>
-        {isEditing ? (
+        {isEditing && canEdit ? (
           <input
             className="objective-row-input"
             type="number"
@@ -393,7 +419,7 @@ export default function DashboardKeyResultRowEditor({
         )}
       </td>
       <td>
-        {isEditing ? (
+        {isEditing && canEdit ? (
           <input
             className="objective-row-input"
             type="number"
@@ -407,7 +433,7 @@ export default function DashboardKeyResultRowEditor({
         )}
       </td>
       <td>
-        {isEditing ? (
+        {isEditing && canEdit ? (
           <input
             className="objective-row-input"
             type="number"
@@ -421,14 +447,14 @@ export default function DashboardKeyResultRowEditor({
         )}
       </td>
       <td>
-        {isEditing ? (
+        {isEditing && canEdit ? (
           <select
             className="objective-row-select"
             value={status}
             onChange={(event) => setStatus(event.target.value as KrStatus)}
             disabled={isSaving}
           >
-            {KR_STATUS_OPTIONS.map((option) => (
+            {keyResultStatusOptions.map((option) => (
               <option key={option} value={option}>
                 {option}
               </option>
@@ -439,7 +465,7 @@ export default function DashboardKeyResultRowEditor({
         )}
       </td>
       <td>
-        {isEditing ? (
+        {isEditing && canEdit ? (
           <input
             className="objective-row-input"
             type="date"
@@ -452,14 +478,14 @@ export default function DashboardKeyResultRowEditor({
         )}
       </td>
       <td>
-        {isEditing ? (
+        {isEditing && canEdit ? (
           <select
             className="objective-row-select"
             value={checkInFrequency}
             onChange={(event) => setCheckInFrequency(event.target.value as CheckInFrequency)}
             disabled={isSaving}
           >
-            {CHECKIN_FREQUENCY_OPTIONS.map((option) => (
+            {checkInFrequencyOptions.map((option) => (
               <option key={option} value={option}>
                 {option}
               </option>
@@ -470,7 +496,7 @@ export default function DashboardKeyResultRowEditor({
         )}
       </td>
       <td>
-        {isEditing ? (
+        {isEditing && canEdit ? (
           <input
             className="objective-row-input"
             value={blockers}
@@ -483,7 +509,7 @@ export default function DashboardKeyResultRowEditor({
       </td>
       <td>{objectiveKeyRisksDependency || "-"}</td>
       <td>
-        {isEditing ? (
+        {isEditing && canEdit ? (
           <input className="objective-row-input" value={notes} onChange={(event) => setNotes(event.target.value)} disabled={isSaving} />
         ) : (
           keyResult.notes || latestUpdateNotes || "-"

@@ -2,6 +2,11 @@
 
 Internal OKR follow-up app built with Next.js and SharePoint list-backed persistence.
 
+## User Documentation
+
+- Detailed user manual: [`USER_MANUAL.md`](./USER_MANUAL.md)
+- Auth flow diagram: [`AUTH_FLOW.md`](./AUTH_FLOW.md)
+
 ## What is implemented
 
 - Dashboard with venture tabs and position cards
