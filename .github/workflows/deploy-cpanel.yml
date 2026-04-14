@@ -128,12 +128,17 @@ jobs:
 
             echo "Restarting application"
             if [ -n "$RESTART_COMMAND" ]; then
+              echo "Running custom restart command"
               sh -lc "$RESTART_COMMAND"
             else
+              echo "Touching tmp/restart.txt"
               mkdir -p tmp
-              touch tmp/restart.txt
-              if [ -f "$HOME/nodevenv/$APP_NAME/20/bin/activate" ]; then
-                "$HOME/nodevenv/$APP_NAME/20/bin/passenger-config" restart-app "$APP_DIR" || true
+              touch tmp/restart.txt || echo "touch tmp/restart.txt failed"
+              if [ -x "$HOME/nodevenv/$APP_NAME/20/bin/passenger-config" ]; then
+                echo "Attempting passenger-config restart-app"
+                "$HOME/nodevenv/$APP_NAME/20/bin/passenger-config" restart-app "$APP_DIR" || echo "passenger-config restart-app failed"
+              else
+                echo "passenger-config not found for $APP_NAME"
               fi
             fi
 
