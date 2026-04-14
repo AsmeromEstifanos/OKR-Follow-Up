@@ -132,6 +132,9 @@ jobs:
             else
               mkdir -p tmp
               touch tmp/restart.txt
+              if [ -f "$HOME/nodevenv/$APP_NAME/20/bin/activate" ]; then
+                "$HOME/nodevenv/$APP_NAME/20/bin/passenger-config" restart-app "$APP_DIR" || true
+              fi
             fi
 
             echo "Cleaning temp deployment files"
