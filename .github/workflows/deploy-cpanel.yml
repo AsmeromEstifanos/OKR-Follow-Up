@@ -43,6 +43,7 @@ jobs:
             --exclude=.github \
             --exclude=node_modules \
             --exclude=.next/cache \
+            --exclude=deploy.tgz \
             --exclude=dev-out.log \
             --exclude=dev-err.log \
             -czf deploy.tgz .
