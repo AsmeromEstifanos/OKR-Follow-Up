@@ -38,7 +38,15 @@ jobs:
 
       - name: Create deployment archive
         run: |
-          git archive --format=tar.gz --output=deploy.tgz HEAD
+          tar -czf deploy.tgz \
+            .next \
+            app \
+            lib \
+            public \
+            app.js \
+            next.config.mjs \
+            package.json \
+            package-lock.json
 
       - name: Upload archive to server
         uses: appleboy/scp-action@v0.1.7
@@ -50,7 +58,7 @@ jobs:
           source: deploy.tgz
           target: /tmp/okr-follow-up-deploy
 
-      - name: Extract, install, build, and restart on cPanel
+      - name: Extract, install production deps, and restart on cPanel
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.CPANEL_HOST }}
@@ -109,8 +117,9 @@ jobs:
               exit 127
             fi
 
-            npm ci
-            npm run build
+            export NODE_ENV=production
+
+            npm ci --omit=dev
 
             if [ -n "$RESTART_COMMAND" ]; then
               sh -lc "$RESTART_COMMAND"
