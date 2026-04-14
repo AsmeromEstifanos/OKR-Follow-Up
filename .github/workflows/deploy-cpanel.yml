@@ -17,6 +17,7 @@ jobs:
       APP_DIR: ${{ secrets.CPANEL_APP_DIR }}
       APP_PORT: ${{ secrets.CPANEL_APP_PORT }}
       RESTART_COMMAND: ${{ secrets.CPANEL_RESTART_COMMAND }}
+      NEXT_PUBLIC_BASE_PATH: /okr
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
