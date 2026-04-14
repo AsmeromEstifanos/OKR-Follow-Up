@@ -1238,6 +1238,14 @@ a {
   color: #214a87;
 }
 
+.objective-kr-toggle.is-open {
+  color: #1f8f85;
+}
+
+.objective-kr-toggle.is-open:hover {
+  color: #17756e;
+}
+
 .board-meta {
   margin-top: 0.2rem;
   color: #7a89a7;
