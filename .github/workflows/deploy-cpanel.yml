@@ -84,6 +84,31 @@ jobs:
               export APP_PORT="$APP_PORT"
             fi
 
+            APP_NAME="$(basename "$APP_DIR")"
+            NODEVENV_DIR=""
+            for candidate in \
+              "$HOME/nodevenv/$APP_NAME" \
+              "$HOME/nodevenv/public_html/$APP_NAME"
+            do
+              if [ -d "$candidate" ]; then
+                NODEVENV_DIR="$candidate"
+                break
+              fi
+            done
+
+            if [ -n "$NODEVENV_DIR" ]; then
+              ACTIVATE_SCRIPT="$(find "$NODEVENV_DIR" -maxdepth 3 -path '*/bin/activate' | head -n 1)"
+              if [ -n "$ACTIVATE_SCRIPT" ]; then
+                . "$ACTIVATE_SCRIPT"
+              fi
+            fi
+
+            if ! command -v npm >/dev/null 2>&1; then
+              echo "npm is not available in this SSH session."
+              echo "Expected a cPanel nodevenv under $HOME/nodevenv/$APP_NAME or a host-level Node install."
+              exit 127
+            fi
+
             npm ci
             npm run build
 
