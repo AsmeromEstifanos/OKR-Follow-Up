@@ -1,0 +1,104 @@
+name: Deploy to cPanel
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-cpanel-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      APP_DIR: ${{ secrets.CPANEL_APP_DIR }}
+      APP_PORT: ${{ secrets.CPANEL_APP_PORT }}
+      RESTART_COMMAND: ${{ secrets.CPANEL_RESTART_COMMAND }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check application
+        run: npx tsc --noEmit --incremental false
+
+      - name: Build application
+        run: npm run build
+
+      - name: Create deployment archive
+        run: |
+          tar \
+            --exclude=.git \
+            --exclude=.github \
+            --exclude=node_modules \
+            --exclude=.next/cache \
+            --exclude=dev-out.log \
+            --exclude=dev-err.log \
+            -czf deploy.tgz .
+
+      - name: Upload archive to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.CPANEL_HOST }}
+          username: ${{ secrets.CPANEL_USERNAME }}
+          key: ${{ secrets.CPANEL_SSH_KEY }}
+          port: ${{ secrets.CPANEL_PORT || 22 }}
+          source: deploy.tgz
+          target: /tmp/okr-follow-up-deploy
+
+      - name: Extract, install, build, and restart on cPanel
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.CPANEL_HOST }}
+          username: ${{ secrets.CPANEL_USERNAME }}
+          key: ${{ secrets.CPANEL_SSH_KEY }}
+          port: ${{ secrets.CPANEL_PORT || 22 }}
+          script_stop: true
+          envs: APP_DIR,APP_PORT,RESTART_COMMAND
+          script: |
+            set -e
+
+            if [ -z "$APP_DIR" ]; then
+              echo "CPANEL_APP_DIR secret is required."
+              exit 1
+            fi
+
+            mkdir -p "$APP_DIR"
+            mkdir -p /tmp/okr-follow-up-deploy/extracted
+
+            tar -xzf /tmp/okr-follow-up-deploy/deploy.tgz -C /tmp/okr-follow-up-deploy/extracted
+            find "$APP_DIR" -mindepth 1 -maxdepth 1 \
+              ! -name ".env" \
+              ! -name "tmp" \
+              ! -name "logs" \
+              -exec rm -rf {} +
+
+            cp -R /tmp/okr-follow-up-deploy/extracted/. "$APP_DIR"
+            cd "$APP_DIR"
+
+            if [ -n "$APP_PORT" ]; then
+              export APP_PORT="$APP_PORT"
+            fi
+
+            npm ci
+            npm run build
+
+            if [ -n "$RESTART_COMMAND" ]; then
+              sh -lc "$RESTART_COMMAND"
+            else
+              mkdir -p tmp
+              touch tmp/restart.txt
+            fi
+
+            rm -rf /tmp/okr-follow-up-deploy
