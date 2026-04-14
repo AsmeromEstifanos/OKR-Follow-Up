@@ -117,10 +117,16 @@ jobs:
               exit 127
             fi
 
+            echo "Using npm: $(command -v npm)"
+            npm --version
+            node --version
+
             export NODE_ENV=production
 
-            npm ci --omit=dev
+            echo "Installing production dependencies"
+            npm ci --omit=dev --no-audit --no-fund
 
+            echo "Restarting application"
             if [ -n "$RESTART_COMMAND" ]; then
               sh -lc "$RESTART_COMMAND"
             else
@@ -128,4 +134,7 @@ jobs:
               touch tmp/restart.txt
             fi
 
+            echo "Cleaning temp deployment files"
             rm -rf /tmp/okr-follow-up-deploy
+
+            echo "Deployment complete"
