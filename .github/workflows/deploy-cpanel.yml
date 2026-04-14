@@ -17,7 +17,6 @@ jobs:
       APP_DIR: ${{ secrets.CPANEL_APP_DIR }}
       APP_PORT: ${{ secrets.CPANEL_APP_PORT }}
       RESTART_COMMAND: ${{ secrets.CPANEL_RESTART_COMMAND }}
-      DEPLOY_ARCHIVE: ${{ runner.temp }}/deploy.tgz
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
@@ -39,15 +38,7 @@ jobs:
 
       - name: Create deployment archive
         run: |
-          tar \
-            -C "$GITHUB_WORKSPACE" \
-            --exclude=.git \
-            --exclude=.github \
-            --exclude=node_modules \
-            --exclude=.next/cache \
-            --exclude=dev-out.log \
-            --exclude=dev-err.log \
-            -czf "$DEPLOY_ARCHIVE" .
+          git archive --format=tar.gz --output=deploy.tgz HEAD
 
       - name: Upload archive to server
         uses: appleboy/scp-action@v0.1.7
@@ -56,7 +47,7 @@ jobs:
           username: ${{ secrets.CPANEL_USERNAME }}
           key: ${{ secrets.CPANEL_SSH_KEY }}
           port: ${{ secrets.CPANEL_PORT || 22 }}
-          source: ${{ runner.temp }}/deploy.tgz
+          source: deploy.tgz
           target: /tmp/okr-follow-up-deploy
 
       - name: Extract, install, build, and restart on cPanel
