@@ -71,11 +71,7 @@ jobs:
             mkdir -p /tmp/okr-follow-up-deploy/extracted
 
             tar -xzf /tmp/okr-follow-up-deploy/deploy.tgz -C /tmp/okr-follow-up-deploy/extracted
-            find "$APP_DIR" -mindepth 1 -maxdepth 1 \
-              ! -name ".env" \
-              ! -name "tmp" \
-              ! -name "logs" \
-              -exec rm -rf {} +
+            find "$APP_DIR" -mindepth 1 -maxdepth 1 ! -name ".env" ! -name "tmp" ! -name "logs" -exec rm -rf {} +
 
             cp -R /tmp/okr-follow-up-deploy/extracted/. "$APP_DIR"
             cd "$APP_DIR"
@@ -86,10 +82,7 @@ jobs:
 
             APP_NAME="$(basename "$APP_DIR")"
             NODE_BIN_DIR=""
-            for candidate in \
-              "$HOME/nodevenv/$APP_NAME" \
-              "$HOME/nodevenv/public_html/$APP_NAME"
-            do
+            for candidate in "$HOME/nodevenv/$APP_NAME" "$HOME/nodevenv/public_html/$APP_NAME"; do
               if [ -d "$candidate" ]; then
                 FOUND_BIN_DIR="$(find "$candidate" -maxdepth 3 -type d -path '*/bin' | head -n 1)"
                 if [ -n "$FOUND_BIN_DIR" ]; then
