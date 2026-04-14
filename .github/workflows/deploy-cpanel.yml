@@ -85,27 +85,34 @@ jobs:
             fi
 
             APP_NAME="$(basename "$APP_DIR")"
-            NODEVENV_DIR=""
+            NODE_BIN_DIR=""
             for candidate in \
               "$HOME/nodevenv/$APP_NAME" \
               "$HOME/nodevenv/public_html/$APP_NAME"
             do
               if [ -d "$candidate" ]; then
-                NODEVENV_DIR="$candidate"
-                break
+                FOUND_BIN_DIR="$(find "$candidate" -maxdepth 3 -type d -path '*/bin' | head -n 1)"
+                if [ -n "$FOUND_BIN_DIR" ]; then
+                  NODE_BIN_DIR="$FOUND_BIN_DIR"
+                  break
+                fi
               fi
             done
 
-            if [ -n "$NODEVENV_DIR" ]; then
-              ACTIVATE_SCRIPT="$(find "$NODEVENV_DIR" -maxdepth 3 -path '*/bin/activate' | head -n 1)"
-              if [ -n "$ACTIVATE_SCRIPT" ]; then
-                . "$ACTIVATE_SCRIPT"
-              fi
+            if [ -n "$NODE_BIN_DIR" ]; then
+              export PATH="$NODE_BIN_DIR:$PATH"
             fi
 
             if ! command -v npm >/dev/null 2>&1; then
               echo "npm is not available in this SSH session."
-              echo "Expected a cPanel nodevenv under $HOME/nodevenv/$APP_NAME or a host-level Node install."
+              echo "Expected a cPanel nodevenv bin directory under $HOME/nodevenv/$APP_NAME or a host-level Node install."
+              echo "Current PATH: $PATH"
+              if [ -d "$HOME/nodevenv" ]; then
+                echo "Available nodevenv directories:"
+                find "$HOME/nodevenv" -maxdepth 3 -type d | sed 's#^#- #'
+              else
+                echo "$HOME/nodevenv does not exist."
+              fi
               exit 127
             fi
 
