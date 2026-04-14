@@ -127,32 +127,29 @@ jobs:
             npm ci --omit=dev --no-audit --no-fund
 
             echo "Restarting application"
-            set +e
-            if [ -n "$RESTART_COMMAND" ]; then
-              echo "Running custom restart command"
-              sh -lc "$RESTART_COMMAND"
-              RESTART_EXIT=$?
-              echo "Custom restart exit code: $RESTART_EXIT"
-            else
-              echo "Ensuring tmp directory exists"
-              mkdir -p tmp
-              echo "tmp mkdir exit code: $?"
-
-              echo "Touching tmp/restart.txt"
-              touch tmp/restart.txt
-              TOUCH_EXIT=$?
-              echo "touch exit code: $TOUCH_EXIT"
-
-              if [ -x "$HOME/nodevenv/$APP_NAME/20/bin/passenger-config" ]; then
-                echo "Attempting passenger-config restart-app"
-                "$HOME/nodevenv/$APP_NAME/20/bin/passenger-config" restart-app "$APP_DIR"
-                PASSENGER_EXIT=$?
-                echo "passenger-config exit code: $PASSENGER_EXIT"
+            (
+              set +e
+              if [ -n "$RESTART_COMMAND" ]; then
+                echo "Running custom restart command"
+                sh -lc "$RESTART_COMMAND"
+                echo "Custom restart exit code: $?"
               else
-                echo "passenger-config not found for $APP_NAME"
+                echo "Ensuring tmp directory exists"
+                mkdir -p tmp
+                echo "tmp mkdir exit code: $?"
+                echo "Touching tmp/restart.txt"
+                touch tmp/restart.txt
+                echo "touch exit code: $?"
+                if [ -x "$HOME/nodevenv/$APP_NAME/20/bin/passenger-config" ]; then
+                  echo "Attempting passenger-config restart-app"
+                  "$HOME/nodevenv/$APP_NAME/20/bin/passenger-config" restart-app "$APP_DIR"
+                  echo "passenger-config exit code: $?"
+                else
+                  echo "passenger-config not found for $APP_NAME"
+                fi
               fi
-            fi
-            set -e
+              exit 0
+            ) || true
 
             echo "Cleaning temp deployment files"
             rm -rf /tmp/okr-follow-up-deploy
