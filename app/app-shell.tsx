@@ -327,6 +327,11 @@ export default function AppShell({ children }: Props): JSX.Element {
               <span>{sharePointStatusLabel}</span>
             </div>
           ) : null}
+          {!isNavCollapsed ? (
+            <div className="ln-version-label" aria-label={`Application version ${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.1.0"}`}>
+              Version {process.env.NEXT_PUBLIC_APP_VERSION ?? "0.1.0"}
+            </div>
+          ) : null}
         </div>
       </aside>
 

@@ -232,6 +232,13 @@ a {
   word-break: break-word;
 }
 
+.ln-version-label {
+  color: #94afcb;
+  font-size: 0.72rem;
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+
 .shell-auth-wrap {
   display: grid;
   gap: 0.32rem;
