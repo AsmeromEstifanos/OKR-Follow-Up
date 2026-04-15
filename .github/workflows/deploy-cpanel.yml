@@ -19,7 +19,8 @@ jobs:
       RESTART_COMMAND: ${{ secrets.CPANEL_RESTART_COMMAND }}
       NEXT_PUBLIC_BASE_PATH: /okr
       NEXT_PUBLIC_AZURE_CLIENT_ID: ${{ secrets.NEXT_PUBLIC_AZURE_CLIENT_ID }}
-      NEXT_PUBLIC_AAD_TENANT_ID: ${{ secrets.NEXT_PUBLIC_AAD_TENANT_ID }}
+      NEXT_PUBLIC_AAD_TENANT_ID: ${{ secrets.NEXT_PUBLIC_AAD_TENANT_ID || secrets.AZURE_APP_TENANT_ID }}
+      NEXT_PUBLIC_AZURE_AUTHORITY: https://login.microsoftonline.com/${{ secrets.NEXT_PUBLIC_AAD_TENANT_ID || secrets.AZURE_APP_TENANT_ID }}
       NEXT_PUBLIC_REDIRECT_URI: https://sol-ventures.com/okr
       NEXT_PUBLIC_POST_LOGOUT_REDIRECT_URI: https://sol-ventures.com/okr
       NEXT_PUBLIC_LOGIN_SCOPES: openid profile email User.Read Sites.Read.All Sites.ReadWrite.All
