@@ -1,8 +1,8 @@
 "use client";
 
-import AuthButtons from "@/app/auth-buttons";
 import LoaderImage from "@/app/loader-image";
-import { ensureActiveAccount, msalConfigError } from "@/lib/auth/msal-client";
+import { ensureActiveAccount } from "@/lib/auth/msal-client";
+import { withBasePath } from "@/lib/base-path";
 import { useIsAuthenticated, useMsal } from "@azure/msal-react";
 import { useEffect } from "react";
 
@@ -30,13 +30,9 @@ export default function AuthGate({ children }: Props): JSX.Element {
 
   if (!isAuthenticated) {
     return (
-      <section className="auth-gate" aria-live="polite">
-        <LoaderImage size={180} />
-        <h1>Authentication required</h1>
-        <p>Sign in with your Microsoft account to open the OKR workspace.</p>
-        {msalConfigError ? <p className="message danger">{msalConfigError}</p> : null}
-        <AuthButtons />
-      </section>
+      <div className="auth-loader" aria-live="polite">
+        <LoaderImage size={220} src={withBasePath("/SVH.GIF")} />
+      </div>
     );
   }
 
