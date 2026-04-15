@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import AppShell from "@/app/app-shell";
 import AuthProviders from "@/app/auth-providers";
+import { withBasePath } from "@/lib/base-path";
 import type { ReactNode } from "react";
 import "./globals.css";
 
@@ -8,7 +9,7 @@ export const metadata: Metadata = {
   title: "OKR Follow-Up",
   description: "Internal OKR follow-up",
   icons: {
-    icon: "/okr/sol-ventures.png",
+    icon: withBasePath("/sol-ventures.png"),
   },
 };
 
