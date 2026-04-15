@@ -214,16 +214,6 @@ export default function AppShell({ children }: Props): JSX.Element {
     return () => window.removeEventListener("storage", handleStorage);
   }, [router]);
 
-  if (!isAuthenticated) {
-    return (
-      <main className="ln-main ln-main-mobile">
-        <AuthGate>
-          <div className="layout">{children}</div>
-        </AuthGate>
-      </main>
-    );
-  }
-
   return (
     <div className="ln-shell">
       {isMobile && isMobileMenuOpen ? (
