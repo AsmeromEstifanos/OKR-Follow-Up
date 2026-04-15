@@ -31,7 +31,7 @@ export default function AuthGate({ children }: Props): JSX.Element {
   if (!isAuthenticated) {
     return (
       <div className="auth-loader" aria-live="polite">
-        <LoaderImage size={220} src={withBasePath("/SVH.GIF")} />
+        <LoaderImage size={220} src={withBasePath("/svh.gif")} />
       </div>
     );
   }
