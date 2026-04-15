@@ -41,6 +41,13 @@ jobs:
       - name: Type-check application
         run: npx tsc --noEmit --incremental false
 
+      - name: Validate public auth env
+        run: |
+          test -n "$NEXT_PUBLIC_AZURE_CLIENT_ID" || (echo "Missing NEXT_PUBLIC_AZURE_CLIENT_ID" && exit 1)
+          test -n "$NEXT_PUBLIC_AAD_TENANT_ID" || (echo "Missing NEXT_PUBLIC_AAD_TENANT_ID" && exit 1)
+          test "$NEXT_PUBLIC_AAD_TENANT_ID" != "undefined" || (echo "NEXT_PUBLIC_AAD_TENANT_ID resolved to undefined" && exit 1)
+          echo "Public auth env is configured."
+
       - name: Build application
         run: npm run build
 
