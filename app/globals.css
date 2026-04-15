@@ -410,20 +410,6 @@ a {
   padding: 1.2rem 1.1rem;
 }
 
-.auth-gate-signed-out {
-  min-height: calc(100vh - 6rem);
-  display: grid;
-  justify-items: center;
-  align-content: center;
-  gap: 1rem;
-  text-align: center;
-}
-
-.auth-gate-copy {
-  display: grid;
-  gap: 0.35rem;
-}
-
 .auth-loader {
   min-height: calc(100vh - 2rem);
   display: flex;
