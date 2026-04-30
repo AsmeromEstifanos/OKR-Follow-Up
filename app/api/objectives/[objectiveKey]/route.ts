@@ -19,6 +19,7 @@ const ALLOWED_PATCH_FIELDS = new Set([
   "objectiveCode",
   "title",
   "description",
+  "constraintGuardrails",
   "owner",
   "ownerEmail",
   "department",
@@ -103,7 +104,11 @@ function parseObjectivePatch(body: unknown): UpdateObjectiveInput {
   }
 
   if (raw.description !== undefined) {
-    patch.description = expectString(raw, "description");
+    patch.description = expectString(raw, "description", true);
+  }
+
+  if (raw.constraintGuardrails !== undefined) {
+    patch.constraintGuardrails = expectString(raw, "constraintGuardrails", true);
   }
 
   if (raw.owner !== undefined) {

@@ -1,4 +1,4 @@
-import type { KeyResult, PeriodStatus } from "@/lib/types";
+import type { KeyResult, Milestone, PeriodStatus } from "@/lib/types";
 
 const MISSING_CHECKIN_DAYS = 7;
 
@@ -33,6 +33,23 @@ export function computeObjectiveProgress(keyResults: Pick<KeyResult, "progressPc
 
   const total = keyResults.reduce((sum, kr) => sum + kr.progressPct, 0);
   return clampPercent(total / keyResults.length);
+}
+
+export function computeMilestoneProgress(milestones: Pick<Milestone, "weight" | "progressPct">[]): number {
+  if (milestones.length === 0) {
+    return 0;
+  }
+
+  const totalWeight = milestones.reduce((sum, milestone) => sum + Math.max(0, milestone.weight), 0);
+  if (totalWeight <= 0) {
+    return 0;
+  }
+
+  const weightedProgress = milestones.reduce((sum, milestone) => {
+    return sum + Math.max(0, milestone.weight) * clampPercent(milestone.progressPct);
+  }, 0);
+
+  return clampPercent(weightedProgress / totalWeight);
 }
 
 export function isMissingCheckin(

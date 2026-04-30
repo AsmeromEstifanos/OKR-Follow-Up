@@ -20,6 +20,7 @@ const ALLOWED_PATCH_FIELDS = new Set([
   "owner",
   "ownerEmail",
   "metricType",
+  "measurementRule",
   "baselineValue",
   "targetValue",
   "currentValue",
@@ -27,6 +28,7 @@ const ALLOWED_PATCH_FIELDS = new Set([
   "dueDate",
   "checkInFrequency",
   "blockers",
+  "supportNeeded",
   "notes"
 ]);
 const READ_ONLY_FIELDS = new Set(["krKey", "progressPct"]);
@@ -104,6 +106,10 @@ function parseKrPatch(body: unknown): UpdateKeyResultInput {
     patch.metricType = expectString(raw, "metricType");
   }
 
+  if (raw.measurementRule !== undefined) {
+    patch.measurementRule = expectString(raw, "measurementRule", true);
+  }
+
   if (raw.baselineValue !== undefined) {
     patch.baselineValue = expectNumber(raw, "baselineValue");
   }
@@ -130,6 +136,10 @@ function parseKrPatch(body: unknown): UpdateKeyResultInput {
 
   if (raw.blockers !== undefined) {
     patch.blockers = expectString(raw, "blockers", true);
+  }
+
+  if (raw.supportNeeded !== undefined) {
+    patch.supportNeeded = expectString(raw, "supportNeeded", true);
   }
 
   if (raw.notes !== undefined) {

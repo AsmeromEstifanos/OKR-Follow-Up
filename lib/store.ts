@@ -4,10 +4,12 @@ import {
   addVenture as addVentureLocal,
   createCheckIn as createCheckInLocal,
   createKeyResult as createKeyResultLocal,
+  createMilestone as createMilestoneLocal,
   createObjective as createObjectiveLocal,
   createPeriod as createPeriodLocal,
   deleteDepartmentFromVenture as deleteDepartmentFromVentureLocal,
   deleteKeyResult as deleteKeyResultLocal,
+  deleteMilestone as deleteMilestoneLocal,
   deleteObjective as deleteObjectiveLocal,
   deleteVenture as deleteVentureLocal,
   exportStoreSnapshot as exportStoreSnapshotLocal,
@@ -20,6 +22,7 @@ import {
   hydrateStoreFromSnapshot as hydrateStoreFromSnapshotLocal,
   listCheckIns as listCheckInsLocal,
   listKeyResults as listKeyResultsLocal,
+  listMilestones as listMilestonesLocal,
   listObjectives as listObjectivesLocal,
   listPeriods as listPeriodsLocal,
   previewNextKrCode as previewNextKrCodeLocal,
@@ -27,6 +30,7 @@ import {
   updateDepartmentInVenture as updateDepartmentInVentureLocal,
   updateFieldOptions as updateFieldOptionsLocal,
   updateKeyResult as updateKeyResultLocal,
+  updateMilestone as updateMilestoneLocal,
   updateObjective as updateObjectiveLocal,
   updatePeriod as updatePeriodLocal,
   updateRagThresholds as updateRagThresholdsLocal,
@@ -55,18 +59,21 @@ import type {
   CreateCheckInInput,
   CreateDepartmentInput,
   CreateKeyResultInput,
+  CreateMilestoneInput,
   CreateObjectiveInput,
   CreatePeriodInput,
   CreateVentureInput,
   DashboardMe,
   FieldOptions,
   KeyResult,
+  Milestone,
   Objective,
   ObjectiveWithContext,
   Period,
   RagThresholds,
   UpdateDepartmentInput,
   UpdateKeyResultInput,
+  UpdateMilestoneInput,
   UpdateObjectiveInput,
   UpdateVentureInput,
   Venture
@@ -181,6 +188,7 @@ async function syncStoreToSharePoint(): Promise<void> {
 
 type ObjectiveFilters = Parameters<typeof listObjectivesLocal>[0];
 type KrFilters = Parameters<typeof listKeyResultsLocal>[0];
+type MilestoneFilters = Parameters<typeof listMilestonesLocal>[0];
 type CheckInFilters = Parameters<typeof listCheckInsLocal>[0];
 type DashboardFilters = Parameters<typeof getDashboardForOwnerLocal>[1];
 
@@ -382,6 +390,11 @@ export async function listKeyResults(filters: KrFilters = {}): Promise<KeyResult
   return listKeyResultsLocal(filters);
 }
 
+export async function listMilestones(filters: MilestoneFilters = {}): Promise<Milestone[]> {
+  await ensureStoreHydrated();
+  return listMilestonesLocal(filters);
+}
+
 export async function getKeyResult(krKey: string): Promise<KeyResult | null> {
   await ensureStoreHydrated();
   return getKeyResultLocal(krKey);
@@ -391,6 +404,14 @@ export async function createKeyResult(input: CreateKeyResultInput): Promise<KeyR
   await ensureStoreHydrated();
   updateOperationProgress(28, "Creating key result");
   const result = createKeyResultLocal(input);
+  await syncStoreToSharePoint();
+  return result;
+}
+
+export async function createMilestone(input: CreateMilestoneInput): Promise<Milestone> {
+  await ensureStoreHydrated();
+  updateOperationProgress(28, "Creating milestone");
+  const result = createMilestoneLocal(input);
   await syncStoreToSharePoint();
   return result;
 }
@@ -411,10 +432,32 @@ export async function updateKeyResult(krKey: string, patch: UpdateKeyResultInput
   return result;
 }
 
+export async function updateMilestone(milestoneKey: string, patch: UpdateMilestoneInput): Promise<Milestone | null> {
+  await ensureStoreHydrated();
+  updateOperationProgress(28, "Updating milestone");
+  const result = updateMilestoneLocal(milestoneKey, patch);
+  if (result) {
+    await syncStoreToSharePoint();
+  }
+
+  return result;
+}
+
 export async function deleteKeyResult(krKey: string): Promise<{ krKey: string; deletedCheckInCount: number } | null> {
   await ensureStoreHydrated();
   updateOperationProgress(28, "Deleting key result");
   const result = deleteKeyResultLocal(krKey);
+  if (result) {
+    await syncStoreToSharePoint();
+  }
+
+  return result;
+}
+
+export async function deleteMilestone(milestoneKey: string): Promise<{ milestoneKey: string } | null> {
+  await ensureStoreHydrated();
+  updateOperationProgress(28, "Deleting milestone");
+  const result = deleteMilestoneLocal(milestoneKey);
   if (result) {
     await syncStoreToSharePoint();
   }

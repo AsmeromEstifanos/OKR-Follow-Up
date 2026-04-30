@@ -1,5 +1,5 @@
 import { objectiveBelongsToVenture } from "@/lib/objective-scope";
-import { clampPercent, computeKrProgress, computeObjectiveProgress, isMissingCheckin } from "@/lib/okr-rules";
+import { clampPercent, computeKrProgress, computeMilestoneProgress, computeObjectiveProgress, isMissingCheckin } from "@/lib/okr-rules";
 import type {
   AppConfig,
   CheckInFrequency,
@@ -7,6 +7,7 @@ import type {
   CreateCheckInInput,
   CreateDepartmentInput,
   CreateKeyResultInput,
+  CreateMilestoneInput,
   CreateObjectiveInput,
   CreatePeriodInput,
   CreateVentureInput,
@@ -15,10 +16,12 @@ import type {
   FieldOptions,
   KeyResult,
   KrStatus,
+  Milestone,
   MetricType,
   Objective,
   OkrCycle,
   ObjectiveType,
+  UpdateMilestoneInput,
   UpdateObjectiveInput,
   UpdateKeyResultInput,
   ObjectiveWithContext,
@@ -35,6 +38,7 @@ type StoreState = {
   periods: Period[];
   objectives: Objective[];
   keyResults: KeyResult[];
+  milestones: Milestone[];
   checkIns: CheckIn[];
 };
 
@@ -44,6 +48,7 @@ type PersistedContent = {
   periods: Period[];
   objectives: Objective[];
   keyResults: KeyResult[];
+  milestones: Milestone[];
   checkIns: CheckIn[];
 };
 
@@ -436,6 +441,50 @@ function getStatusFromProgress(progressPct: number): KrStatus {
   return "OffTrack";
 }
 
+function getLegacyMilestoneProgress(status: string | undefined): number {
+  if (status === "Done") {
+    return 100;
+  }
+
+  if (status === "InProgress") {
+    return 50;
+  }
+
+  return 0;
+}
+
+function normalizeMilestoneMetricValue(value: unknown): number | null {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : null;
+}
+
+function resolveMilestoneProgress(input: {
+  targetValue?: unknown;
+  currentValue?: unknown;
+  progressPct?: unknown;
+  legacyStatus?: string;
+}): number {
+  const targetValue = normalizeMilestoneMetricValue(input.targetValue);
+  const currentValue = normalizeMilestoneMetricValue(input.currentValue);
+
+  if (targetValue !== null && currentValue !== null) {
+    return computeKrProgress(0, targetValue, currentValue);
+  }
+
+  if (input.progressPct !== undefined && input.progressPct !== null && input.progressPct !== "") {
+    const progressPct = Number(input.progressPct);
+    if (Number.isFinite(progressPct)) {
+      return clampPercent(progressPct);
+    }
+  }
+
+  return getLegacyMilestoneProgress(input.legacyStatus);
+}
+
 function findVentureByKey(store: StoreState, ventureKey: string): Venture | undefined {
   return store.config.ventures.find((venture) => venture.ventureKey.toLowerCase() === ventureKey.toLowerCase());
 }
@@ -495,7 +544,30 @@ function recalcObjectiveInStore(store: StoreState, objectiveKey: string): void {
   objective.rag = getRagFromProgress(progressPct, store.config.ragThresholds);
 }
 
+function recalcKrInStore(store: StoreState, krKey: string): void {
+  const keyResult = store.keyResults.find((item) => item.krKey === krKey);
+  if (!keyResult) {
+    return;
+  }
+
+  const krMilestones = store.milestones
+    .filter((milestone) => milestone.krKey.toLowerCase() === krKey.toLowerCase())
+    .sort((left, right) => left.sequence - right.sequence);
+
+  if (krMilestones.length > 0) {
+    keyResult.progressPct = computeMilestoneProgress(krMilestones);
+    keyResult.currentValue = keyResult.progressPct;
+    keyResult.baselineValue = 0;
+    keyResult.targetValue = 100;
+  } else {
+    keyResult.progressPct = computeKrProgress(keyResult.baselineValue, keyResult.targetValue, keyResult.currentValue);
+  }
+
+  keyResult.status = getStatusFromProgress(keyResult.progressPct);
+}
+
 function recalcAllObjectivesInStore(store: StoreState): void {
+  store.keyResults.forEach((keyResult) => recalcKrInStore(store, keyResult.krKey));
   store.objectives.forEach((objective) => recalcObjectiveInStore(store, objective.objectiveKey));
 }
 
@@ -555,6 +627,10 @@ function migrateObjectiveDefaults(store: StoreState): void {
       objective.notes = objective.description ?? "";
     }
 
+    if (objective.constraintGuardrails === undefined || objective.constraintGuardrails === null) {
+      objective.constraintGuardrails = objective.keyRisksDependency ?? "";
+    }
+
     if (typeof objective.lastCheckinAt !== "string" && objective.lastCheckinAt !== null) {
       objective.lastCheckinAt = null;
     }
@@ -581,9 +657,46 @@ function migrateKrDefaults(store: StoreState): void {
       kr.notes = "";
     }
 
+    if (kr.measurementRule === undefined || kr.measurementRule === null) {
+      kr.measurementRule = "";
+    }
+
+    if (kr.supportNeeded === undefined || kr.supportNeeded === null) {
+      kr.supportNeeded = "";
+    }
+
     if (typeof kr.lastCheckinAt !== "string" && kr.lastCheckinAt !== null) {
       kr.lastCheckinAt = null;
     }
+  });
+}
+
+function migrateMilestoneDefaults(store: StoreState): void {
+  store.milestones = (store.milestones ?? []).map((milestone, index) => {
+    const legacyMilestone = milestone as Milestone & {
+      status?: string;
+      targetValue?: number | null;
+      currentValue?: number | null;
+      progressPct?: number;
+    };
+    const targetValue = normalizeMilestoneMetricValue(legacyMilestone.targetValue);
+    const currentValue = normalizeMilestoneMetricValue(legacyMilestone.currentValue);
+
+    return {
+      milestoneKey: milestone.milestoneKey,
+      krKey: milestone.krKey,
+      title: normalizeName(milestone.title),
+      weight: Number.isFinite(milestone.weight) ? Math.max(0, milestone.weight) : 0,
+      targetValue,
+      currentValue,
+      progressPct: resolveMilestoneProgress({
+        targetValue,
+        currentValue,
+        progressPct: legacyMilestone.progressPct,
+        legacyStatus: legacyMilestone.status
+      }),
+      sequence: Number.isInteger(milestone.sequence) ? milestone.sequence : index + 1
+    };
   });
 }
 
@@ -600,6 +713,7 @@ function buildSeedStore(): StoreState {
     periods: [],
     objectives: [],
     keyResults: [],
+    milestones: [],
     checkIns: []
   };
 
@@ -612,6 +726,10 @@ function applyStoreMigrations(store: StoreState): void {
   ensureUniqueDepartmentKeys(store);
   migrateObjectiveDefaults(store);
   migrateKrDefaults(store);
+  migrateMilestoneDefaults(store);
+  store.keyResults.forEach((keyResult) => {
+    recalcKrInStore(store, keyResult.krKey);
+  });
   persistStore(store);
 }
 
@@ -624,6 +742,7 @@ function toStoreSnapshot(store: StoreState): StoreSnapshot {
       periods: clone(store.periods),
       objectives: clone(store.objectives),
       keyResults: clone(store.keyResults),
+      milestones: clone(store.milestones),
       checkIns: clone(store.checkIns)
     }
   };
@@ -645,6 +764,7 @@ function fromStoreSnapshot(snapshot: StoreSnapshot): StoreState {
   store.periods = clone(snapshot.content.periods);
   store.objectives = clone(snapshot.content.objectives);
   store.keyResults = clone(snapshot.content.keyResults);
+  store.milestones = clone(snapshot.content.milestones ?? []);
   store.checkIns = clone(snapshot.content.checkIns);
   return store;
 }
@@ -698,6 +818,7 @@ function getStore(): StoreState {
 
     storeContainer.__okrDummyStore.objectives = persistedContent.objectives;
     storeContainer.__okrDummyStore.keyResults = persistedContent.keyResults;
+    storeContainer.__okrDummyStore.milestones = persistedContent.milestones ?? [];
     storeContainer.__okrDummyStore.checkIns = persistedContent.checkIns;
   }
 
@@ -1141,6 +1262,7 @@ export function getObjectiveWithContext(objectiveKey: string): ObjectiveWithCont
 
   const objectiveKrs = store.keyResults.filter((kr) => kr.objectiveKey === objectiveKey);
   const latestCheckIns: Record<string, CheckIn | null> = {};
+  const milestonesByKr: Record<string, Milestone[]> = {};
 
   objectiveKrs.forEach((kr) => {
     const latest = sortByDateDescending(
@@ -1149,12 +1271,17 @@ export function getObjectiveWithContext(objectiveKey: string): ObjectiveWithCont
     )[0];
 
     latestCheckIns[kr.krKey] = latest ?? null;
+    milestonesByKr[kr.krKey] = sortByDateDescending(
+      store.milestones.filter((milestone) => milestone.krKey === kr.krKey),
+      (milestone) => String(milestone.sequence).padStart(6, "0")
+    ).reverse();
   });
 
   return clone({
     objective,
     keyResults: objectiveKrs,
-    latestCheckIns
+    latestCheckIns,
+    milestonesByKr
   });
 }
 
@@ -1177,6 +1304,7 @@ export function createObjective(input: CreateObjectiveInput): Objective {
     periodKey: input.periodKey,
     title: input.title,
     description: input.description || notes,
+    constraintGuardrails: normalizeName(input.constraintGuardrails ?? input.keyRisksDependency ?? ""),
     owner: normalizeName(input.owner ?? "") || undefined,
     ownerEmail: normalizeEmail(input.ownerEmail ?? "") || undefined,
     department: input.department,
@@ -1225,6 +1353,10 @@ export function updateObjective(objectiveKey: string, patch: UpdateObjectiveInpu
 
   if (patch.description !== undefined) {
     objective.description = normalizeName(patch.description);
+  }
+
+  if (patch.constraintGuardrails !== undefined) {
+    objective.constraintGuardrails = normalizeName(patch.constraintGuardrails);
   }
 
   if (patch.owner !== undefined) {
@@ -1328,6 +1460,7 @@ export function deleteObjective(
   store.keyResults = store.keyResults.filter(
     (keyResult) => keyResult.objectiveKey.toLowerCase() !== objective.objectiveKey.toLowerCase()
   );
+  store.milestones = store.milestones.filter((milestone) => !relatedKrKeys.has(milestone.krKey.toLowerCase()));
   store.checkIns = store.checkIns.filter((checkIn) => {
     return (
       checkIn.objectiveKey.toLowerCase() !== objective.objectiveKey.toLowerCase() &&
@@ -1370,6 +1503,54 @@ export function getKeyResult(krKey: string): KeyResult | null {
   return kr ? clone(kr) : null;
 }
 
+type MilestoneFilters = {
+  krKey?: string;
+};
+
+export function listMilestones(filters: MilestoneFilters = {}): Milestone[] {
+  const { krKey } = filters;
+  return clone(
+    getStore()
+      .milestones.filter((milestone) => isMatch(milestone.krKey, krKey))
+      .sort((left, right) => left.sequence - right.sequence)
+  );
+}
+
+export function createMilestone(input: CreateMilestoneInput): Milestone {
+  const store = getStore();
+  ensureKrExists(store, input.krKey);
+
+  const milestoneKey = getNextNumericKey(store.milestones.map((milestone) => milestone.milestoneKey));
+  const existingForKr = store.milestones.filter((milestone) => milestone.krKey.toLowerCase() === input.krKey.toLowerCase());
+  const targetValue = normalizeMilestoneMetricValue(input.targetValue);
+  const currentValue = normalizeMilestoneMetricValue(input.currentValue);
+  const milestone: Milestone = {
+    milestoneKey,
+    krKey: input.krKey,
+    title: normalizeName(input.title),
+    weight: Math.max(0, Number(input.weight) || 0),
+    targetValue,
+    currentValue,
+    progressPct: resolveMilestoneProgress({
+      targetValue,
+      currentValue,
+      progressPct: input.progressPct
+    }),
+    sequence:
+      input.sequence && Number.isInteger(input.sequence)
+        ? input.sequence
+        : existingForKr.reduce((max, item) => Math.max(max, item.sequence), 0) + 1
+  };
+
+  store.milestones.push(milestone);
+  recalcKrInStore(store, milestone.krKey);
+  const keyResult = ensureKrExists(store, milestone.krKey);
+  keyResult.lastCheckinAt = nowIso();
+  recalcObjectiveInStore(store, keyResult.objectiveKey);
+  persistStore(store);
+  return clone(milestone);
+}
+
 export function createKeyResult(input: CreateKeyResultInput): KeyResult {
   const store = getStore();
   const requestedKrCode = normalizeKey(input.krCode ?? input.krKey ?? "");
@@ -1393,6 +1574,7 @@ export function createKeyResult(input: CreateKeyResultInput): KeyResult {
     owner: normalizeName(input.owner ?? "") || undefined,
     ownerEmail: normalizeEmail(input.ownerEmail ?? "") || undefined,
     metricType: normalizeMetricType(input.metricType),
+    measurementRule: normalizeName(input.measurementRule ?? ""),
     baselineValue: input.baselineValue,
     targetValue: input.targetValue,
     currentValue: input.currentValue,
@@ -1401,11 +1583,13 @@ export function createKeyResult(input: CreateKeyResultInput): KeyResult {
     dueDate: input.dueDate,
     checkInFrequency,
     blockers,
+    supportNeeded: normalizeName(input.supportNeeded ?? ""),
     notes,
     lastCheckinAt: nowIso()
   };
 
   store.keyResults.push(keyResult);
+  recalcKrInStore(store, keyResult.krKey);
   recalcObjectiveInStore(store, objective.objectiveKey);
   persistStore(store);
   return clone(keyResult);
@@ -1461,6 +1645,10 @@ export function updateKeyResult(krKey: string, patch: UpdateKeyResultInput): Key
     keyResult.metricType = normalizeMetricType(patch.metricType);
   }
 
+  if (patch.measurementRule !== undefined) {
+    keyResult.measurementRule = normalizeName(patch.measurementRule);
+  }
+
   if (patch.baselineValue !== undefined) {
     keyResult.baselineValue = patch.baselineValue;
   }
@@ -1489,15 +1677,15 @@ export function updateKeyResult(krKey: string, patch: UpdateKeyResultInput): Key
     keyResult.blockers = normalizeName(patch.blockers);
   }
 
+  if (patch.supportNeeded !== undefined) {
+    keyResult.supportNeeded = normalizeName(patch.supportNeeded);
+  }
+
   if (patch.notes !== undefined) {
     keyResult.notes = normalizeName(patch.notes);
   }
 
-  keyResult.progressPct = computeKrProgress(keyResult.baselineValue, keyResult.targetValue, keyResult.currentValue);
-
-  if (patch.status === undefined) {
-    keyResult.status = getStatusFromProgress(keyResult.progressPct);
-  }
+  recalcKrInStore(store, keyResult.krKey);
 
   keyResult.lastCheckinAt = nowIso();
 
@@ -1530,6 +1718,7 @@ export function deleteKeyResult(krKey: string): { krKey: string; deletedCheckInC
   ).length;
 
   store.keyResults.splice(krIndex, 1);
+  store.milestones = store.milestones.filter((milestone) => milestone.krKey.toLowerCase() !== keyResult.krKey.toLowerCase());
   store.checkIns = store.checkIns.filter((checkIn) => checkIn.krKey.toLowerCase() !== keyResult.krKey.toLowerCase());
   recalcObjectiveInStore(store, keyResult.objectiveKey);
 
@@ -1538,6 +1727,68 @@ export function deleteKeyResult(krKey: string): { krKey: string; deletedCheckInC
     krKey: keyResult.krKey,
     deletedCheckInCount
   };
+}
+
+export function updateMilestone(milestoneKey: string, patch: UpdateMilestoneInput): Milestone | null {
+  const store = getStore();
+  const milestone = store.milestones.find((item) => item.milestoneKey === milestoneKey);
+  if (!milestone) {
+    return null;
+  }
+
+  if (patch.title !== undefined) {
+    milestone.title = normalizeName(patch.title);
+  }
+
+  if (patch.weight !== undefined) {
+    milestone.weight = Math.max(0, Number(patch.weight) || 0);
+  }
+
+  if (patch.targetValue !== undefined) {
+    milestone.targetValue = normalizeMilestoneMetricValue(patch.targetValue);
+  }
+
+  if (patch.currentValue !== undefined) {
+    milestone.currentValue = normalizeMilestoneMetricValue(patch.currentValue);
+  }
+
+  if (patch.progressPct !== undefined) {
+    milestone.progressPct = clampPercent(patch.progressPct);
+  }
+
+  if (patch.sequence !== undefined && Number.isInteger(patch.sequence)) {
+    milestone.sequence = patch.sequence;
+  }
+
+  milestone.progressPct = resolveMilestoneProgress({
+    targetValue: milestone.targetValue,
+    currentValue: milestone.currentValue,
+    progressPct: patch.progressPct !== undefined ? patch.progressPct : milestone.progressPct
+  });
+
+  const keyResult = ensureKrExists(store, milestone.krKey);
+  recalcKrInStore(store, milestone.krKey);
+  keyResult.lastCheckinAt = nowIso();
+  recalcObjectiveInStore(store, keyResult.objectiveKey);
+  persistStore(store);
+  return clone(milestone);
+}
+
+export function deleteMilestone(milestoneKey: string): { milestoneKey: string } | null {
+  const store = getStore();
+  const milestoneIndex = store.milestones.findIndex((item) => item.milestoneKey === milestoneKey);
+  if (milestoneIndex < 0) {
+    return null;
+  }
+
+  const milestone = store.milestones[milestoneIndex];
+  const keyResult = ensureKrExists(store, milestone.krKey);
+  store.milestones.splice(milestoneIndex, 1);
+  recalcKrInStore(store, milestone.krKey);
+  keyResult.lastCheckinAt = nowIso();
+  recalcObjectiveInStore(store, keyResult.objectiveKey);
+  persistStore(store);
+  return { milestoneKey };
 }
 
 type CheckInFilters = {

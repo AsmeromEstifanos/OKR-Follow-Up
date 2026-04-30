@@ -35,6 +35,7 @@ type OwnerSuggestion = {
 
 type PendingObjective = {
   title: string;
+  description: string;
   owner: string;
   ownerEmail: string;
   objectiveType: ObjectiveType;
@@ -227,6 +228,7 @@ export default function DashboardObjectiveControls({
     const resolvedProgressPct = hasProgressPct ? rawProgressPct : rawProgress;
     return {
       title: trimmedTitle,
+      description: notes.trim(),
       owner: owner.trim(),
       ownerEmail: ownerEmail.trim(),
       objectiveType,
@@ -300,6 +302,7 @@ export default function DashboardObjectiveControls({
             periodKey: defaultPeriodKey,
             title: item.title,
             description: item.notes,
+            constraintGuardrails: item.keyRisksDependency,
             owner: item.owner,
             ownerEmail: item.ownerEmail,
             department: positionName,
@@ -389,7 +392,7 @@ export default function DashboardObjectiveControls({
               <input name="objectiveOwnerEmail" value={ownerEmail} readOnly disabled={isSaving} />
             </div>
             <div className="field objective-field-wide">
-              <label>Objective</label>
+              <label>Objective Title</label>
               <textarea
                 name="objectiveTitle"
                 value={title}
@@ -470,28 +473,28 @@ export default function DashboardObjectiveControls({
               </select>
             </div>
             <div className="field objective-field-wide">
-              <label>Blockers</label>
+              <label>Objective Intent</label>
               <textarea
                 name="objectiveBlockers"
-                value={blockers}
-                onChange={(event) => setBlockers(event.target.value)}
-                placeholder="Current blockers"
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                placeholder="Objective intent"
                 disabled={isSaving}
               />
             </div>
             <div className="field objective-field-wide">
-              <label>Key Risks/Dependancy</label>
+              <label>Constraint / Guardrails</label>
               <input
                 name="objectiveKeyRisksDependency"
                 value={keyRisksDependency}
                 onChange={(event) => setKeyRisksDependency(event.target.value)}
-                placeholder="Key risks/dependencies"
+                placeholder="Constraint / guardrails"
                 disabled={isSaving}
               />
             </div>
             <div className="field objective-field-wide">
-              <label>Notes</label>
-              <textarea name="objectiveNotes" value={notes} onChange={(event) => setNotes(event.target.value)} disabled={isSaving} />
+              <label>Blockers</label>
+              <textarea name="objectiveNotes" value={blockers} onChange={(event) => setBlockers(event.target.value)} disabled={isSaving} />
             </div>
           </div>
           <div className="actions">

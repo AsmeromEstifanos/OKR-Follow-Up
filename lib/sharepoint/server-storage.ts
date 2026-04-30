@@ -1,4 +1,4 @@
-import type { ActivityLogEntry, AuthLogEntry, CheckIn, FieldOptions, KeyResult, Objective, Period, RagThresholds, Venture } from "@/lib/types";
+import type { ActivityLogEntry, AuthLogEntry, CheckIn, FieldOptions, KeyResult, Milestone, Objective, Period, RagThresholds, Venture } from "@/lib/types";
 import { updateOperationProgress, updateOperationProgressWithSteps } from "@/lib/operation-progress";
 
 const GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0";
@@ -8,12 +8,49 @@ const LEGACY_CONTENT_RECORD_KEY = "content";
 const RAG_CONFIG_KEY = "ragThresholds";
 const FIELD_OPTIONS_CONFIG_KEY = "fieldOptions";
 
+function clampPercent(value: number): number {
+  if (Number.isNaN(value) || !Number.isFinite(value)) {
+    return 0;
+  }
+
+  if (value < 0) {
+    return 0;
+  }
+
+  if (value > 100) {
+    return 100;
+  }
+
+  return Number(value.toFixed(2));
+}
+
+function computeMilestoneMetricProgress(targetValue: number, currentValue: number): number {
+  if (targetValue === 0) {
+    return currentValue >= targetValue ? 100 : 0;
+  }
+
+  return clampPercent((currentValue / targetValue) * 100);
+}
+
+function getLegacyMilestoneProgress(status: string): number {
+  if (status === "Done") {
+    return 100;
+  }
+
+  if (status === "InProgress") {
+    return 50;
+  }
+
+  return 0;
+}
+
 type PersistedContent = {
   ragThresholds?: RagThresholds;
   fieldOptions?: FieldOptions;
   periods: Period[];
   objectives: Objective[];
   keyResults: KeyResult[];
+  milestones: Milestone[];
   checkIns: CheckIn[];
 };
 
@@ -84,6 +121,7 @@ type AtomicListName =
   | "periods"
   | "objectives"
   | "keyResults"
+  | "milestones"
   | "checkIns"
   | "config"
   | "roles"
@@ -102,6 +140,9 @@ type AtomicCapabilities = {
   hasKrCodeColumn: boolean;
   hasKrOwnerEmailColumn: boolean;
   hasKrBlockersColumn: boolean;
+  hasMilestoneTargetValueColumn: boolean;
+  hasMilestoneCurrentValueColumn: boolean;
+  hasMilestoneProgressPctColumn: boolean;
   hasConfigValueJsonColumn: boolean;
 };
 
@@ -155,6 +196,7 @@ const LIST_DEFS: Record<AtomicListName, ListDefinition> = {
       { name: "ObjectiveType", type: "text" },
       { name: "OkrCycle", type: "text" },
       { name: "Blockers", type: "multilineText", optional: true },
+      { name: "ConstraintGuardrails", type: "multilineText", optional: true },
       { name: "KeyRisksDependency", type: "multilineText" },
       { name: "Notes", type: "multilineText" },
       { name: "Status", type: "text" },
@@ -178,6 +220,7 @@ const LIST_DEFS: Record<AtomicListName, ListDefinition> = {
       { name: "Owner", type: "text" },
       { name: "OwnerEmail", type: "text", optional: true },
       { name: "MetricType", type: "text" },
+      { name: "MeasurementRule", type: "multilineText", optional: true },
       { name: "BaselineValue", type: "number" },
       { name: "TargetValue", type: "number" },
       { name: "CurrentValue", type: "number" },
@@ -186,8 +229,24 @@ const LIST_DEFS: Record<AtomicListName, ListDefinition> = {
       { name: "DueDate", type: "text" },
       { name: "CheckInFrequency", type: "text" },
       { name: "Blockers", type: "multilineText", optional: true },
+      { name: "SupportNeeded", type: "multilineText", optional: true },
       { name: "Notes", type: "multilineText" },
       { name: "LastCheckinAt", type: "text" }
+    ]
+  },
+  milestones: {
+    suffix: "Milestones",
+    keyField: "MilestoneKey",
+    columns: [
+      { name: "MilestoneKey", type: "text" },
+      { name: "KrKey", type: "text" },
+      { name: "MilestoneTitle", type: "text" },
+      { name: "Weight", type: "number" },
+      { name: "TargetValue", type: "number", optional: true },
+      { name: "CurrentValue", type: "number", optional: true },
+      { name: "ProgressPct", type: "number" },
+      { name: "Status", type: "text", optional: true },
+      { name: "Sequence", type: "number" }
     ]
   },
   checkIns: {
@@ -262,6 +321,7 @@ const SNAPSHOT_LIST_ORDER: SnapshotListName[] = [
   "periods",
   "objectives",
   "keyResults",
+  "milestones",
   "checkIns",
   "config"
 ];
@@ -272,6 +332,7 @@ const SNAPSHOT_LIST_LABELS: Record<SnapshotListName, string> = {
   periods: "Syncing periods",
   objectives: "Syncing objectives",
   keyResults: "Syncing key results",
+  milestones: "Syncing milestones",
   checkIns: "Syncing check-ins",
   config: "Saving configuration"
 };
@@ -539,7 +600,9 @@ async function ensureList(
 ): Promise<string> {
   const cacheKey = getListCacheKey(siteId, displayName);
   if (cache.__okrSharePointListIds?.[cacheKey]) {
-    return cache.__okrSharePointListIds[cacheKey];
+    const cachedListId = cache.__okrSharePointListIds[cacheKey];
+    await ensureListColumns(config, siteId, cachedListId, definition.columns);
+    return cachedListId;
   }
 
   const lists = await listSiteLists(config, siteId);
@@ -1020,6 +1083,9 @@ async function loadAtomicCapabilities(
     hasKrCodeColumn: await listHasColumn(config, siteId, listIds.keyResults, "KrCode"),
     hasKrOwnerEmailColumn: await listHasColumn(config, siteId, listIds.keyResults, "OwnerEmail"),
     hasKrBlockersColumn: await listHasColumn(config, siteId, listIds.keyResults, "Blockers"),
+    hasMilestoneTargetValueColumn: await listHasColumn(config, siteId, listIds.milestones, "TargetValue"),
+    hasMilestoneCurrentValueColumn: await listHasColumn(config, siteId, listIds.milestones, "CurrentValue"),
+    hasMilestoneProgressPctColumn: await listHasColumn(config, siteId, listIds.milestones, "ProgressPct"),
     hasConfigValueJsonColumn: await listHasColumn(config, siteId, listIds.config, "ValueJson")
   };
 }
@@ -1062,6 +1128,7 @@ function buildAtomicRows(snapshot: SharePointStoreSnapshot, capabilities: Atomic
     ObjectiveType: objective.objectiveType,
     OkrCycle: objective.okrCycle,
     ...(capabilities.hasObjectiveBlockersColumn ? { Blockers: objective.blockers ?? "" } : {}),
+    ConstraintGuardrails: objective.constraintGuardrails ?? "",
     KeyRisksDependency: objective.keyRisksDependency,
     Notes: objective.notes,
     Status: objective.status,
@@ -1082,6 +1149,7 @@ function buildAtomicRows(snapshot: SharePointStoreSnapshot, capabilities: Atomic
     Owner: kr.owner ?? "",
     ...(capabilities.hasKrOwnerEmailColumn ? { OwnerEmail: kr.ownerEmail ?? "" } : {}),
     MetricType: kr.metricType,
+    MeasurementRule: kr.measurementRule ?? "",
     BaselineValue: kr.baselineValue,
     TargetValue: kr.targetValue,
     CurrentValue: kr.currentValue,
@@ -1090,8 +1158,30 @@ function buildAtomicRows(snapshot: SharePointStoreSnapshot, capabilities: Atomic
     DueDate: kr.dueDate,
     CheckInFrequency: kr.checkInFrequency,
     ...(capabilities.hasKrBlockersColumn ? { Blockers: kr.blockers ?? "" } : {}),
+    SupportNeeded: kr.supportNeeded ?? "",
     Notes: kr.notes,
     LastCheckinAt: kr.lastCheckinAt ?? ""
+  }));
+
+  const milestones = snapshot.content.milestones.map((milestone) => ({
+    MilestoneKey: milestone.milestoneKey,
+    KrKey: milestone.krKey,
+    MilestoneTitle: milestone.title,
+    Weight: milestone.weight,
+    ...(capabilities.hasMilestoneTargetValueColumn ? { TargetValue: milestone.targetValue ?? null } : {}),
+    ...(capabilities.hasMilestoneCurrentValueColumn ? { CurrentValue: milestone.currentValue ?? null } : {}),
+    ...(capabilities.hasMilestoneProgressPctColumn ? { ProgressPct: milestone.progressPct } : {}),
+    ...(!capabilities.hasMilestoneProgressPctColumn
+      ? {
+          Status:
+            milestone.progressPct >= 100
+              ? "Done"
+              : milestone.progressPct > 0
+                ? "InProgress"
+                : "NotStarted"
+        }
+      : {}),
+    Sequence: milestone.sequence
   }));
 
   const checkIns = snapshot.content.checkIns.map((checkIn) => ({
@@ -1136,6 +1226,7 @@ function buildAtomicRows(snapshot: SharePointStoreSnapshot, capabilities: Atomic
     periods,
     objectives,
     keyResults,
+    milestones,
     checkIns,
     config
   };
@@ -1296,6 +1387,9 @@ async function loadAtomicSnapshot(config: SharePointStorageConfig): Promise<Shar
   const hasKrCodeColumn = await listHasColumn(config, siteId, listIds.keyResults, "KrCode");
   const hasKrOwnerEmailColumn = await listHasColumn(config, siteId, listIds.keyResults, "OwnerEmail");
   const hasKrBlockersColumn = await listHasColumn(config, siteId, listIds.keyResults, "Blockers");
+  const hasMilestoneTargetValueColumn = await listHasColumn(config, siteId, listIds.milestones, "TargetValue");
+  const hasMilestoneCurrentValueColumn = await listHasColumn(config, siteId, listIds.milestones, "CurrentValue");
+  const hasMilestoneProgressPctColumn = await listHasColumn(config, siteId, listIds.milestones, "ProgressPct");
   const hasConfigValueJsonColumn = await listHasColumn(config, siteId, listIds.config, "ValueJson");
   const objectiveSelectFields = [
     "ObjectiveKey",
@@ -1311,6 +1405,7 @@ async function loadAtomicSnapshot(config: SharePointStorageConfig): Promise<Shar
     "ObjectiveType",
     "OkrCycle",
     ...(hasObjectiveBlockersColumn ? ["Blockers"] : []),
+    "ConstraintGuardrails",
     "KeyRisksDependency",
     "Notes",
     "Status",
@@ -1338,11 +1433,13 @@ async function loadAtomicSnapshot(config: SharePointStorageConfig): Promise<Shar
     "DueDate",
     "CheckInFrequency",
     ...(hasKrBlockersColumn ? ["Blockers"] : []),
+    "MeasurementRule",
+    "SupportNeeded",
     "Notes",
     "LastCheckinAt"
   ];
 
-  const [ventureItems, departmentItems, periodItems, objectiveItems, krItems, checkInItems, configItems] = await Promise.all([
+  const [ventureItems, departmentItems, periodItems, objectiveItems, krItems, milestoneItems, checkInItems, configItems] = await Promise.all([
     listItems(config, siteId, listIds.ventures, ["VentureKey", "VentureName"]),
     listItems(config, siteId, listIds.departments, [
       "DepartmentKey",
@@ -1354,6 +1451,17 @@ async function loadAtomicSnapshot(config: SharePointStorageConfig): Promise<Shar
     listItems(config, siteId, listIds.periods, ["PeriodKey", "PeriodName", "StartDate", "EndDate", "Status"]),
     listItems(config, siteId, listIds.objectives, objectiveSelectFields),
     listItems(config, siteId, listIds.keyResults, keyResultSelectFields),
+    listItems(config, siteId, listIds.milestones, [
+      "MilestoneKey",
+      "KrKey",
+      "MilestoneTitle",
+      "Weight",
+      ...(hasMilestoneTargetValueColumn ? ["TargetValue"] : []),
+      ...(hasMilestoneCurrentValueColumn ? ["CurrentValue"] : []),
+      ...(hasMilestoneProgressPctColumn ? ["ProgressPct"] : []),
+      "Status",
+      "Sequence"
+    ]),
     listItems(config, siteId, listIds.checkIns, [
       "CheckInAt",
       "PeriodKey",
@@ -1383,6 +1491,7 @@ async function loadAtomicSnapshot(config: SharePointStorageConfig): Promise<Shar
     periodItems.length > 0 ||
     objectiveItems.length > 0 ||
     krItems.length > 0 ||
+    milestoneItems.length > 0 ||
     checkInItems.length > 0 ||
     configItems.length > 0;
 
@@ -1462,6 +1571,7 @@ async function loadAtomicSnapshot(config: SharePointStorageConfig): Promise<Shar
         objectiveType: asString(item.fields?.ObjectiveType) as Objective["objectiveType"],
         okrCycle: asString(item.fields?.OkrCycle) as Objective["okrCycle"],
         blockers: asString(item.fields?.Blockers),
+        constraintGuardrails: asString(item.fields?.ConstraintGuardrails),
         keyRisksDependency: asString(item.fields?.KeyRisksDependency),
         notes: asString(item.fields?.Notes),
         status: asString(item.fields?.Status) as Objective["status"],
@@ -1491,6 +1601,7 @@ async function loadAtomicSnapshot(config: SharePointStorageConfig): Promise<Shar
           owner: asString(item.fields?.Owner) || undefined,
           ownerEmail: asOwnerEmail(item.fields?.OwnerEmail, item.fields?.Owner) || undefined,
           metricType: asString(item.fields?.MetricType) as KeyResult["metricType"],
+        measurementRule: asString(item.fields?.MeasurementRule),
         baselineValue: asNumber(item.fields?.BaselineValue, 0),
         targetValue: asNumber(item.fields?.TargetValue, 0),
         currentValue: asNumber(item.fields?.CurrentValue, 0),
@@ -1499,11 +1610,46 @@ async function loadAtomicSnapshot(config: SharePointStorageConfig): Promise<Shar
         dueDate: asString(item.fields?.DueDate),
         checkInFrequency: asString(item.fields?.CheckInFrequency) as KeyResult["checkInFrequency"],
         blockers: asString(item.fields?.Blockers),
+        supportNeeded: asString(item.fields?.SupportNeeded),
         notes: asString(item.fields?.Notes),
         lastCheckinAt: asNullableString(item.fields?.LastCheckinAt)
       } as KeyResult;
     })
     .filter((kr): kr is KeyResult => Boolean(kr));
+
+  const milestones = milestoneItems
+    .map((item) => {
+      const milestoneKey = asString(item.fields?.MilestoneKey).trim();
+      if (!milestoneKey) {
+        return null;
+      }
+
+      return {
+        milestoneKey,
+        krKey: asString(item.fields?.KrKey),
+        title: asString(item.fields?.MilestoneTitle),
+        weight: asNumber(item.fields?.Weight, 0),
+        targetValue:
+          item.fields?.TargetValue === undefined || item.fields?.TargetValue === null
+            ? null
+            : asNumber(item.fields?.TargetValue, 0),
+        currentValue:
+          item.fields?.CurrentValue === undefined || item.fields?.CurrentValue === null
+            ? null
+            : asNumber(item.fields?.CurrentValue, 0),
+        progressPct:
+          item.fields?.TargetValue !== undefined &&
+          item.fields?.TargetValue !== null &&
+          item.fields?.CurrentValue !== undefined &&
+          item.fields?.CurrentValue !== null
+            ? computeMilestoneMetricProgress(asNumber(item.fields?.TargetValue, 0), asNumber(item.fields?.CurrentValue, 0))
+            : item.fields?.ProgressPct !== undefined && item.fields?.ProgressPct !== null
+              ? clampPercent(asNumber(item.fields?.ProgressPct, 0))
+              : getLegacyMilestoneProgress(asString(item.fields?.Status)),
+        sequence: asNumber(item.fields?.Sequence, 0)
+      } as Milestone;
+    })
+    .filter((milestone): milestone is Milestone => Boolean(milestone));
 
   const checkIns = checkInItems
     .map((item) => {
@@ -1556,6 +1702,7 @@ async function loadAtomicSnapshot(config: SharePointStorageConfig): Promise<Shar
       periods,
       objectives,
       keyResults,
+      milestones,
       checkIns
     }
   };
@@ -1595,12 +1742,18 @@ async function saveAtomicSnapshot(config: SharePointStorageConfig, snapshot: Sha
   updateOperationProgress(88, SNAPSHOT_LIST_LABELS.keyResults);
   await replaceListItems(config, siteId, listIds.keyResults, LIST_DEFS.keyResults.keyField, rows.keyResults, {
     basePercent: 88,
-    endPercent: 94,
+    endPercent: 92,
     stage: SNAPSHOT_LIST_LABELS.keyResults
   });
-  updateOperationProgress(94, SNAPSHOT_LIST_LABELS.checkIns);
+  updateOperationProgress(92, SNAPSHOT_LIST_LABELS.milestones);
+  await replaceListItems(config, siteId, listIds.milestones, LIST_DEFS.milestones.keyField, rows.milestones, {
+    basePercent: 92,
+    endPercent: 95,
+    stage: SNAPSHOT_LIST_LABELS.milestones
+  });
+  updateOperationProgress(95, SNAPSHOT_LIST_LABELS.checkIns);
   await replaceListItems(config, siteId, listIds.checkIns, LIST_DEFS.checkIns.keyField, rows.checkIns, {
-    basePercent: 94,
+    basePercent: 95,
     endPercent: 98,
     stage: SNAPSHOT_LIST_LABELS.checkIns
   });
@@ -1758,6 +1911,7 @@ async function loadLegacySnapshot(config: SharePointStorageConfig): Promise<Shar
       periods: typedContent.periods as Period[],
       objectives: typedContent.objectives as Objective[],
       keyResults: typedContent.keyResults as KeyResult[],
+      milestones: (typedContent.milestones as Milestone[] | undefined) ?? [],
       checkIns: typedContent.checkIns as CheckIn[]
     }
   };

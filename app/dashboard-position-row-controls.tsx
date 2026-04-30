@@ -15,6 +15,8 @@ type Props = {
   positionOwnerEmail?: string;
   objectiveCount: number;
   adminEmails: string[];
+  forcedOpen?: boolean | null;
+  forceToken?: number;
   children: ReactNode;
 };
 
@@ -53,6 +55,8 @@ export default function DashboardPositionRowControls({
   positionOwnerEmail,
   objectiveCount,
   adminEmails,
+  forcedOpen,
+  forceToken,
   children
 }: Props): JSX.Element {
   const router = useRouter();
@@ -76,6 +80,14 @@ export default function DashboardPositionRowControls({
     setDisplayName(positionName);
     setDisplayOwner(positionOwner ?? "");
   }, [positionName, positionOwner, positionOwnerEmail, selectedVentureKey, departmentKey]);
+
+  useEffect(() => {
+    if (forcedOpen === null || forcedOpen === undefined) {
+      return;
+    }
+
+    setIsOpen(forcedOpen);
+  }, [forcedOpen, forceToken]);
 
   const canManage = isAdmin && Boolean(selectedVentureKey && departmentKey);
   const editTrigger =

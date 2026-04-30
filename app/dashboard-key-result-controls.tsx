@@ -35,6 +35,7 @@ type PendingKr = {
   owner: string;
   ownerEmail: string;
   metricType: MetricType;
+  measurementRule: string;
   baselineValue: number;
   targetValue: number;
   currentValue: number;
@@ -42,6 +43,7 @@ type PendingKr = {
   dueDate: string;
   checkInFrequency: CheckInFrequency;
   blockers: string;
+  supportNeeded: string;
   notes: string;
 };
 
@@ -123,6 +125,7 @@ export default function DashboardKeyResultControls({
   const [owner, setOwner] = useState<string>(sanitizedDefaultOwner);
   const [ownerEmail, setOwnerEmail] = useState<string>("");
   const [metricType, setMetricType] = useState<MetricType>(metricTypeOptions[0] ?? "Operational");
+  const [measurementRule, setMeasurementRule] = useState<string>("");
   const [baselineValue, setBaselineValue] = useState<string>("0");
   const [targetValue, setTargetValue] = useState<string>("100");
   const [currentValue, setCurrentValue] = useState<string>("0");
@@ -130,6 +133,7 @@ export default function DashboardKeyResultControls({
   const [dueDate, setDueDate] = useState<string>(toDateInput(defaultDueDate));
   const [checkInFrequency, setCheckInFrequency] = useState<CheckInFrequency>(checkInFrequencyOptions[0] ?? "Weekly");
   const [blockers, setBlockers] = useState<string>("");
+  const [supportNeeded, setSupportNeeded] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
   const [pendingKrs, setPendingKrs] = useState<PendingKr[]>([]);
   const [error, setError] = useState<string>("");
@@ -156,6 +160,7 @@ export default function DashboardKeyResultControls({
     setOwner("");
     setOwnerEmail("");
     setMetricType(metricTypeOptions[0] ?? "Operational");
+    setMeasurementRule("");
     setBaselineValue("0");
     setTargetValue("100");
     setCurrentValue("0");
@@ -163,6 +168,7 @@ export default function DashboardKeyResultControls({
     setDueDate(toDateInput(defaultDueDate));
     setCheckInFrequency(checkInFrequencyOptions[0] ?? "Weekly");
     setBlockers("");
+    setSupportNeeded("");
     setNotes("");
   };
 
@@ -178,6 +184,7 @@ export default function DashboardKeyResultControls({
     setOwner(sanitizedDefaultOwner);
     setOwnerEmail("");
     setMetricType(metricTypeOptions[0] ?? "Operational");
+    setMeasurementRule("");
     setBaselineValue("0");
     setTargetValue("100");
     setCurrentValue("0");
@@ -185,6 +192,7 @@ export default function DashboardKeyResultControls({
     setDueDate(toDateInput(defaultDueDate));
     setCheckInFrequency(checkInFrequencyOptions[0] ?? "Weekly");
     setBlockers("");
+    setSupportNeeded("");
     setNotes("");
     setPendingKrs([]);
   };
@@ -230,6 +238,7 @@ export default function DashboardKeyResultControls({
       owner: owner.trim(),
       ownerEmail: ownerEmail.trim(),
       metricType,
+      measurementRule: measurementRule.trim(),
       baselineValue: baseline,
       targetValue: target,
       currentValue: current,
@@ -237,6 +246,7 @@ export default function DashboardKeyResultControls({
       dueDate,
       checkInFrequency,
       blockers: blockers.trim(),
+      supportNeeded: supportNeeded.trim(),
       notes: notes.trim()
     };
   };
@@ -298,6 +308,7 @@ export default function DashboardKeyResultControls({
             owner: item.owner,
             ownerEmail: item.ownerEmail,
             metricType: item.metricType,
+            measurementRule: item.measurementRule,
             baselineValue: item.baselineValue,
             targetValue: item.targetValue,
             currentValue: item.currentValue,
@@ -305,6 +316,7 @@ export default function DashboardKeyResultControls({
             dueDate: item.dueDate,
             checkInFrequency: item.checkInFrequency,
             blockers: item.blockers,
+            supportNeeded: item.supportNeeded,
             notes: item.notes
           })
         });
@@ -400,6 +412,10 @@ export default function DashboardKeyResultControls({
               </select>
             </div>
             <div className="field">
+              <label>Measurement Rule</label>
+              <input name="krMeasurementRule" value={measurementRule} onChange={(event) => setMeasurementRule(event.target.value)} disabled={isSaving} />
+            </div>
+            <div className="field">
               <label>Baseline Value</label>
               <input
                 name="krBaselineValue"
@@ -470,6 +486,10 @@ export default function DashboardKeyResultControls({
             <div className="field kr-field-wide">
               <label>Blockers</label>
               <textarea name="krBlockers" value={blockers} onChange={(event) => setBlockers(event.target.value)} disabled={isSaving} />
+            </div>
+            <div className="field kr-field-wide">
+              <label>Support Needed</label>
+              <textarea name="krSupportNeeded" value={supportNeeded} onChange={(event) => setSupportNeeded(event.target.value)} disabled={isSaving} />
             </div>
             <div className="field kr-field-wide">
               <label>Notes</label>

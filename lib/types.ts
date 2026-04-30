@@ -55,6 +55,7 @@ export interface Objective {
   periodKey: string;
   title: string;
   description: string;
+  constraintGuardrails?: string;
   owner?: string;
   ownerEmail?: string;
   department: string;
@@ -83,6 +84,7 @@ export interface KeyResult {
   owner?: string;
   ownerEmail?: string;
   metricType: MetricType;
+  measurementRule?: string;
   baselineValue: number;
   targetValue: number;
   currentValue: number;
@@ -91,8 +93,20 @@ export interface KeyResult {
   dueDate: string;
   checkInFrequency: CheckInFrequency;
   blockers?: string;
+  supportNeeded?: string;
   notes: string;
   lastCheckinAt: string | null;
+}
+
+export interface Milestone {
+  milestoneKey: string;
+  krKey: string;
+  title: string;
+  weight: number;
+  targetValue?: number | null;
+  currentValue?: number | null;
+  progressPct: number;
+  sequence: number;
 }
 
 export interface CheckIn {
@@ -143,6 +157,7 @@ export interface ObjectiveWithContext {
   objective: Objective;
   keyResults: KeyResult[];
   latestCheckIns: Record<string, CheckIn | null>;
+  milestonesByKr: Record<string, Milestone[]>;
 }
 
 export type CreatePeriodInput = Omit<Period, "status"> & { status?: PeriodStatus };
@@ -160,6 +175,7 @@ export type UpdateObjectiveInput = Partial<
     | "objectiveCode"
     | "title"
     | "description"
+    | "constraintGuardrails"
     | "owner"
     | "ownerEmail"
     | "department"
@@ -199,6 +215,7 @@ export type UpdateKeyResultInput = Partial<
     | "owner"
     | "ownerEmail"
     | "metricType"
+    | "measurementRule"
     | "baselineValue"
     | "targetValue"
     | "currentValue"
@@ -206,6 +223,7 @@ export type UpdateKeyResultInput = Partial<
     | "dueDate"
     | "checkInFrequency"
     | "blockers"
+    | "supportNeeded"
     | "notes"
   >
 >;
@@ -213,6 +231,16 @@ export type CreateCheckInInput = Omit<CheckIn, "checkInAt" | "progressPctSnapsho
   checkInAt?: string;
   progressPctSnapshot?: number;
 };
+
+export type CreateMilestoneInput = Omit<Milestone, "milestoneKey" | "sequence" | "progressPct"> & {
+  milestoneKey?: string;
+  sequence?: number;
+  progressPct?: number;
+};
+
+export type UpdateMilestoneInput = Partial<
+  Pick<Milestone, "title" | "weight" | "targetValue" | "currentValue" | "progressPct" | "sequence">
+>;
 
 export type CreateVentureInput = {
   ventureKey?: string;

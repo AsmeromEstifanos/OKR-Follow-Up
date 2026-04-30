@@ -11,6 +11,7 @@ import type {
   KeyResult,
   KrStatus,
   MetricType,
+  Milestone,
   Objective,
   ObjectiveStatus,
   ObjectiveType,
@@ -23,6 +24,7 @@ type KeyResultRowData = {
   keyResult: KeyResult;
   latestUpdateNotes?: string;
   latestUpdatedAt?: string | null;
+  milestones: Milestone[];
 };
 
 type Props = {
@@ -30,6 +32,8 @@ type Props = {
   keyResults: KeyResultRowData[];
   positionOwnerEmail?: string;
   adminEmails: string[];
+  forcedExpanded?: boolean | null;
+  forceToken?: number;
   objectiveTypeOptions: ObjectiveType[];
   objectiveStatusOptions: ObjectiveStatus[];
   objectiveCycleOptions: OkrCycle[];
@@ -58,26 +62,6 @@ function ragPillClass(rag: string): string {
   }
 
   return "pill pill-red";
-}
-
-function formatStatus(value: ObjectiveStatus): string {
-  if (value === "OnTrack") {
-    return "On Track";
-  }
-
-  if (value === "AtRisk") {
-    return "At Risk";
-  }
-
-  if (value === "OffTrack") {
-    return "Off Track";
-  }
-
-  if (value === "NotStarted") {
-    return "Not Started";
-  }
-
-  return value;
 }
 
 function formatDate(value: string | null): string {
@@ -118,6 +102,8 @@ export default function DashboardObjectiveRowEditor({
   keyResults,
   positionOwnerEmail,
   adminEmails,
+  forcedExpanded,
+  forceToken,
   objectiveTypeOptions,
   objectiveStatusOptions,
   objectiveCycleOptions,
@@ -135,15 +121,16 @@ export default function DashboardObjectiveRowEditor({
 
   const [code, setCode] = useState<string>(objectiveCode);
   const [title, setTitle] = useState<string>(objective.title);
+  const [intent, setIntent] = useState<string>(objective.description ?? "");
   const [owner, setOwner] = useState<string>(resolveOwnerName(objective.owner));
   const [ownerEmail, setOwnerEmail] = useState<string>(resolveOwnerEmail(objective.owner, objective.ownerEmail));
   const [objectiveType, setObjectiveType] = useState<ObjectiveType>(objective.objectiveType);
   const [status, setStatus] = useState<ObjectiveStatus>(objective.status);
   const [progressPct, setProgressPct] = useState<string>(String(objective.progressPct));
   const [okrCycle, setOkrCycle] = useState<OkrCycle>(objective.okrCycle);
-  const [blockers, setBlockers] = useState<string>(objective.blockers ?? "");
-  const [keyRisksDependency, setKeyRisksDependency] = useState<string>(objective.keyRisksDependency ?? "");
-  const [notes, setNotes] = useState<string>(objective.notes ?? objective.description ?? "");
+  const [constraintGuardrails, setConstraintGuardrails] = useState<string>(
+    objective.constraintGuardrails ?? objective.keyRisksDependency ?? ""
+  );
   const normalizedOwnerEmail = normalizeEmail(resolveOwnerEmail(objective.owner, objective.ownerEmail));
   const normalizedPositionOwnerEmail = normalizeEmail(positionOwnerEmail);
   const normalizedUserEmail = normalizeEmail(signedInEmail);
@@ -155,35 +142,37 @@ export default function DashboardObjectiveRowEditor({
   useEffect(() => {
     setCode(objectiveCode);
     setTitle(objective.title);
+    setIntent(objective.description ?? "");
     setOwner(resolveOwnerName(objective.owner));
     setOwnerEmail(resolveOwnerEmail(objective.owner, objective.ownerEmail));
     setObjectiveType(objective.objectiveType);
     setStatus(objective.status);
     setProgressPct(String(objective.progressPct));
     setOkrCycle(objective.okrCycle);
-    setBlockers(objective.blockers ?? "");
-    setKeyRisksDependency(objective.keyRisksDependency ?? "");
-    setNotes(objective.notes ?? objective.description ?? "");
+    setConstraintGuardrails(objective.constraintGuardrails ?? objective.keyRisksDependency ?? "");
   }, [objective, objectiveCode]);
 
-  const resetDraft = (): void => {
-    setCode(objectiveCode);
-    setTitle(objective.title);
-    setOwner(resolveOwnerName(objective.owner));
-    setOwnerEmail(resolveOwnerEmail(objective.owner, objective.ownerEmail));
-    setObjectiveType(objective.objectiveType);
-    setStatus(objective.status);
-    setProgressPct(String(objective.progressPct));
-    setOkrCycle(objective.okrCycle);
-    setBlockers(objective.blockers ?? "");
-    setKeyRisksDependency(objective.keyRisksDependency ?? "");
-    setNotes(objective.notes ?? objective.description ?? "");
-  };
+  useEffect(() => {
+    if (forcedExpanded === null || forcedExpanded === undefined) {
+      return;
+    }
+
+    setIsExpanded(forcedExpanded);
+  }, [forcedExpanded, forceToken]);
 
   const cancelEdit = (): void => {
     setError("");
     setIsEditing(false);
-    resetDraft();
+    setCode(objectiveCode);
+    setTitle(objective.title);
+    setIntent(objective.description ?? "");
+    setOwner(resolveOwnerName(objective.owner));
+    setOwnerEmail(resolveOwnerEmail(objective.owner, objective.ownerEmail));
+    setObjectiveType(objective.objectiveType);
+    setStatus(objective.status);
+    setProgressPct(String(objective.progressPct));
+    setOkrCycle(objective.okrCycle);
+    setConstraintGuardrails(objective.constraintGuardrails ?? objective.keyRisksDependency ?? "");
   };
 
   const saveEdit = async (): Promise<void> => {
@@ -202,8 +191,6 @@ export default function DashboardObjectiveRowEditor({
       return;
     }
 
-    const resolvedProgressPct = numericProgressPct;
-
     setIsSaving(true);
     setError("");
 
@@ -216,15 +203,15 @@ export default function DashboardObjectiveRowEditor({
       body: JSON.stringify({
         objectiveCode: code.trim(),
         title: title.trim(),
+        description: intent.trim(),
         owner: owner.trim(),
         ownerEmail: ownerEmail.trim(),
         objectiveType,
         status,
-        progressPct: clampPercent(resolvedProgressPct),
+        progressPct: clampPercent(numericProgressPct),
         okrCycle,
-        blockers: blockers.trim(),
-        keyRisksDependency: keyRisksDependency.trim(),
-        notes: notes.trim()
+        constraintGuardrails: constraintGuardrails.trim(),
+        keyRisksDependency: constraintGuardrails.trim()
       })
     });
 
@@ -280,60 +267,28 @@ export default function DashboardObjectiveRowEditor({
     <Fragment>
       <tr className={`board-objective-row ${isEditing ? "board-objective-row-editing" : ""}`}>
         <td className="board-objective-cell">
-          {!isEditing ? (
-            <div className="objective-code-emphasis">{objectiveCode}</div>
-          ) : null}
+          {!isEditing ? <div className="objective-code-emphasis">{objectiveCode}</div> : null}
           <div className="objective-title-wrap">
             {isEditing ? (
-              <input
-                className="objective-row-input"
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                placeholder="Objective"
-                autoFocus
-                disabled={isSaving}
-              />
+              <input className="objective-row-input" value={title} onChange={(event) => setTitle(event.target.value)} autoFocus disabled={isSaving} />
             ) : (
               <span className="objective-title-text">{objective.title}</span>
             )}
             {!isEditing && canEdit ? (
-              <button
-                type="button"
-                className="objective-edit-trigger"
-                aria-label={`Edit ${objective.title}`}
-                title="Edit objective"
-                onClick={() => setIsEditing(true)}
-                disabled={isSaving}
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                  <path
-                    d="M3 17.25V21h3.75L18.81 8.94l-3.75-3.75L3 17.25zm17.71-10.04a1 1 0 0 0 0-1.41l-2.5-2.5a1 1 0 0 0-1.41 0l-1.96 1.96 3.75 3.75 2.12-2.1z"
-                    fill="currentColor"
-                  />
+              <button type="button" className="objective-edit-trigger" onClick={() => setIsEditing(true)} disabled={isSaving}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 17.25V21h3.75L18.81 8.94l-3.75-3.75L3 17.25zm17.71-10.04a1 1 0 0 0 0-1.41l-2.5-2.5a1 1 0 0 0-1.41 0l-1.96 1.96 3.75 3.75 2.12-2.1z" fill="currentColor" />
                 </svg>
               </button>
             ) : null}
           </div>
           {!isEditing ? (
-            <button
-              type="button"
-              className={`objective-kr-toggle ${isExpanded ? "is-open" : ""}`}
-              aria-expanded={isExpanded}
-              onClick={() => setIsExpanded((current) => !current)}
-            >
+            <button type="button" className={`objective-kr-toggle ${isExpanded ? "is-open" : ""}`} aria-expanded={isExpanded} onClick={() => setIsExpanded((current) => !current)}>
               Key Results ({keyResults.length})
             </button>
           ) : null}
-          {isEditing && canEdit ? (
-            <input
-              className="objective-row-input"
-              value={code}
-              onChange={(event) => setCode(event.target.value)}
-              placeholder="OBJ-001"
-              disabled={isSaving}
-            />
-          ) : null}
-          {isEditing && canEdit ? (
+          {isEditing ? <input className="objective-row-input" value={code} onChange={(event) => setCode(event.target.value)} disabled={isSaving} /> : null}
+          {isEditing ? (
             <div className="objective-row-actions">
               <button className="btn" type="button" onClick={() => void saveEdit()} disabled={isSaving}>
                 Save
@@ -349,7 +304,14 @@ export default function DashboardObjectiveRowEditor({
           {error ? <p className="message danger objective-row-error">{error}</p> : null}
         </td>
         <td>
-          {isEditing && canEdit ? (
+          {isEditing ? (
+            <textarea className="objective-row-input" value={intent} onChange={(event) => setIntent(event.target.value)} disabled={isSaving} />
+          ) : (
+            objective.description || "-"
+          )}
+        </td>
+        <td>
+          {isEditing ? (
             <OwnerInput
               id={`objective-owner-inline-${objective.objectiveKey}`}
               value={owner}
@@ -366,122 +328,28 @@ export default function DashboardObjectiveRowEditor({
             objective.owner || "-"
           )}
         </td>
+        <td>{formatDate(objective.endDate)}</td>
         <td>
-          {isEditing && canEdit ? (
-            <select
-              className="objective-row-select"
-              value={objectiveType}
-              onChange={(event) => setObjectiveType(event.target.value as ObjectiveType)}
-              disabled={isSaving}
-            >
-              {objectiveTypeOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+          {isEditing ? (
+            <input className="objective-row-input" value={constraintGuardrails} onChange={(event) => setConstraintGuardrails(event.target.value)} disabled={isSaving} />
           ) : (
-            objective.objectiveType
+            objective.constraintGuardrails || objective.keyRisksDependency || "-"
           )}
         </td>
         <td>
-          {isEditing && canEdit ? (
-            <select
-              className="objective-row-select"
-              value={status}
-              onChange={(event) => setStatus(event.target.value as ObjectiveStatus)}
-              disabled={isSaving}
-            >
-              {objectiveStatusOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          ) : (
-            formatStatus(objective.status)
-          )}
-        </td>
-        <td>
-          <span className={ragPillClass(objective.rag)}>{objective.rag}</span>
-        </td>
-        <td>
-          {isEditing && canEdit ? (
-            <input
-              className="objective-row-input"
-              type="number"
-              step="any"
-              value={progressPct}
-              onChange={(event) => setProgressPct(event.target.value)}
-              placeholder="Progress %"
-              disabled={isSaving}
-            />
+          {isEditing ? (
+            <input className="objective-row-input" type="number" step="any" value={progressPct} onChange={(event) => setProgressPct(event.target.value)} disabled={isSaving} />
           ) : (
             `${objective.progressPct}%`
           )}
         </td>
         <td>
-          {isEditing && canEdit ? (
-            <select
-              className="objective-row-select"
-              value={okrCycle}
-              onChange={(event) => setOkrCycle(event.target.value as OkrCycle)}
-              disabled={isSaving}
-            >
-              {objectiveCycleOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          ) : (
-            objective.okrCycle
-          )}
+          <span className={ragPillClass(objective.rag)}>{objective.rag}</span>
         </td>
-        <td>
-          {isEditing && canEdit ? (
-            <input
-              className="objective-row-input"
-              value={blockers}
-              onChange={(event) => setBlockers(event.target.value)}
-              placeholder="Blockers"
-              disabled={isSaving}
-            />
-          ) : (
-            objective.blockers || "-"
-          )}
-        </td>
-        <td>
-          {isEditing && canEdit ? (
-            <input
-              className="objective-row-input"
-              value={keyRisksDependency}
-              onChange={(event) => setKeyRisksDependency(event.target.value)}
-              placeholder="Key Risks/Dependancy"
-              disabled={isSaving}
-            />
-          ) : (
-            objective.keyRisksDependency || "-"
-          )}
-        </td>
-        <td>
-          {isEditing && canEdit ? (
-            <input
-              className="objective-row-input"
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              placeholder="Notes"
-              disabled={isSaving}
-            />
-          ) : (
-            objective.notes || objective.description || "-"
-          )}
-        </td>
-        <td>{formatDate(objective.lastCheckinAt)}</td>
       </tr>
       {isExpanded ? (
         <tr className="board-details-row">
-          <td colSpan={11}>
+          <td colSpan={7}>
             <div className="board-objective-details">
               <div className="board-objective-content">
                 <DashboardKeyResultControls
@@ -498,37 +366,36 @@ export default function DashboardObjectiveRowEditor({
                 <table className="board-subtable">
                   <thead>
                     <tr className="board-subheader-row">
-                      <th>Key Result</th>
+                      <th>KR</th>
                       <th>Owner</th>
-                      <th>KR Metric Type</th>
-                      <th>Baseline Value</th>
-                      <th>Target Value</th>
-                      <th>Current Value</th>
+                      <th>Measurement Rule</th>
+                      <th>Target</th>
+                      <th>Current</th>
                       <th>KR Progress %</th>
-                      <th>KR Status</th>
                       <th>Due Date</th>
-                      <th>Check-in Frequency</th>
-                      <th>Blockers</th>
-                      <th>Key Risks/Dependancy</th>
-                      <th>Notes</th>
-                      <th>Last updated</th>
+                      <th>Note</th>
+                      <th>Blocker</th>
+                      <th>Support Needed</th>
+                      <th>KR Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {keyResults.length === 0 ? (
                       <tr className="board-empty-row">
-                        <td colSpan={14}>No key results for this objective yet.</td>
+                        <td colSpan={11}>No key results for this objective yet.</td>
                       </tr>
                     ) : (
                       keyResults.map((item) => (
                         <DashboardKeyResultRowEditor
                           key={item.keyResult.krKey}
                           keyResult={item.keyResult}
-                          objectiveKeyRisksDependency={objective.keyRisksDependency}
                           latestUpdateNotes={item.latestUpdateNotes}
                           latestUpdatedAt={item.latestUpdatedAt}
+                          milestones={item.milestones}
                           positionOwnerEmail={positionOwnerEmail}
                           adminEmails={adminEmails}
+                          forcedExpanded={forcedExpanded}
+                          forceToken={forceToken}
                           metricTypeOptions={metricTypeOptions}
                           keyResultStatusOptions={keyResultStatusOptions}
                           checkInFrequencyOptions={checkInFrequencyOptions}

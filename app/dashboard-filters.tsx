@@ -46,6 +46,17 @@ export default function DashboardFilters({
     ).sort((left, right) => left.localeCompare(right));
   }, [ventureKey, ventures]);
 
+  const clearHref = useMemo(() => {
+    const params = new URLSearchParams();
+    const currentView = searchParams.get("view");
+    if (currentView) {
+      params.set("view", currentView);
+    }
+
+    const query = params.toString();
+    return query ? `${pathname}?${query}` : pathname;
+  }, [pathname, searchParams]);
+
   const applyFilters = (nextVentureKey: string, nextDepartment: string): void => {
     const params = new URLSearchParams(searchParams.toString());
 
@@ -80,7 +91,7 @@ export default function DashboardFilters({
     <section className="section">
       <div className="section-header">
         <h2>Filters</h2>
-        <Link className="btn-link" href={pathname}>
+        <Link className="btn-link" href={clearHref}>
           Clear
         </Link>
       </div>
