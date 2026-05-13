@@ -321,12 +321,15 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
       .replace(/^\s*>\s?/gm, "");
   }
 
-  function handleEmailSend(msgId: string, action: EmailAction): void {
-    const to = action.recipients
+  function buildRecipientList(action: EmailAction): string {
+    return action.recipients
       .map((r) => r.email)
       .filter((email) => email && email.includes("@"))
       .join(",");
+  }
 
+  function handleEmailSend(msgId: string, action: EmailAction): void {
+    const to = buildRecipientList(action);
     if (!to) {
       setMessages((prev) => [
         ...prev,
@@ -340,13 +343,34 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
     const mailto = `mailto:${to}?subject=${subject}&body=${body}`;
 
     window.location.href = mailto;
+    finalizeEmailDispatch(msgId, action.recipients.length, "your email client");
+  }
 
+  function handleEmailSendWeb(msgId: string, action: EmailAction): void {
+    const to = buildRecipientList(action);
+    if (!to) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "No valid recipient emails to open.", id: newId() }
+      ]);
+      return;
+    }
+
+    const subject = encodeURIComponent(stripMarkdownForEmail(action.subject));
+    const body = encodeURIComponent(stripMarkdownForEmail(action.body));
+    const url = `https://outlook.office.com/mail/deeplink/compose?to=${to}&subject=${subject}&body=${body}`;
+
+    window.open(url, "_blank", "noopener,noreferrer");
+    finalizeEmailDispatch(msgId, action.recipients.length, "Outlook on the Web");
+  }
+
+  function finalizeEmailDispatch(msgId: string, count: number, target: string): void {
     setDismissedEmailIds((prev) => new Set([...prev, msgId]));
     setMessages((prev) => [
       ...prev,
       {
         role: "assistant",
-        content: `Opened your email client with a draft to ${action.recipients.length} recipient${action.recipients.length === 1 ? "" : "s"}. Review and click Send in Outlook to dispatch.`,
+        content: `Opened ${target} with a draft to ${count} recipient${count === 1 ? "" : "s"}. Review and click Send to dispatch.`,
         id: newId()
       }
     ]);
@@ -444,6 +468,13 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
                             Cancel
                           </button>
                         </div>
+                        <button
+                          type="button"
+                          className="ai-email-fallback-link"
+                          onClick={() => handleEmailSendWeb(msg.id, action)}
+                        >
+                          Or open in Outlook on the Web
+                        </button>
                       </div>
                     )}
                     {showOptions && options && (
