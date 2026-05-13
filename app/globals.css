@@ -3286,6 +3286,61 @@ textarea {
   padding: 0.45rem 0.7rem;
 }
 
+.ai-fab-bubble-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 88%;
+}
+
+.ai-email-confirm-card {
+  background: #fff;
+  border: 1px solid #d1d9dc;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+
+.ai-email-confirm-meta {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.ai-email-confirm-icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.ai-email-confirm-subject {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #183038;
+  line-height: 1.3;
+}
+
+.ai-email-confirm-to {
+  font-size: 0.76rem;
+  color: #4f6770;
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+.ai-email-confirm-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.ai-email-send-btn {
+  font-size: 0.8rem;
+  padding: 0.35rem 0.85rem;
+}
+
 /* Typing dots */
 .ai-chat-typing {
   display: flex;

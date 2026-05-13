@@ -6,6 +6,8 @@ import React, { FormEvent, useEffect, useRef, useState } from "react";
 type Role = "user" | "assistant";
 type Message = { role: Role; content: string; id: string };
 type Props = { userEmail?: string; userName?: string };
+type EmailRecipient = { name: string; email: string };
+type EmailAction = { recipients: EmailRecipient[]; subject: string; body: string };
 
 let msgIdCounter = 0;
 function newId(): string {
@@ -93,6 +95,25 @@ function MarkdownContent({ text }: { text: string }): JSX.Element {
   return <div className="ai-md-body">{nodes}</div>;
 }
 
+function parseEmailAction(content: string): { text: string; action: EmailAction | null } {
+  const startIdx = content.indexOf("[SEND_EMAILS]");
+  if (startIdx === -1) return { text: content, action: null };
+
+  const endIdx = content.indexOf("[/SEND_EMAILS]", startIdx);
+  if (endIdx === -1) {
+    // Block is still streaming — hide the partial marker
+    return { text: content.slice(0, startIdx).trim(), action: null };
+  }
+
+  const jsonStr = content.slice(startIdx + "[SEND_EMAILS]".length, endIdx).trim();
+  const textBefore = content.slice(0, startIdx).trim();
+  try {
+    return { text: textBefore, action: JSON.parse(jsonStr) as EmailAction };
+  } catch {
+    return { text: textBefore, action: null };
+  }
+}
+
 function makeWelcome(userName?: string): Message {
   const greeting = userName ? `Hi ${userName.split(" ")[0]}!` : "Hi!";
   return {
@@ -126,6 +147,8 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [dismissedEmailIds, setDismissedEmailIds] = useState<Set<string>>(new Set());
+  const [sendingEmailId, setSendingEmailId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -207,6 +230,55 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
     setMessages([makeWelcome(userName)]);
     setError("");
     setInput("");
+    setDismissedEmailIds(new Set());
+  }
+
+  async function handleEmailSend(msgId: string, action: EmailAction): Promise<void> {
+    setSendingEmailId(msgId);
+    try {
+      const res = await fetch(apiPath("/api/ai/send-emails"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          senderEmail: userEmail,
+          senderName: userName,
+          recipients: action.recipients,
+          subject: action.subject,
+          body: action.body
+        })
+      });
+      const result = (await res.json()) as { sent?: number; errors?: string[]; error?: string };
+      setDismissedEmailIds((prev) => new Set([...prev, msgId]));
+      const confirmText =
+        result.error
+          ? `Could not send emails: ${result.error}`
+          : result.errors?.length
+          ? `Sent to ${result.sent ?? 0} recipient(s). Some failed: ${result.errors.join("; ")}`
+          : `Done! Emails sent to ${result.sent ?? 0} recipient(s). They should arrive shortly.`;
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: confirmText, id: newId() }
+      ]);
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: `Failed to send emails: ${err instanceof Error ? err.message : "Unknown error"}`,
+          id: newId()
+        }
+      ]);
+    } finally {
+      setSendingEmailId(null);
+    }
+  }
+
+  function handleEmailDismiss(msgId: string): void {
+    setDismissedEmailIds((prev) => new Set([...prev, msgId]));
+    setMessages((prev) => [
+      ...prev,
+      { role: "assistant", content: "No problem — let me know if you'd like to make any changes.", id: newId() }
+    ]);
   }
 
   return (
@@ -238,21 +310,64 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
           </div>
 
           <div className="ai-fab-messages">
-            {messages.map((msg) => (
-              <div key={msg.id} className={`ai-fab-msg ${msg.role === "user" ? "ai-fab-msg-user" : "ai-fab-msg-ai"}`}>
-                {msg.role === "assistant" && (
-                  <span className="ai-fab-msg-avatar" aria-hidden="true">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={withBasePath("/svh.gif")} alt="" className="ai-fab-avatar-gif" />
-                  </span>
-                )}
-                <div className="ai-fab-bubble">
-                  {msg.role === "assistant"
-                    ? <MarkdownContent text={msg.content} />
-                    : <p className="ai-fab-bubble-text">{msg.content}</p>}
+            {messages.map((msg) => {
+              const { text, action } =
+                msg.role === "assistant" ? parseEmailAction(msg.content) : { text: msg.content, action: null };
+              const showAction = action !== null && !dismissedEmailIds.has(msg.id);
+
+              return (
+                <div key={msg.id} className={`ai-fab-msg ${msg.role === "user" ? "ai-fab-msg-user" : "ai-fab-msg-ai"}`}>
+                  {msg.role === "assistant" && (
+                    <span className="ai-fab-msg-avatar" aria-hidden="true">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={withBasePath("/svh.gif")} alt="" className="ai-fab-avatar-gif" />
+                    </span>
+                  )}
+                  {msg.role === "user" ? (
+                    <div className="ai-fab-bubble">
+                      <p className="ai-fab-bubble-text">{msg.content}</p>
+                    </div>
+                  ) : (
+                  <div className="ai-fab-bubble-wrap">
+                    <div className="ai-fab-bubble">
+                      <MarkdownContent text={text} />
+                    </div>
+                    {showAction && (
+                      <div className="ai-email-confirm-card">
+                        <div className="ai-email-confirm-meta">
+                          <span className="ai-email-confirm-icon">✉️</span>
+                          <div>
+                            <div className="ai-email-confirm-subject">{action.subject}</div>
+                            <div className="ai-email-confirm-to">
+                              To: {action.recipients.map((r) => r.name || r.email).join(", ")}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="ai-email-confirm-actions">
+                          <button
+                            type="button"
+                            className="btn ai-email-send-btn"
+                            disabled={sendingEmailId === msg.id}
+                            onClick={() => void handleEmailSend(msg.id, action)}
+                          >
+                            {sendingEmailId === msg.id ? "Sending…" : "Confirm & Send"}
+                          </button>
+                          <button
+                            type="button"
+                            className="tab-btn"
+                            disabled={sendingEmailId === msg.id}
+                            onClick={() => handleEmailDismiss(msg.id)}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {isLoading && (
               <div className="ai-fab-msg ai-fab-msg-ai">
