@@ -36,6 +36,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return unauthorized();
   }
 
+  try {
+    return await runScheduled();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: `Scheduled run failed: ${message}` }, { status: 200 });
+  }
+}
+
+async function runScheduled(): Promise<NextResponse> {
   const now = new Date();
   const settings = await readNotificationSettings();
 
