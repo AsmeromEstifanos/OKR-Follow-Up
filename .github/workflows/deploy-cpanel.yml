@@ -54,10 +54,14 @@ jobs:
       - name: Write server-side secrets to .env.deploy
         env:
           SECRET_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SECRET_SCHEDULER_SECRET: ${{ secrets.SCHEDULER_SECRET }}
         run: |
           : > .env.deploy
           if [ -n "$SECRET_OPENAI_API_KEY" ]; then
             printf 'OPENAI_API_KEY=%s\n' "$SECRET_OPENAI_API_KEY" >> .env.deploy
+          fi
+          if [ -n "$SECRET_SCHEDULER_SECRET" ]; then
+            printf 'SCHEDULER_SECRET=%s\n' "$SECRET_SCHEDULER_SECRET" >> .env.deploy
           fi
 
       - name: Create deployment archive
@@ -104,7 +108,7 @@ jobs:
             mkdir -p /tmp/okr-follow-up-deploy/extracted
 
             tar -xzf /tmp/okr-follow-up-deploy/deploy.tgz -C /tmp/okr-follow-up-deploy/extracted
-            find "$APP_DIR" -mindepth 1 -maxdepth 1 ! -name ".env" ! -name "tmp" ! -name "logs" -exec rm -rf {} +
+            find "$APP_DIR" -mindepth 1 -maxdepth 1 ! -name ".env" ! -name "tmp" ! -name "logs" ! -name "data" -exec rm -rf {} +
 
             cp -R /tmp/okr-follow-up-deploy/extracted/. "$APP_DIR"
             cd "$APP_DIR"

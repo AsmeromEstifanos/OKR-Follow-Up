@@ -144,6 +144,7 @@ export default function AppShell({ children }: Props): JSX.Element {
   const normalizedPathname = useMemo(() => stripBasePath(pathname), [pathname]);
   const isDashboardRoute = normalizedPathname.startsWith("/dashboard");
   const isConfigRoute = normalizedPathname.startsWith("/config");
+  const isNotifSettingsRoute = normalizedPathname.startsWith("/admin/notifications");
   const navQuery = useMemo(() => {
     const params = new URLSearchParams(searchParams.toString());
     const preserved = new URLSearchParams();
@@ -163,6 +164,7 @@ export default function AppShell({ children }: Props): JSX.Element {
   const boardHref = navQuery ? `/?${navQuery}` : "/";
   const dashboardHref = navQuery ? `/dashboard?${navQuery}` : "/dashboard";
   const configHref = "/config";
+  const notifSettingsHref = "/admin/notifications";
   const refreshConnection = useCallback(() => {
     connection.refresh();
   }, [connection]);
@@ -316,6 +318,26 @@ export default function AppShell({ children }: Props): JSX.Element {
                 <ConfigIcon />
               </span>
               <span className="ln-nav-label">{isNavCollapsed ? "" : "Config"}</span>
+            </Link>
+          ) : null}
+          {isAdminUser ? (
+            <Link
+              href={notifSettingsHref}
+              className={`ln-nav-item ${isNotifSettingsRoute ? "ln-nav-item-active" : ""} ${
+                isNavCollapsed ? "ln-nav-item-collapsed" : ""
+              }`}
+              onClick={() => {
+                if (isMobile) {
+                  setIsMobileMenuOpen(false);
+                }
+              }}
+            >
+              <span className="ln-nav-icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2zm6-6V11a6 6 0 0 0-5-5.91V4a1 1 0 1 0-2 0v1.09A6 6 0 0 0 6 11v5l-2 2v1h16v-1l-2-2z" />
+                </svg>
+              </span>
+              <span className="ln-nav-label">{isNavCollapsed ? "" : "Notifications"}</span>
             </Link>
           ) : null}
         </nav>
