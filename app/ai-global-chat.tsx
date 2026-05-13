@@ -310,6 +310,17 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
     setDismissedEmailIds(new Set());
   }
 
+  function stripMarkdownForEmail(text: string): string {
+    return text
+      .replace(/\*\*([^*\n]+)\*\*/g, "$1")
+      .replace(/__([^_\n]+)__/g, "$1")
+      .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, "$1$2")
+      .replace(/(^|[^_])_([^_\n]+)_(?!_)/g, "$1$2")
+      .replace(/`([^`\n]+)`/g, "$1")
+      .replace(/^#{1,6}\s+/gm, "")
+      .replace(/^\s*>\s?/gm, "");
+  }
+
   function handleEmailSend(msgId: string, action: EmailAction): void {
     const to = action.recipients
       .map((r) => r.email)
@@ -324,8 +335,8 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
       return;
     }
 
-    const subject = encodeURIComponent(action.subject);
-    const body = encodeURIComponent(action.body);
+    const subject = encodeURIComponent(stripMarkdownForEmail(action.subject));
+    const body = encodeURIComponent(stripMarkdownForEmail(action.body));
     const mailto = `mailto:${to}?subject=${subject}&body=${body}`;
 
     window.location.href = mailto;

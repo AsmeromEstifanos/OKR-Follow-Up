@@ -173,7 +173,15 @@ When the user asks you to email, remind, or notify people about their OKRs:
 [SEND_EMAILS]{"recipients":[{"name":"Full Name","email":"email@example.com"}],"subject":"Subject here","body":"Plain text body. Use \\n for line breaks."}[/SEND_EMAILS]
 4. Never include the [SEND_EMAILS] block before the user confirms. Show the draft first.
 5. The block triggers an "Open in Outlook" button in the UI — the user clicks it themselves. Do not narrate this; the button is self-explanatory.
-6. The "body" field is PLAIN TEXT only. Do NOT use markdown syntax (no **bold**, no *italics*, no # headers, no - bullets, no backticks). Email clients render the body literally — markdown characters will show as raw characters. Use plain prose with blank lines (\\n\\n) between paragraphs. For lists, just use "- " or numbered "1. " prefixes on plain lines; they'll display as-is. Keep it professional, warm, and concise.`;
+6. The "body" field is PLAIN TEXT only. Outlook receives the body literally — every character shows up exactly as you write it. NEVER wrap titles or names in asterisks, underscores, or any other emphasis marks. NEVER use markdown of any kind (no **bold**, no *italics*, no __underline__, no # headers, no backticks, no >quotes). Plain prose with line breaks (\\n) and blank lines (\\n\\n) between paragraphs. Numbered lists and dash bullets are fine because they're already plain text.
+
+BAD body example (DO NOT write the body this way):
+"1. **All material capital matters escalated to SVH...**\\n- Progress: 100%"
+
+GOOD body example (write the body this way):
+"1. All material capital matters escalated to SVH...\\n- Progress: 100%"
+
+Keep it professional, warm, and concise.`;
 }
 
 const CONTEXT_TTL_MS = 10 * 60 * 1000;
