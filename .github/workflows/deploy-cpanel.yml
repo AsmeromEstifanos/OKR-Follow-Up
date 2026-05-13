@@ -55,6 +55,8 @@ jobs:
         env:
           SECRET_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           SECRET_SCHEDULER_SECRET: ${{ secrets.SCHEDULER_SECRET }}
+          SECRET_AZURE_APP_CLIENT_SECRET: ${{ secrets.AZURE_APP_CLIENT_SECRET }}
+          SECRET_NOTIFICATION_FROM_EMAIL: ${{ secrets.NOTIFICATION_FROM_EMAIL }}
         run: |
           : > .env.deploy
           if [ -n "$SECRET_OPENAI_API_KEY" ]; then
@@ -62,6 +64,12 @@ jobs:
           fi
           if [ -n "$SECRET_SCHEDULER_SECRET" ]; then
             printf 'SCHEDULER_SECRET=%s\n' "$SECRET_SCHEDULER_SECRET" >> .env.deploy
+          fi
+          if [ -n "$SECRET_AZURE_APP_CLIENT_SECRET" ]; then
+            printf 'AZURE_APP_CLIENT_SECRET=%s\n' "$SECRET_AZURE_APP_CLIENT_SECRET" >> .env.deploy
+          fi
+          if [ -n "$SECRET_NOTIFICATION_FROM_EMAIL" ]; then
+            printf 'NOTIFICATION_FROM_EMAIL=%s\n' "$SECRET_NOTIFICATION_FROM_EMAIL" >> .env.deploy
           fi
 
       - name: Create deployment archive
