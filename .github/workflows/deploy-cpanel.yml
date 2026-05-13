@@ -17,7 +17,6 @@ jobs:
       APP_DIR: ${{ secrets.CPANEL_APP_DIR }}
       APP_PORT: ${{ secrets.CPANEL_APP_PORT }}
       RESTART_COMMAND: ${{ secrets.CPANEL_RESTART_COMMAND }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       NEXT_PUBLIC_BASE_PATH: /okr
       NEXT_PUBLIC_AZURE_CLIENT_ID: ${{ secrets.NEXT_PUBLIC_AZURE_CLIENT_ID }}
       NEXT_PUBLIC_AAD_TENANT_ID: ${{ secrets.AZURE_APP_TENANT_ID }}
@@ -82,7 +81,7 @@ jobs:
           key: ${{ secrets.CPANEL_SSH_KEY }}
           port: ${{ secrets.CPANEL_PORT || 22 }}
           script_stop: true
-          envs: APP_DIR,APP_PORT,RESTART_COMMAND,OPENAI_API_KEY
+          envs: APP_DIR,APP_PORT,RESTART_COMMAND
           script: |
             set -e
 
@@ -100,18 +99,16 @@ jobs:
             cp -R /tmp/okr-follow-up-deploy/extracted/. "$APP_DIR"
             cd "$APP_DIR"
 
-            # Write server-side secrets to .env (overwrites only the keys we manage)
+            # Inject server-side secrets into .env
             touch .env
-            update_env() {
-              local key="$1" val="$2"
-              if [ -z "$val" ]; then return; fi
-              if grep -q "^${key}=" .env 2>/dev/null; then
-                sed -i "s|^${key}=.*|${key}=${val}|" .env
+            OPENAI_KEY='${{ secrets.OPENAI_API_KEY }}'
+            if [ -n "$OPENAI_KEY" ]; then
+              if grep -q "^OPENAI_API_KEY=" .env 2>/dev/null; then
+                sed -i "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=${OPENAI_KEY}|" .env
               else
-                echo "${key}=${val}" >> .env
+                echo "OPENAI_API_KEY=${OPENAI_KEY}" >> .env
               fi
-            }
-            update_env "OPENAI_API_KEY" "$OPENAI_API_KEY"
+            fi
 
             if [ -n "$APP_PORT" ]; then
               export APP_PORT="$APP_PORT"
