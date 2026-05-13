@@ -198,7 +198,6 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [dismissedEmailIds, setDismissedEmailIds] = useState<Set<string>>(new Set());
-  const [sendingEmailId, setSendingEmailId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -283,44 +282,35 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
     setDismissedEmailIds(new Set());
   }
 
-  async function handleEmailSend(msgId: string, action: EmailAction): Promise<void> {
-    setSendingEmailId(msgId);
-    try {
-      const res = await fetch(apiPath("/api/ai/send-emails"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          senderEmail: userEmail,
-          senderName: userName,
-          recipients: action.recipients,
-          subject: action.subject,
-          body: action.body
-        })
-      });
-      const result = (await res.json()) as { sent?: number; errors?: string[]; error?: string };
-      setDismissedEmailIds((prev) => new Set([...prev, msgId]));
-      const confirmText =
-        result.error
-          ? `Could not send emails: ${result.error}`
-          : result.errors?.length
-          ? `Sent to ${result.sent ?? 0} recipient(s). Some failed: ${result.errors.join("; ")}`
-          : `Done! Emails sent to ${result.sent ?? 0} recipient(s). They should arrive shortly.`;
+  function handleEmailSend(msgId: string, action: EmailAction): void {
+    const to = action.recipients
+      .map((r) => r.email)
+      .filter((email) => email && email.includes("@"))
+      .join(",");
+
+    if (!to) {
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: confirmText, id: newId() }
+        { role: "assistant", content: "No valid recipient emails to open.", id: newId() }
       ]);
-    } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: `Failed to send emails: ${err instanceof Error ? err.message : "Unknown error"}`,
-          id: newId()
-        }
-      ]);
-    } finally {
-      setSendingEmailId(null);
+      return;
     }
+
+    const subject = encodeURIComponent(action.subject);
+    const body = encodeURIComponent(action.body);
+    const mailto = `mailto:${to}?subject=${subject}&body=${body}`;
+
+    window.location.href = mailto;
+
+    setDismissedEmailIds((prev) => new Set([...prev, msgId]));
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "assistant",
+        content: `Opened your email client with a draft to ${action.recipients.length} recipient${action.recipients.length === 1 ? "" : "s"}. Review and click Send in Outlook to dispatch.`,
+        id: newId()
+      }
+    ]);
   }
 
   function handleEmailDismiss(msgId: string): void {
@@ -397,15 +387,13 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
                           <button
                             type="button"
                             className="btn ai-email-send-btn"
-                            disabled={sendingEmailId === msg.id}
-                            onClick={() => void handleEmailSend(msg.id, action)}
+                            onClick={() => handleEmailSend(msg.id, action)}
                           >
-                            {sendingEmailId === msg.id ? "Sending…" : "Confirm & Send"}
+                            Open in Outlook
                           </button>
                           <button
                             type="button"
                             className="tab-btn"
-                            disabled={sendingEmailId === msg.id}
                             onClick={() => handleEmailDismiss(msg.id)}
                           >
                             Cancel
