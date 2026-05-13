@@ -18,8 +18,6 @@ jobs:
       APP_PORT: ${{ secrets.CPANEL_APP_PORT }}
       RESTART_COMMAND: ${{ secrets.CPANEL_RESTART_COMMAND }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      AZURE_APP_CLIENT_SECRET: ${{ secrets.AZURE_APP_CLIENT_SECRET }}
-      NOTIFICATION_FROM_EMAIL: ${{ secrets.NOTIFICATION_FROM_EMAIL }}
       NEXT_PUBLIC_BASE_PATH: /okr
       NEXT_PUBLIC_AZURE_CLIENT_ID: ${{ secrets.NEXT_PUBLIC_AZURE_CLIENT_ID }}
       NEXT_PUBLIC_AAD_TENANT_ID: ${{ secrets.AZURE_APP_TENANT_ID }}
@@ -84,7 +82,7 @@ jobs:
           key: ${{ secrets.CPANEL_SSH_KEY }}
           port: ${{ secrets.CPANEL_PORT || 22 }}
           script_stop: true
-          envs: APP_DIR,APP_PORT,RESTART_COMMAND,OPENAI_API_KEY,AZURE_APP_CLIENT_SECRET,NOTIFICATION_FROM_EMAIL
+          envs: APP_DIR,APP_PORT,RESTART_COMMAND,OPENAI_API_KEY
           script: |
             set -e
 
@@ -114,8 +112,6 @@ jobs:
               fi
             }
             update_env "OPENAI_API_KEY" "$OPENAI_API_KEY"
-            update_env "AZURE_APP_CLIENT_SECRET" "$AZURE_APP_CLIENT_SECRET"
-            update_env "NOTIFICATION_FROM_EMAIL" "$NOTIFICATION_FROM_EMAIL"
 
             if [ -n "$APP_PORT" ]; then
               export APP_PORT="$APP_PORT"
