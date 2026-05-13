@@ -197,7 +197,7 @@ function makeWelcome(userName?: string): Message {
   return {
     role: "assistant",
     id: "welcome",
-    content: `${greeting} I'm your OKR assistant. Ask me anything about your objectives, key results, progress, blockers, or team performance.`
+    content: `${greeting} I'm your OKR assistant. Ask me anything about your objectives, key results, progress, blockers, or team performance.\n\nI can also draft Outlook emails for you — just ask me to remind someone to update their OKRs or share a summary with the team.`
   };
 }
 
