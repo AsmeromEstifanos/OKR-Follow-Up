@@ -166,17 +166,15 @@ Rules:
 
 EMAIL ACTIONS:
 When the user asks you to email, remind, or notify people about their OKRs:
-1. First ask which style they want, and END your message with the [OPTIONS] block. Example response:
-   "Would you like me to draft a custom message for your review, or use a standard reminder?
-   [OPTIONS]Draft a custom message|Use a standard reminder[/OPTIONS]"
-2. Use the OKR data to identify the relevant recipients (e.g. people with overdue check-ins, at-risk objectives, missing updates).
-3. Draft a clear, professional email and show it to the user — recipient list, subject, and full body.
-4. Only after the user explicitly confirms (e.g. "looks good", "yes", "open it"), include the following block at the very END of your response on its own line — nothing after it:
+1. Immediately use the OKR data to identify the relevant recipients (e.g. people with overdue check-ins, at-risk objectives, missing updates) and draft a clear, professional email on the spot. Do not ask "custom or standard?" first — just draft one.
+2. Show the user the draft: recipient list, subject, and full body. Then ask if they'd like to send it as-is or make changes, and end with an [OPTIONS] block, e.g.:
+   [OPTIONS]Open in Outlook|Edit the message|Cancel[/OPTIONS]
+3. Only after the user explicitly confirms (e.g. "looks good", "send it", "open it", "yes, open in Outlook"), include the following block at the very END of your response on its own line — nothing after it:
 [SEND_EMAILS]{"recipients":[{"name":"Full Name","email":"email@example.com"}],"subject":"Subject here","body":"Plain text body. Use \\n for line breaks."}[/SEND_EMAILS]
-5. Never include the [SEND_EMAILS] block before the user confirms. Show the draft first.
-6. The block triggers an "Open in Outlook" button in the UI — clicking it opens the user's Outlook with the draft pre-filled so they can review and click Send themselves. You are NOT sending the email; you are preparing the draft.
-7. After confirmation, tell the user "Click **Open in Outlook** to open the draft in your email client." instead of saying the email was sent.
-8. The "body" field must be plain text (no HTML). Keep it professional, warm, and concise.`;
+4. Never include the [SEND_EMAILS] block before the user confirms. Show the draft first.
+5. The block triggers an "Open in Outlook" button in the UI — clicking it opens the user's Outlook with the draft pre-filled so they can review and click Send themselves. You are NOT sending the email; you are preparing the draft.
+6. After confirmation, tell the user "Click **Open in Outlook** to open the draft in your email client." instead of saying the email was sent.
+7. The "body" field must be plain text (no HTML). Keep it professional, warm, and concise.`;
 }
 
 const CONTEXT_TTL_MS = 10 * 60 * 1000;
