@@ -164,6 +164,34 @@ function parseEmailAction(content: string): { text: string; action: EmailAction 
   }
 }
 
+function parseOptions(content: string): { text: string; options: string[] | null } {
+  const startIdx = content.indexOf("[OPTIONS]");
+  if (startIdx === -1) return { text: content, options: null };
+
+  const endIdx = content.indexOf("[/OPTIONS]", startIdx);
+  if (endIdx === -1) {
+    return { text: content.slice(0, startIdx).trim(), options: null };
+  }
+
+  const optionsStr = content.slice(startIdx + "[OPTIONS]".length, endIdx).trim();
+  const textBefore = content.slice(0, startIdx).trim();
+  const options = optionsStr
+    .split("|")
+    .map((o) => o.trim())
+    .filter(Boolean);
+  return { text: textBefore, options: options.length > 0 ? options : null };
+}
+
+function parseAssistantContent(content: string): {
+  text: string;
+  action: EmailAction | null;
+  options: string[] | null;
+} {
+  const { text: t1, action } = parseEmailAction(content);
+  const { text: t2, options } = parseOptions(t1);
+  return { text: t2, action, options };
+}
+
 function makeWelcome(userName?: string): Message {
   const greeting = userName ? `Hi ${userName.split(" ")[0]}!` : "Hi!";
   return {
@@ -216,15 +244,15 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
     }
   }, [isOpen, messages]);
 
-  async function sendMessage(e?: FormEvent): Promise<void> {
+  async function sendMessage(e?: FormEvent, override?: string): Promise<void> {
     e?.preventDefault();
-    const text = input.trim();
+    const text = (override ?? input).trim();
     if (!text || isLoading) return;
 
     const userMsg: Message = { role: "user", content: text, id: newId() };
     const next = [...messages, userMsg];
     setMessages(next);
-    setInput("");
+    if (override === undefined) setInput("");
     setIsLoading(true);
     setError("");
 
@@ -350,10 +378,14 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
           </div>
 
           <div className="ai-fab-messages">
-            {messages.map((msg) => {
-              const { text, action } =
-                msg.role === "assistant" ? parseEmailAction(msg.content) : { text: msg.content, action: null };
+            {messages.map((msg, msgIdx) => {
+              const { text, action, options } =
+                msg.role === "assistant"
+                  ? parseAssistantContent(msg.content)
+                  : { text: msg.content, action: null, options: null };
               const showAction = action !== null && !dismissedEmailIds.has(msg.id);
+              const isLastMessage = msgIdx === messages.length - 1;
+              const showOptions = options !== null && isLastMessage && !isLoading;
 
               return (
                 <div key={msg.id} className={`ai-fab-msg ${msg.role === "user" ? "ai-fab-msg-user" : "ai-fab-msg-ai"}`}>
@@ -399,6 +431,20 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
                             Cancel
                           </button>
                         </div>
+                      </div>
+                    )}
+                    {showOptions && options && (
+                      <div className="ai-options-row">
+                        {options.map((opt, oIdx) => (
+                          <button
+                            key={oIdx}
+                            type="button"
+                            className="ai-option-btn"
+                            onClick={() => void sendMessage(undefined, opt)}
+                          >
+                            {opt}
+                          </button>
+                        ))}
                       </div>
                     )}
                   </div>

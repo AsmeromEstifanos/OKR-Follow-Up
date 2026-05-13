@@ -3383,6 +3383,39 @@ textarea {
   padding: 0.35rem 0.85rem;
 }
 
+.ai-options-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.1rem;
+}
+
+.ai-option-btn {
+  font-size: 0.78rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid #c9d2d5;
+  background: #fff;
+  color: #183038;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  line-height: 1.2;
+}
+
+.ai-option-btn:hover {
+  background: #183038;
+  color: #fff;
+  border-color: #183038;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(24, 48, 56, 0.18);
+}
+
+.ai-option-btn:active {
+  transform: translateY(0);
+}
+
 /* Typing dots */
 .ai-chat-typing {
   display: flex;
