@@ -401,9 +401,11 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
                     </div>
                   ) : (
                   <div className="ai-fab-bubble-wrap">
-                    <div className="ai-fab-bubble">
-                      <MarkdownContent text={text} />
-                    </div>
+                    {text.trim() && (
+                      <div className="ai-fab-bubble">
+                        <MarkdownContent text={text} />
+                      </div>
+                    )}
                     {showAction && (
                       <div className="ai-email-confirm-card">
                         <div className="ai-email-confirm-meta">
