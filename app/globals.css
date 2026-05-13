@@ -3276,6 +3276,48 @@ textarea {
   margin-bottom: 0.2rem;
 }
 
+.ai-md-table-wrap {
+  margin: 0.4rem 0;
+  overflow-x: auto;
+  border: 1px solid #d1d9dc;
+  border-radius: 8px;
+  background: #fff;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ai-md-table {
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  width: max-content;
+  min-width: 100%;
+}
+
+.ai-md-table th,
+.ai-md-table td {
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid #e2e8f0;
+  vertical-align: top;
+}
+
+.ai-md-table th {
+  background: #f3f6f7;
+  font-weight: 600;
+  color: #183038;
+  position: sticky;
+  top: 0;
+}
+
+.ai-md-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.ai-md-table tbody tr:nth-child(even) td {
+  background: #fafbfb;
+}
+
 .ai-fab-error {
   margin: 0.25rem 0;
   font-size: 0.78rem;

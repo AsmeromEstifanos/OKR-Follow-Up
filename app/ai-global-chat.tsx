@@ -51,6 +51,20 @@ function renderInline(text: string): React.ReactNode[] {
   });
 }
 
+function splitTableRow(line: string): string[] {
+  let trimmed = line.trim();
+  if (trimmed.startsWith("|")) trimmed = trimmed.slice(1);
+  if (trimmed.endsWith("|")) trimmed = trimmed.slice(0, -1);
+  return trimmed.split("|").map((cell) => cell.trim());
+}
+
+function isTableSeparator(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed.includes("|") || !trimmed.includes("-")) return false;
+  const cells = splitTableRow(trimmed);
+  return cells.length > 0 && cells.every((cell) => /^:?-{2,}:?$/.test(cell));
+}
+
 function MarkdownContent({ text }: { text: string }): JSX.Element {
   const lines = text.split("\n");
   const nodes: React.ReactNode[] = [];
@@ -71,6 +85,42 @@ function MarkdownContent({ text }: { text: string }): JSX.Element {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+
+    const isPotentialRow = line.trim().startsWith("|") && line.includes("|");
+    if (isPotentialRow && i + 1 < lines.length && isTableSeparator(lines[i + 1])) {
+      flushList();
+      const header = splitTableRow(line);
+      const bodyRows: string[][] = [];
+      let j = i + 2;
+      while (j < lines.length && lines[j].trim().startsWith("|") && lines[j].includes("|")) {
+        bodyRows.push(splitTableRow(lines[j]));
+        j++;
+      }
+      nodes.push(
+        <div key={`tbl-${i}`} className="ai-md-table-wrap">
+          <table className="ai-md-table">
+            <thead>
+              <tr>
+                {header.map((cell, idx) => (
+                  <th key={idx}>{renderInline(cell)}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {bodyRows.map((row, rIdx) => (
+                <tr key={rIdx}>
+                  {row.map((cell, cIdx) => (
+                    <td key={cIdx}>{renderInline(cell)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      i = j - 1;
+      continue;
+    }
 
     if (line.startsWith("#### ")) {
       flushList();
