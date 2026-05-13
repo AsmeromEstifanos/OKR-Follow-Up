@@ -51,6 +51,15 @@ jobs:
       - name: Build application
         run: npm run build
 
+      - name: Write server-side secrets to .env.deploy
+        env:
+          SECRET_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          : > .env.deploy
+          if [ -n "$SECRET_OPENAI_API_KEY" ]; then
+            printf 'OPENAI_API_KEY=%s\n' "$SECRET_OPENAI_API_KEY" >> .env.deploy
+          fi
+
       - name: Create deployment archive
         run: |
           tar -czf deploy.tgz \
@@ -61,7 +70,8 @@ jobs:
             app.js \
             next.config.mjs \
             package.json \
-            package-lock.json
+            package-lock.json \
+            .env.deploy
 
       - name: Upload archive to server
         uses: appleboy/scp-action@v0.1.7
@@ -81,7 +91,6 @@ jobs:
           key: ${{ secrets.CPANEL_SSH_KEY }}
           port: ${{ secrets.CPANEL_PORT || 22 }}
           script_stop: true
-          debug: true
           envs: APP_DIR,APP_PORT,RESTART_COMMAND
           script: |
             set -e
@@ -100,15 +109,19 @@ jobs:
             cp -R /tmp/okr-follow-up-deploy/extracted/. "$APP_DIR"
             cd "$APP_DIR"
 
-            # Inject server-side secrets into .env
-            touch .env
-            OPENAI_KEY='${{ secrets.OPENAI_API_KEY }}'
-            if [ -n "$OPENAI_KEY" ]; then
-              if grep -q "^OPENAI_API_KEY=" .env 2>/dev/null; then
-                sed -i "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=${OPENAI_KEY}|" .env
-              else
-                echo "OPENAI_API_KEY=${OPENAI_KEY}" >> .env
-              fi
+            # Merge bundled .env.deploy into persistent .env
+            if [ -f .env.deploy ]; then
+              touch .env
+              while IFS= read -r line || [ -n "$line" ]; do
+                case "$line" in ""|"#"*) continue;; esac
+                key="${line%%=*}"
+                if [ -z "$key" ]; then continue; fi
+                if grep -q "^${key}=" .env 2>/dev/null; then
+                  grep -v "^${key}=" .env > .env.tmp && mv .env.tmp .env
+                fi
+                echo "$line" >> .env
+              done < .env.deploy
+              rm -f .env.deploy
             fi
 
             if [ -n "$APP_PORT" ]; then
