@@ -242,6 +242,24 @@ export type UpdateMilestoneInput = Partial<
   Pick<Milestone, "title" | "weight" | "targetValue" | "currentValue" | "progressPct" | "sequence">
 >;
 
+export interface Comment {
+  commentKey: string;
+  entityType: "objective" | "kr";
+  entityKey: string;
+  authorEmail: string;
+  authorName: string;
+  body: string;
+  createdAt: string;
+}
+
+export type CreateCommentInput = {
+  entityType: "objective" | "kr";
+  entityKey: string;
+  authorEmail: string;
+  authorName: string;
+  body: string;
+};
+
 export type CreateVentureInput = {
   ventureKey?: string;
   name: string;

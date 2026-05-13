@@ -1,6 +1,8 @@
 import { getConfig, getObjectiveWithContext, listObjectives, listPeriods } from "@/lib/store";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import AiSummaryPanel from "@/app/ai-summary-panel";
+import CommentSection from "@/app/comment-section";
 import KeyResultEditControls from "./key-result-edit-controls";
 import ObjectiveEditControls from "./objective-edit-controls";
 
@@ -100,6 +102,8 @@ export default async function ObjectiveDetailPage({ params }: Props): Promise<JS
         </article>
       </section>
 
+      <AiSummaryPanel objectiveKey={objective.objectiveKey} objectiveTitle={objective.title} />
+
       <section className="section">
         <div className="section-header">
           <h2>Key Results</h2>
@@ -169,6 +173,10 @@ export default async function ObjectiveDetailPage({ params }: Props): Promise<JS
             ))}
           </div>
         ) : null}
+      </section>
+
+      <section className="section">
+        <CommentSection entityType="objective" entityKey={objective.objectiveKey} />
       </section>
     </div>
   );

@@ -169,7 +169,8 @@ export default function OkrBoard({
                         defaultStartDate={defaultStartDate}
                         defaultEndDate={defaultEndDate}
                         defaultCycle={defaultCycle}
-                        defaultOwner=""
+                        defaultOwner={section.positionOwner ?? ""}
+                        defaultOwnerEmail={section.positionOwnerEmail ?? ""}
                         positionOwnerEmail={section.positionOwnerEmail}
                         adminEmails={adminEmails}
                         objectiveTypeOptions={objectiveTypeOptions}
@@ -184,7 +185,7 @@ export default function OkrBoard({
                         <tr>
                           <th>Objective</th>
                           <th>Objective Intent</th>
-                          <th>Owner</th>
+                          <th className="chat-col-header">Chat</th>
                           <th>Due Date</th>
                           <th>Constraint / Guardrails</th>
                           <th>Objective Progress %</th>

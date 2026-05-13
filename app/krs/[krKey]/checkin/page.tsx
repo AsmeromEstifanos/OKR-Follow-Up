@@ -3,6 +3,7 @@
 import type { CheckIn, Confidence, KeyResult, KrStatus } from "@/lib/types";
 import { apiPath } from "@/lib/base-path";
 import useCurrentUserEmail from "@/app/use-current-user-email";
+import CommentSection from "@/app/comment-section";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -207,6 +208,12 @@ export default function CheckInPage(): JSX.Element {
           <p className="message">{message || "Loading..."}</p>
         )}
       </section>
+
+      {krKey && (
+        <section className="section">
+          <CommentSection entityType="kr" entityKey={krKey} />
+        </section>
+      )}
     </div>
   );
 }

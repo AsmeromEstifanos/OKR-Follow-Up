@@ -1,4 +1,4 @@
-import type { ActivityLogEntry, AuthLogEntry, CheckIn, FieldOptions, KeyResult, Milestone, Objective, Period, RagThresholds, Venture } from "@/lib/types";
+import type { ActivityLogEntry, AuthLogEntry, CheckIn, Comment, FieldOptions, KeyResult, Milestone, Objective, Period, RagThresholds, Venture } from "@/lib/types";
 import { updateOperationProgress, updateOperationProgressWithSteps } from "@/lib/operation-progress";
 
 const GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0";
@@ -126,9 +126,10 @@ type AtomicListName =
   | "config"
   | "roles"
   | "authLogs"
-  | "activityLogs";
+  | "activityLogs"
+  | "comments";
 
-type SnapshotListName = Exclude<AtomicListName, "roles" | "authLogs" | "activityLogs">;
+type SnapshotListName = Exclude<AtomicListName, "roles" | "authLogs" | "activityLogs" | "comments">;
 
 type AtomicCapabilities = {
   hasDepartmentOwnerColumn: boolean;
@@ -311,6 +312,19 @@ const LIST_DEFS: Record<AtomicListName, ListDefinition> = {
       { name: "EntityKey", type: "text", optional: true },
       { name: "EntityLabel", type: "text", optional: true },
       { name: "DetailsJson", type: "multilineText", optional: true }
+    ]
+  },
+  comments: {
+    suffix: "Comments",
+    keyField: "CommentKey",
+    columns: [
+      { name: "CommentKey", type: "text" },
+      { name: "EntityType", type: "text" },
+      { name: "EntityKey", type: "text" },
+      { name: "AuthorEmail", type: "text" },
+      { name: "AuthorName", type: "text" },
+      { name: "Body", type: "multilineText" },
+      { name: "CreatedAt", type: "text" }
     ]
   }
 };
@@ -2189,4 +2203,101 @@ export async function appendActivityLogEntry(input: {
     ...(entityLabel ? { entityLabel } : {}),
     ...(detailsJson ? { detailsJson } : {})
   };
+}
+
+export async function listComments(entityType: string, entityKey: string): Promise<Comment[]> {
+  const config = getStorageConfig();
+  if (!config.enabled) {
+    return [];
+  }
+
+  const { siteId, listIds } = await ensureAtomicTargets(config);
+  const escapedEntityType = escapeFilterString(entityType);
+  const escapedEntityKey = escapeFilterString(entityKey);
+  const filter = `fields/EntityType eq '${escapedEntityType}' and fields/EntityKey eq '${escapedEntityKey}'`;
+  let items: GraphListItem[];
+
+  try {
+    items = await listItems(config, siteId, listIds.comments, ["CommentKey", "EntityType", "EntityKey", "AuthorEmail", "AuthorName", "Body", "CreatedAt"], { filter });
+  } catch {
+    items = await listItems(config, siteId, listIds.comments, ["CommentKey", "EntityType", "EntityKey", "AuthorEmail", "AuthorName", "Body", "CreatedAt"]);
+    items = items.filter(
+      (item) =>
+        asString(item.fields?.EntityType).trim() === entityType &&
+        asString(item.fields?.EntityKey).trim() === entityKey
+    );
+  }
+
+  return items
+    .map((item) => {
+      const commentKey = asString(item.fields?.CommentKey).trim();
+      if (!commentKey) return null;
+      return {
+        commentKey,
+        entityType: asString(item.fields?.EntityType) as Comment["entityType"],
+        entityKey: asString(item.fields?.EntityKey),
+        authorEmail: asString(item.fields?.AuthorEmail),
+        authorName: asString(item.fields?.AuthorName),
+        body: asString(item.fields?.Body),
+        createdAt: asString(item.fields?.CreatedAt)
+      } as Comment;
+    })
+    .filter((c): c is Comment => Boolean(c))
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+export async function appendComment(input: {
+  entityType: string;
+  entityKey: string;
+  authorEmail: string;
+  authorName: string;
+  body: string;
+}): Promise<Comment | null> {
+  const config = getStorageConfig();
+  if (!config.enabled) {
+    return null;
+  }
+
+  const createdAt = new Date().toISOString();
+  const commentKey = `${input.entityType}::${input.entityKey}::${input.authorEmail}::${createdAt}`;
+  const { siteId, listIds } = await ensureAtomicTargets(config);
+
+  await createItem(config, siteId, listIds.comments, {
+    Title: input.body.slice(0, 255),
+    CommentKey: commentKey,
+    EntityType: input.entityType,
+    EntityKey: input.entityKey,
+    AuthorEmail: input.authorEmail.trim().toLowerCase(),
+    AuthorName: input.authorName.trim(),
+    Body: input.body,
+    CreatedAt: createdAt
+  });
+
+  return {
+    commentKey,
+    entityType: input.entityType as Comment["entityType"],
+    entityKey: input.entityKey,
+    authorEmail: input.authorEmail.trim().toLowerCase(),
+    authorName: input.authorName.trim(),
+    body: input.body,
+    createdAt
+  };
+}
+
+export async function removeComment(commentKey: string): Promise<boolean> {
+  const config = getStorageConfig();
+  if (!config.enabled) {
+    return false;
+  }
+
+  const { siteId, listIds } = await ensureAtomicTargets(config);
+  const items = await listItems(config, siteId, listIds.comments, ["CommentKey"]);
+  const match = items.find((item) => asString(item.fields?.CommentKey).trim() === commentKey);
+
+  if (!match) {
+    return false;
+  }
+
+  await deleteItem(config, siteId, listIds.comments, match.id);
+  return true;
 }

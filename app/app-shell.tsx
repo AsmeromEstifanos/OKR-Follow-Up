@@ -1,7 +1,9 @@
 "use client";
 
+import AiGlobalChat from "@/app/ai-global-chat";
 import AuthButtons from "@/app/auth-buttons";
 import AuthGate from "@/app/auth-gate";
+import NotificationBell from "@/app/notification-bell";
 import SharePointActivityLoader from "@/app/sharepoint-activity-loader";
 import useSharePointConnection from "@/app/use-sharepoint-connection";
 import useCurrentUserEmail from "@/app/use-current-user-email";
@@ -126,6 +128,12 @@ export default function AppShell({ children }: Props): JSX.Element {
     return getPrincipalName(activeAccount.username, claims?.preferred_username, claims?.email, claims?.name);
   }, [activeAccount]);
 
+  const displayName = useMemo(() => {
+    if (!activeAccount) return "";
+    const claims = activeAccount.idTokenClaims as { name?: unknown } | undefined;
+    return typeof claims?.name === "string" && claims.name.trim() ? claims.name.trim() : "";
+  }, [activeAccount]);
+
   const mainClassName = `ln-main ${isMobile ? "ln-main-mobile" : "ln-main-collapsed"}`;
   const sidebarClassName = `ln-sidebar ${isMobile ? "ln-sidebar-mobile" : "ln-sidebar-desktop"} ${
     isNavCollapsed ? "ln-sidebar-collapsed" : "ln-sidebar-expanded"
@@ -244,6 +252,9 @@ export default function AppShell({ children }: Props): JSX.Element {
               <span className="ln-brand-title">OKR Follow-Up</span>
             </div>
           ) : null}
+          {currentUserEmail ? (
+            <NotificationBell userEmail={currentUserEmail} isAdmin={isAdminUser} />
+          ) : null}
           {isMobile ? (
             <button
               type="button"
@@ -316,7 +327,9 @@ export default function AppShell({ children }: Props): JSX.Element {
               {principal ? <span className="ln-account-value">{principal}</span> : null}
             </div>
           ) : null}
-          <AuthButtons compact={isMobile} onAuthChanged={refreshConnection} />
+          <div className="ln-sidebar-auth-row">
+            <AuthButtons compact={isMobile} onAuthChanged={refreshConnection} />
+          </div>
           {!isNavCollapsed ? (
             <div
               className={`ln-sp-status ln-sp-status-${sharePointStatusClassName}`}
@@ -356,6 +369,7 @@ export default function AppShell({ children }: Props): JSX.Element {
       </main>
 
       <SharePointActivityLoader />
+      {isAuthenticated && <AiGlobalChat userEmail={currentUserEmail ?? undefined} userName={displayName || undefined} />}
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 
 const SHAREPOINT_ACTIVITY_EVENT = "okr-sharepoint-activity";
 const PROGRESS_POLL_INTERVAL_MS = 350;
+const MIN_OVERLAY_VISIBLE_MS = 250;
 
 type OperationProgress = {
   operationId: string;
@@ -57,8 +58,12 @@ function shouldTrackSharePointRequest(rawUrl: string): boolean {
 
     return (
       !normalizedPath.startsWith("/api/users/suggest") &&
-      !normalizedPath.startsWith("/api/codes/") &&
-      !normalizedPath.startsWith("/api/operation-progress/")
+      !normalizedPath.startsWith("/api/operation-progress/") &&
+      !normalizedPath.startsWith("/api/authz/me") &&
+      !normalizedPath.startsWith("/api/ai/") &&
+      !normalizedPath.startsWith("/api/dashboard/") &&
+      !normalizedPath.startsWith("/api/comments/") &&
+      !normalizedPath.startsWith("/api/notifications/")
     );
   }
 
@@ -72,8 +77,12 @@ function shouldTrackSharePointRequest(rawUrl: string): boolean {
 
       if (
         normalizedPath.startsWith("/api/users/suggest") ||
-        normalizedPath.startsWith("/api/codes/") ||
-        normalizedPath.startsWith("/api/operation-progress/")
+        normalizedPath.startsWith("/api/operation-progress/") ||
+        normalizedPath.startsWith("/api/authz/me") ||
+        normalizedPath.startsWith("/api/ai/") ||
+        normalizedPath.startsWith("/api/dashboard/") ||
+        normalizedPath.startsWith("/api/comments/") ||
+        normalizedPath.startsWith("/api/notifications/")
       ) {
         return false;
       }
@@ -260,6 +269,7 @@ function patchFetchOnce(): void {
     const fetchArgs =
       operationId === null ? args : withOperationHeader(input, init, operationId);
     let stopPolling = false;
+    const requestStartedAt = Date.now();
 
     if (!isTracked) {
       return nativeFetch(...fetchArgs);
@@ -298,6 +308,11 @@ function patchFetchOnce(): void {
     try {
       return await nativeFetch(...fetchArgs);
     } finally {
+      const elapsedMs = Date.now() - requestStartedAt;
+      if (elapsedMs < MIN_OVERLAY_VISIBLE_MS) {
+        await delay(MIN_OVERLAY_VISIBLE_MS - elapsedMs);
+      }
+
       stopPolling = true;
       if (operationId) {
         const finalSnapshot = await fetchOperationProgress(operationId);
@@ -350,7 +365,7 @@ export default function SharePointActivityLoader(): JSX.Element | null {
     };
   }, []);
 
-  const displayStage = activeOperation?.stage ?? activeBatch?.label ?? null;
+  const displayStage = activeOperation?.stage ?? activeBatch?.label ?? "Loading...";
   const displayCount =
     activeBatch && activeBatch.totalSteps > 1
       ? activeBatch
@@ -374,12 +389,12 @@ export default function SharePointActivityLoader(): JSX.Element | null {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={withBasePath("/loader-ring.svg")}
-          alt="Loading SharePoint data"
+          alt="Loading"
           width={72}
           height={72}
           className="sp-loader-image"
         />
-        {displayStage ? <p className="sp-loader-stage">{displayStage}</p> : null}
+        <p className="sp-loader-stage">{displayStage}</p>
         {displayCount ? (
           <p className="sp-loader-count">
             ({displayCount.currentStep}/{displayCount.totalSteps})

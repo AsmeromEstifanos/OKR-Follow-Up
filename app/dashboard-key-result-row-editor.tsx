@@ -1,5 +1,6 @@
 "use client";
 
+import ChatIconButton from "@/app/chat-icon-button";
 import OwnerInput from "@/app/owner-input";
 import useCurrentUserEmail from "@/app/use-current-user-email";
 import { apiPath } from "@/lib/base-path";
@@ -601,6 +602,20 @@ export default function DashboardKeyResultRowEditor({
             {milestones.length > 0 ? `Milestones (${milestones.length})` : "Add Milestone"}
           </button>
           {isEditing ? <input className="objective-row-input" value={code} onChange={(event) => setCode(event.target.value)} disabled={isSaving} /> : null}
+          {isEditing ? (
+            <OwnerInput
+              id={`kr-owner-inline-${keyResult.krKey}`}
+              value={owner}
+              onChange={setOwner}
+              onSelectUser={(user: OwnerSuggestion | null) => {
+                setOwnerEmail(user ? user.mail || user.principalName : "");
+              }}
+              disabled={isSaving}
+              showLabel={false}
+              inputClassName="objective-row-input"
+              placeholder="Owner"
+            />
+          ) : null}
           {canEdit && isEditing ? (
             <div className="objective-row-actions">
               <button className="btn" type="button" onClick={() => void saveEdit()} disabled={isSaving}>
@@ -616,23 +631,12 @@ export default function DashboardKeyResultRowEditor({
           ) : null}
           {error ? <p className="message danger objective-row-error">{error}</p> : null}
         </td>
-        <td>
-          {isEditing ? (
-            <OwnerInput
-              id={`kr-owner-inline-${keyResult.krKey}`}
-              value={owner}
-              onChange={setOwner}
-              onSelectUser={(user: OwnerSuggestion | null) => {
-                setOwnerEmail(user ? user.mail || user.principalName : "");
-              }}
-              disabled={isSaving}
-              showLabel={false}
-              inputClassName="objective-row-input"
-              placeholder="Owner"
-            />
-          ) : (
-            keyResult.owner || "-"
-          )}
+        <td className="chat-col-cell">
+          <ChatIconButton
+            entityType="kr"
+            entityKey={keyResult.krKey}
+            entityLabel={keyResult.title}
+          />
         </td>
         <td>
           {isEditing ? (

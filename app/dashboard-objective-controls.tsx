@@ -16,6 +16,7 @@ type Props = {
   defaultEndDate?: string;
   defaultCycle: string;
   defaultOwner: string;
+  defaultOwnerEmail?: string;
   positionOwnerEmail?: string;
   adminEmails: string[];
   objectiveTypeOptions: ObjectiveType[];
@@ -93,6 +94,7 @@ export default function DashboardObjectiveControls({
   defaultEndDate,
   defaultCycle,
   defaultOwner,
+  defaultOwnerEmail: defaultOwnerEmailProp = "",
   positionOwnerEmail,
   adminEmails,
   objectiveTypeOptions,
@@ -109,7 +111,7 @@ export default function DashboardObjectiveControls({
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [title, setTitle] = useState<string>("");
   const [owner, setOwner] = useState<string>(defaultOwner);
-  const [ownerEmail, setOwnerEmail] = useState<string>("");
+  const [ownerEmail, setOwnerEmail] = useState<string>(defaultOwnerEmailProp);
   const [objectiveCodePreview, setObjectiveCodePreview] = useState<string>("");
   const [objectiveType, setObjectiveType] = useState<ObjectiveType>(objectiveTypeOptions[0] ?? "Committed");
   const [status, setStatus] = useState<ObjectiveStatus>(objectiveStatusOptions[0] ?? "NotStarted");
@@ -143,7 +145,7 @@ export default function DashboardObjectiveControls({
     setError("");
     setTitle("");
     setOwner(defaultOwner);
-    setOwnerEmail("");
+    setOwnerEmail(defaultOwnerEmailProp);
     void loadObjectiveCodePreview();
     setObjectiveType(objectiveTypeOptions[0] ?? "Committed");
     setStatus(objectiveStatusOptions[0] ?? "NotStarted");
@@ -179,7 +181,7 @@ export default function DashboardObjectiveControls({
     setError("");
     setTitle("");
     setOwner(defaultOwner);
-    setOwnerEmail("");
+    setOwnerEmail(defaultOwnerEmailProp);
     setObjectiveCodePreview("");
     setObjectiveType(objectiveTypeOptions[0] ?? "Committed");
     setStatus(objectiveStatusOptions[0] ?? "NotStarted");

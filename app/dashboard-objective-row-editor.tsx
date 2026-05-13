@@ -1,5 +1,6 @@
 "use client";
 
+import ChatIconButton from "@/app/chat-icon-button";
 import DashboardKeyResultControls from "@/app/dashboard-key-result-controls";
 import DashboardKeyResultRowEditor from "@/app/dashboard-key-result-row-editor";
 import OwnerInput from "@/app/owner-input";
@@ -289,6 +290,20 @@ export default function DashboardObjectiveRowEditor({
           ) : null}
           {isEditing ? <input className="objective-row-input" value={code} onChange={(event) => setCode(event.target.value)} disabled={isSaving} /> : null}
           {isEditing ? (
+            <OwnerInput
+              id={`objective-owner-inline-${objective.objectiveKey}`}
+              value={owner}
+              onChange={setOwner}
+              onSelectUser={(user: OwnerSuggestion | null) => {
+                setOwnerEmail(user ? user.mail || user.principalName : "");
+              }}
+              disabled={isSaving}
+              showLabel={false}
+              inputClassName="objective-row-input"
+              placeholder="Owner (optional)"
+            />
+          ) : null}
+          {isEditing ? (
             <div className="objective-row-actions">
               <button className="btn" type="button" onClick={() => void saveEdit()} disabled={isSaving}>
                 Save
@@ -310,25 +325,15 @@ export default function DashboardObjectiveRowEditor({
             objective.description || "-"
           )}
         </td>
-        <td>
-          {isEditing ? (
-            <OwnerInput
-              id={`objective-owner-inline-${objective.objectiveKey}`}
-              value={owner}
-              onChange={setOwner}
-              onSelectUser={(user: OwnerSuggestion | null) => {
-                setOwnerEmail(user ? user.mail || user.principalName : "");
-              }}
-              disabled={isSaving}
-              showLabel={false}
-              inputClassName="objective-row-input"
-              placeholder="Owner (optional)"
-            />
-          ) : (
-            objective.owner || "-"
-          )}
+        <td className="chat-col-cell">
+          <ChatIconButton
+            entityType="objective"
+            entityKey={objective.objectiveKey}
+            entityLabel={objective.title}
+          />
         </td>
         <td>{formatDate(objective.endDate)}</td>
+
         <td>
           {isEditing ? (
             <input className="objective-row-input" value={constraintGuardrails} onChange={(event) => setConstraintGuardrails(event.target.value)} disabled={isSaving} />
@@ -357,6 +362,7 @@ export default function DashboardObjectiveRowEditor({
                   periodKey={objective.periodKey}
                   defaultDueDate={objective.endDate}
                   defaultOwner={objective.owner || ""}
+                  defaultOwnerEmail={resolveOwnerEmail(objective.owner, objective.ownerEmail)}
                   positionOwnerEmail={positionOwnerEmail}
                   adminEmails={adminEmails}
                   metricTypeOptions={metricTypeOptions}
@@ -367,7 +373,7 @@ export default function DashboardObjectiveRowEditor({
                   <thead>
                     <tr className="board-subheader-row">
                       <th>KR</th>
-                      <th>Owner</th>
+                      <th className="chat-col-header">Chat</th>
                       <th>Measurement Rule</th>
                       <th>Target</th>
                       <th>Current</th>

@@ -13,6 +13,7 @@ type Props = {
   periodKey: string;
   defaultDueDate: string;
   defaultOwner: string;
+  defaultOwnerEmail?: string;
   positionOwnerEmail?: string;
   adminEmails: string[];
   metricTypeOptions: MetricType[];
@@ -105,6 +106,7 @@ export default function DashboardKeyResultControls({
   periodKey,
   defaultDueDate,
   defaultOwner,
+  defaultOwnerEmail: defaultOwnerEmailProp = "",
   positionOwnerEmail,
   adminEmails,
   metricTypeOptions,
@@ -123,7 +125,7 @@ export default function DashboardKeyResultControls({
   const [krCodePreview, setKrCodePreview] = useState<string>("");
   const [title, setTitle] = useState<string>("");
   const [owner, setOwner] = useState<string>(sanitizedDefaultOwner);
-  const [ownerEmail, setOwnerEmail] = useState<string>("");
+  const [ownerEmail, setOwnerEmail] = useState<string>(defaultOwnerEmailProp);
   const [metricType, setMetricType] = useState<MetricType>(metricTypeOptions[0] ?? "Operational");
   const [measurementRule, setMeasurementRule] = useState<string>("");
   const [baselineValue, setBaselineValue] = useState<string>("0");
@@ -182,7 +184,7 @@ export default function DashboardKeyResultControls({
     setKrCodePreview("");
     setTitle("");
     setOwner(sanitizedDefaultOwner);
-    setOwnerEmail("");
+    setOwnerEmail(defaultOwnerEmailProp);
     setMetricType(metricTypeOptions[0] ?? "Operational");
     setMeasurementRule("");
     setBaselineValue("0");
