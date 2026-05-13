@@ -47,7 +47,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const periodMap = new Map(periods.map((p) => [p.periodKey, p]));
   const activePeriodKeys = new Set(periods.filter((p) => p.status === "Active").map((p) => p.periodKey));
 
-  const results: Record<string, SendRemindersResult | { skipped: true }> = {};
+  const results: Record<string, SendRemindersResult | { skipped: true } | { error: string }> = {};
+
+  async function safeRun<T>(label: string, fn: () => Promise<T>): Promise<T | { error: string }> {
+    try {
+      return await fn();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { error: `${label} failed: ${message}` };
+    }
+  }
 
   if (settings.preDeadline.enabled) {
     const grouped = new Map<string, KeyResult[]>();
@@ -62,7 +71,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       list.push(kr);
       grouped.set(email, list);
     }
-    results.preDeadline = await sendPreDeadlineReminders(grouped, settings.preDeadline.daysBefore);
+    results.preDeadline = await safeRun("preDeadline", () =>
+      sendPreDeadlineReminders(grouped, settings.preDeadline.daysBefore)
+    );
   } else {
     results.preDeadline = { skipped: true };
   }
@@ -80,7 +91,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       list.push(kr);
       grouped.set(email, list);
     }
-    results.overdueCheckIn = await sendMissingCheckInReminders(grouped);
+    results.overdueCheckIn = await safeRun("overdueCheckIn", () => sendMissingCheckInReminders(grouped));
   } else {
     results.overdueCheckIn = { skipped: true };
   }
@@ -98,7 +109,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       list.push(obj);
       grouped.set(email, list);
     }
-    results.atRiskAlert = await sendAtRiskAlerts(grouped);
+    results.atRiskAlert = await safeRun("atRiskAlert", () => sendAtRiskAlerts(grouped));
   } else {
     results.atRiskAlert = { skipped: true };
   }
@@ -121,7 +132,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       entry.krs.push(kr);
       grouped.set(email, entry);
     }
-    results.weeklyDigest = await sendWeeklyDigest(grouped);
+    results.weeklyDigest = await safeRun("weeklyDigest", () => sendWeeklyDigest(grouped));
   } else {
     results.weeklyDigest = { skipped: true };
   }
