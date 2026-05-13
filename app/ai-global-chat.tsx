@@ -312,10 +312,8 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
 
   function stripMarkdownForEmail(text: string): string {
     return text
-      .replace(/\*\*([^*\n]+)\*\*/g, "$1")
-      .replace(/__([^_\n]+)__/g, "$1")
-      .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, "$1$2")
-      .replace(/(^|[^_])_([^_\n]+)_(?!_)/g, "$1$2")
+      .replace(/\*\*/g, "")
+      .replace(/__/g, "")
       .replace(/`([^`\n]+)`/g, "$1")
       .replace(/^#{1,6}\s+/gm, "")
       .replace(/^\s*>\s?/gm, "");
