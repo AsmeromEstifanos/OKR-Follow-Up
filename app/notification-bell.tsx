@@ -440,7 +440,7 @@ export default function NotificationBell({ userEmail, isAdmin = false }: Props):
                               onChange={() => toggleRecipient(recipient.email)}
                             />
                             <span className="notif-confirm-recipient-name" title={recipient.email}>
-                              {recipient.name}
+                              {recipient.name || recipient.email}
                             </span>
                           </label>
                         </li>
