@@ -59,6 +59,7 @@ export default function NotificationBell({ userEmail, isAdmin = false }: Props):
   const [sendResult, setSendResult] = useState<string>("");
   const [reminderLog, setReminderLog] = useState<ReminderLogEntry[]>([]);
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [panelPos, setPanelPos] = useState<{ top: number; left: number } | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLButtonElement>(null);
@@ -130,13 +131,7 @@ export default function NotificationBell({ userEmail, isAdmin = false }: Props):
   }
 
   async function handleSendReminders(): Promise<void> {
-    const confirmed = window.confirm(
-      "Send reminder emails now? This dispatches the same aggregated reminders as the daily scheduler."
-    );
-    if (!confirmed) {
-      return;
-    }
-
+    setShowConfirm(false);
     setIsSending(true);
     setSendResult("");
 
@@ -217,7 +212,7 @@ export default function NotificationBell({ userEmail, isAdmin = false }: Props):
               <button
                 type="button"
                 className="notif-send-btn"
-                onClick={handleSendReminders}
+                onClick={() => setShowConfirm(true)}
                 disabled={isSending}
                 title="Send the same reminder emails the daily scheduler sends"
               >
@@ -322,6 +317,30 @@ export default function NotificationBell({ userEmail, isAdmin = false }: Props):
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {showConfirm && (
+        <div className="notif-confirm-overlay" role="dialog" aria-modal="true">
+          <div className="notif-confirm-card">
+            <div className="notif-confirm-title">Send reminder emails now?</div>
+            <div className="notif-confirm-actions">
+              <button
+                type="button"
+                className="notif-confirm-cancel"
+                onClick={() => setShowConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="notif-confirm-send"
+                onClick={() => void handleSendReminders()}
+              >
+                Send
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
