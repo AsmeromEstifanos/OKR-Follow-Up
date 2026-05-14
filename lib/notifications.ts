@@ -3,19 +3,24 @@ import type { KeyResult, Objective } from "@/lib/types";
 const GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0";
 
 function getStorageConfig(): { tenantId: string; clientId: string; clientSecret: string; fromEmail: string } | null {
-  const tenantId =
+  const tenantId = (
     process.env.AZURE_APP_TENANT_ID ??
     process.env.AZURE_TENANT_ID ??
     process.env.NEXT_PUBLIC_AAD_TENANT_ID ??
-    "";
-  const clientId =
+    ""
+  ).trim();
+  const clientId = (
     process.env.AZURE_APP_CLIENT_ID ??
     process.env.AZURE_CLIENT_ID ??
     process.env.NEXT_PUBLIC_AZURE_CLIENT_ID ??
-    "";
-  const clientSecret =
-    process.env.AZURE_APP_CLIENT_SECRET ?? process.env.AZURE_CLIENT_SECRET ?? "";
-  const fromEmail = process.env.NOTIFICATION_FROM_EMAIL ?? "";
+    ""
+  ).trim();
+  const clientSecret = (
+    process.env.AZURE_APP_CLIENT_SECRET ??
+    process.env.AZURE_CLIENT_SECRET ??
+    ""
+  ).trim();
+  const fromEmail = (process.env.NOTIFICATION_FROM_EMAIL ?? "").trim();
 
   if (!tenantId || !clientId || !clientSecret || !fromEmail) {
     return null;
@@ -42,7 +47,11 @@ async function acquireToken(config: { tenantId: string; clientId: string; client
 
   if (!response.ok) {
     const message = await response.text();
-    throw new Error(`Failed to acquire Graph token for notifications: ${response.status} ${message}`);
+    const clientIdHint = `${config.clientId.slice(0, 8)}…`;
+    const secretLen = config.clientSecret.length;
+    throw new Error(
+      `Failed to acquire Graph token (clientId ${clientIdHint}, secret length ${secretLen}): ${response.status} ${message}`
+    );
   }
 
   const json = (await response.json()) as { access_token: string };
