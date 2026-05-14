@@ -14,6 +14,17 @@ type NotificationItem =
   | { kind: "missing-checkin"; kr: KeyResult }
   | { kind: "at-risk"; objective: Objective };
 
+type SentItem = { recipient: string; subject: string };
+
+type ReminderLogEntry = {
+  occurredAt: string;
+  triggeredBy: string;
+  emailsSent: number;
+  errorCount: number;
+  recipients: number;
+  sentItems: SentItem[];
+};
+
 function BellIcon(): JSX.Element {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -30,11 +41,24 @@ function SendIcon(): JSX.Element {
   );
 }
 
+function formatTimestamp(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
+}
+
 export default function NotificationBell({ userEmail, isAdmin = false }: Props): JSX.Element {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [sendResult, setSendResult] = useState<string>("");
+  const [reminderLog, setReminderLog] = useState<ReminderLogEntry[]>([]);
+  const [expandedLog, setExpandedLog] = useState<string | null>(null);
   const [panelPos, setPanelPos] = useState<{ top: number; left: number } | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLButtonElement>(null);
@@ -57,6 +81,23 @@ export default function NotificationBell({ userEmail, isAdmin = false }: Props):
       // silently ignore
     }
   }, [userEmail]);
+
+  const loadReminderLog = useCallback(async (): Promise<void> => {
+    if (!userEmail || !isAdmin) return;
+
+    try {
+      const response = await fetch(apiPath("/api/notifications/log"), {
+        headers: { "x-user-email": userEmail },
+        cache: "no-store"
+      });
+      if (!response.ok) return;
+
+      const payload = (await response.json()) as { log?: ReminderLogEntry[] };
+      setReminderLog(Array.isArray(payload.log) ? payload.log : []);
+    } catch {
+      // silently ignore
+    }
+  }, [userEmail, isAdmin]);
 
   useEffect(() => {
     loadNotifications();
@@ -82,6 +123,7 @@ export default function NotificationBell({ userEmail, isAdmin = false }: Props):
     if (!isOpen && bellRef.current) {
       const rect = bellRef.current.getBoundingClientRect();
       setPanelPos({ top: rect.bottom + 8, left: rect.left });
+      void loadReminderLog();
     }
     setIsOpen((prev) => !prev);
     setSendResult("");
@@ -127,6 +169,8 @@ export default function NotificationBell({ userEmail, isAdmin = false }: Props):
         const base = `${sent} email${sent !== 1 ? "s" : ""} sent.`;
         setSendResult(errorCount > 0 ? `${base} ${errorCount} failed.` : base);
       }
+
+      void loadReminderLog();
     } catch {
       setSendResult("Failed to send reminders.");
     } finally {
@@ -168,7 +212,7 @@ export default function NotificationBell({ userEmail, isAdmin = false }: Props):
                 className="notif-send-btn"
                 onClick={handleSendReminders}
                 disabled={isSending}
-                title="Send email reminders to all users with overdue check-ins or at-risk objectives"
+                title="Send the same reminder emails the daily scheduler sends"
               >
                 <SendIcon />
                 {isSending ? "Sending…" : "Send Reminders"}
@@ -222,6 +266,56 @@ export default function NotificationBell({ userEmail, isAdmin = false }: Props):
                 );
               })}
             </ul>
+          )}
+
+          {isAdmin && (
+            <div className="notif-log-section">
+              <div className="notif-log-heading">Reminder email log</div>
+              {reminderLog.length === 0 ? (
+                <p className="notif-log-empty">No reminder emails sent yet.</p>
+              ) : (
+                <ul className="notif-log-list">
+                  {reminderLog.map((entry, index) => {
+                    const key = `${entry.occurredAt}-${index}`;
+                    const isExpanded = expandedLog === key;
+                    return (
+                      <li key={key} className="notif-log-item">
+                        <button
+                          type="button"
+                          className="notif-log-item-head"
+                          onClick={() => setExpandedLog(isExpanded ? null : key)}
+                        >
+                          <span className="notif-log-time">{formatTimestamp(entry.occurredAt)}</span>
+                          <span className="notif-log-summary">
+                            {entry.emailsSent} email{entry.emailsSent !== 1 ? "s" : ""} sent
+                            {entry.errorCount > 0 ? ` · ${entry.errorCount} failed` : ""}
+                          </span>
+                        </button>
+                        {isExpanded && (
+                          <div className="notif-log-detail">
+                            <div className="notif-log-meta">
+                              Triggered by {entry.triggeredBy === "scheduler" ? "scheduled job" : entry.triggeredBy}
+                            </div>
+                            {entry.sentItems.length === 0 ? (
+                              <div className="notif-log-meta">No recipient details recorded.</div>
+                            ) : (
+                              <ul className="notif-log-recipients">
+                                {entry.sentItems.map((item, i) => (
+                                  <li key={i}>
+                                    <span className="notif-log-recipient">{item.recipient}</span>
+                                    <span className="notif-log-subject">{item.subject}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
           )}
         </div>
       )}

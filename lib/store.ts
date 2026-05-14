@@ -39,6 +39,7 @@ import {
 } from "@/lib/dummy-store";
 import {
   appendActivityLogEntry,
+  listActivityLogEntries,
   appendAuthLogEntry,
   appendComment,
   listComments,
@@ -610,6 +611,18 @@ export async function getComments(entityType: string, entityKey: string): Promis
   }
 
   return listComments(entityType, entityKey);
+}
+
+export async function getActivityLogEntries(
+  entityType: string,
+  limit = 20
+): Promise<ActivityLogEntry[]> {
+  const status = getSharePointStorageStatus();
+  if (!status.enabled) {
+    return [];
+  }
+
+  return listActivityLogEntries(entityType, limit);
 }
 
 export async function createComment(input: CreateCommentInput): Promise<Comment | null> {

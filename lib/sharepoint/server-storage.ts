@@ -2205,6 +2205,56 @@ export async function appendActivityLogEntry(input: {
   };
 }
 
+export async function listActivityLogEntries(
+  entityType: string,
+  limit: number
+): Promise<ActivityLogEntry[]> {
+  const config = getStorageConfig();
+  if (!config.enabled) {
+    return [];
+  }
+
+  const { siteId, listIds } = await ensureAtomicTargets(config);
+  const columns = [
+    "ActivityLogKey",
+    "UserEmail",
+    "ActivityName",
+    "HttpMethod",
+    "RoutePath",
+    "OccurredAt",
+    "EntityType",
+    "EntityKey",
+    "EntityLabel",
+    "DetailsJson"
+  ];
+  const escapedEntityType = escapeFilterString(entityType);
+  const filter = `fields/EntityType eq '${escapedEntityType}'`;
+
+  let items: GraphListItem[];
+  try {
+    items = await listItems(config, siteId, listIds.activityLogs, columns, { filter });
+  } catch {
+    items = await listItems(config, siteId, listIds.activityLogs, columns);
+    items = items.filter((item) => asString(item.fields?.EntityType).trim() === entityType);
+  }
+
+  return items
+    .map((item) => ({
+      activityLogKey: asString(item.fields?.ActivityLogKey),
+      userEmail: asString(item.fields?.UserEmail),
+      activityName: asString(item.fields?.ActivityName),
+      httpMethod: asString(item.fields?.HttpMethod),
+      routePath: asString(item.fields?.RoutePath),
+      occurredAt: asString(item.fields?.OccurredAt),
+      entityType: asString(item.fields?.EntityType),
+      entityKey: asString(item.fields?.EntityKey),
+      entityLabel: asString(item.fields?.EntityLabel),
+      detailsJson: asString(item.fields?.DetailsJson)
+    }))
+    .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
+    .slice(0, Math.max(1, limit));
+}
+
 export async function listComments(entityType: string, entityKey: string): Promise<Comment[]> {
   const config = getStorageConfig();
   if (!config.enabled) {

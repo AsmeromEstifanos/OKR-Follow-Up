@@ -288,9 +288,9 @@ export default function AppShell({ children }: Props): JSX.Element {
           </Link>
           <Link
             href={boardHref}
-            className={`ln-nav-item ${!isDashboardRoute && !isConfigRoute ? "ln-nav-item-active" : ""} ${
-              isNavCollapsed ? "ln-nav-item-collapsed" : ""
-            }`}
+            className={`ln-nav-item ${
+              !isDashboardRoute && !isConfigRoute && !isNotifSettingsRoute ? "ln-nav-item-active" : ""
+            } ${isNavCollapsed ? "ln-nav-item-collapsed" : ""}`}
             onClick={() => {
               if (isMobile) {
                 setIsMobileMenuOpen(false);

@@ -2999,6 +2999,112 @@ textarea {
   font-size: 0.85rem;
 }
 
+.notif-log-section {
+  border-top: 2px solid var(--line);
+  background: #fbfcfb;
+}
+
+.notif-log-heading {
+  padding: 0.55rem 1rem 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.notif-log-empty {
+  margin: 0;
+  padding: 0 1rem 0.75rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.notif-log-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.notif-log-item {
+  border-bottom: 1px solid var(--line);
+}
+
+.notif-log-item:last-child {
+  border-bottom: none;
+}
+
+.notif-log-item-head {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  align-items: flex-start;
+  padding: 0.5rem 1rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.notif-log-item-head:hover {
+  background: #f4f8f6;
+}
+
+.notif-log-time {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.notif-log-summary {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.notif-log-detail {
+  padding: 0 1rem 0.6rem;
+}
+
+.notif-log-meta {
+  font-size: 0.73rem;
+  color: var(--muted);
+  margin-bottom: 0.3rem;
+}
+
+.notif-log-recipients {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.notif-log-recipients li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  padding: 0.3rem 0.5rem;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.notif-log-recipient {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.notif-log-subject {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
 /* ── Global AI Chat FAB ── */
 .ai-fab-wrap {
   position: fixed;

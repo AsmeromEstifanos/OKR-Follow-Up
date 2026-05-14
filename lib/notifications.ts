@@ -161,11 +161,17 @@ function buildAtRiskEmailHtml(ownerEmail: string, objectives: Objective[]): stri
 </div>`;
 }
 
+export type SentEmailRecord = {
+  recipient: string;
+  subject: string;
+};
+
 export type SendRemindersResult = {
   emailsSent: number;
   skipped: number;
   errors: string[];
   notConfigured?: boolean;
+  sentItems?: SentEmailRecord[];
 };
 
 export async function sendMissingCheckInReminders(
@@ -417,6 +423,7 @@ export async function sendAggregatedReminders(
   let emailsSent = 0;
   let skipped = 0;
   const errors: string[] = [];
+  const sentItems: SentEmailRecord[] = [];
 
   for (const [ownerEmail, reminder] of grouped) {
     const hasContent =
@@ -435,10 +442,11 @@ export async function sendAggregatedReminders(
       const { subject, html } = buildAggregatedEmail(ownerEmail, reminder);
       await sendGraphEmail(token, config.fromEmail, ownerEmail, subject, html);
       emailsSent++;
+      sentItems.push({ recipient: ownerEmail, subject });
     } catch (err) {
       errors.push(err instanceof Error ? err.message : String(err));
     }
   }
 
-  return { emailsSent, skipped, errors };
+  return { emailsSent, skipped, errors, sentItems };
 }
