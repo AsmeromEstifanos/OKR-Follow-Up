@@ -10,6 +10,21 @@ export type ReminderRunResult = {
   sendResult: SendRemindersResult | { error: string };
 };
 
+export type ReminderRecipientPreview = {
+  email: string;
+  name: string;
+  summary: string;
+  preDeadline: number;
+  overdueCheckIn: number;
+  atRisk: number;
+  digest: number;
+};
+
+export type ReminderPreviewResult = {
+  candidates: { preDeadline: number; overdueCheckIn: number; atRiskAlert: number; weeklyDigest: number };
+  recipients: ReminderRecipientPreview[];
+};
+
 function daysUntil(dueDate: string | null | undefined, now: Date): number | null {
   if (!dueDate) return null;
   const due = new Date(dueDate).getTime();
@@ -21,11 +36,14 @@ function lowerEmail(value: string | null | undefined): string {
   return (value ?? "").trim().toLowerCase();
 }
 
-// Computes who should receive which reminders (based on the saved settings) and
-// sends one aggregated email per owner. Shared by the daily cron endpoint and the
-// admin "Send Reminders" button so both behave identically.
-export async function runReminders(): Promise<ReminderRunResult> {
-  const now = new Date();
+type AggregatedBuild = {
+  aggregated: Map<string, AggregatedReminder>;
+  candidates: { preDeadline: number; overdueCheckIn: number; atRiskAlert: number; weeklyDigest: number };
+};
+
+// Builds the per-owner aggregated reminder map from live OKR data + saved
+// settings. Pure computation — does not send anything.
+async function buildAggregatedReminders(now: Date): Promise<AggregatedBuild> {
   const settings = await readNotificationSettings();
 
   const [periods, allObjectives, allKrs] = await Promise.all([
@@ -113,9 +131,73 @@ export async function runReminders(): Promise<ReminderRunResult> {
     }
   }
 
+  return { aggregated, candidates };
+}
+
+function summarizeReminder(reminder: AggregatedReminder): string {
+  const parts: string[] = [];
+  if (reminder.overdueCheckInKrs.length > 0) {
+    parts.push(`${reminder.overdueCheckInKrs.length} overdue check-in${reminder.overdueCheckInKrs.length === 1 ? "" : "s"}`);
+  }
+  if (reminder.preDeadlineKrs.length > 0) {
+    parts.push(`${reminder.preDeadlineKrs.length} upcoming deadline${reminder.preDeadlineKrs.length === 1 ? "" : "s"}`);
+  }
+  if (reminder.atRiskObjectives.length > 0) {
+    parts.push(`${reminder.atRiskObjectives.length} at-risk objective${reminder.atRiskObjectives.length === 1 ? "" : "s"}`);
+  }
+  if (reminder.digestObjectives.length > 0 || reminder.digestKrs.length > 0) {
+    parts.push("weekly digest");
+  }
+  return parts.join(", ") || "no items";
+}
+
+// Computes who would receive a reminder email and what each would contain,
+// without sending anything. Powers the recipient-selection step in the UI.
+export async function previewReminders(): Promise<ReminderPreviewResult> {
+  const now = new Date();
+  const { aggregated, candidates } = await buildAggregatedReminders(now);
+
+  const recipients: ReminderRecipientPreview[] = [];
+  for (const [email, reminder] of aggregated) {
+    const hasContent =
+      reminder.preDeadlineKrs.length > 0 ||
+      reminder.overdueCheckInKrs.length > 0 ||
+      reminder.atRiskObjectives.length > 0 ||
+      reminder.digestObjectives.length > 0 ||
+      reminder.digestKrs.length > 0;
+    if (!email || !email.includes("@") || !hasContent) continue;
+
+    recipients.push({
+      email,
+      name: reminder.ownerName || email,
+      summary: summarizeReminder(reminder),
+      preDeadline: reminder.preDeadlineKrs.length,
+      overdueCheckIn: reminder.overdueCheckInKrs.length,
+      atRisk: reminder.atRiskObjectives.length,
+      digest: reminder.digestObjectives.length + reminder.digestKrs.length
+    });
+  }
+
+  recipients.sort((a, b) => a.name.localeCompare(b.name));
+  return { candidates, recipients };
+}
+
+// Computes and sends one aggregated email per owner. When `recipientFilter` is
+// provided, only those email addresses are sent to. Shared by the daily cron
+// (no filter = everyone) and the admin "Send Reminders" button (with selection).
+export async function runReminders(recipientFilter?: string[]): Promise<ReminderRunResult> {
+  const now = new Date();
+  const { aggregated, candidates } = await buildAggregatedReminders(now);
+
+  let toSend = aggregated;
+  if (recipientFilter) {
+    const allowed = new Set(recipientFilter.map((email) => lowerEmail(email)));
+    toSend = new Map([...aggregated].filter(([email]) => allowed.has(email)));
+  }
+
   let sendResult: SendRemindersResult | { error: string };
   try {
-    sendResult = await sendAggregatedReminders(aggregated);
+    sendResult = await sendAggregatedReminders(toSend);
   } catch (err) {
     sendResult = { error: err instanceof Error ? err.message : String(err) };
   }
@@ -123,7 +205,7 @@ export async function runReminders(): Promise<ReminderRunResult> {
   return {
     ranAt: now.toISOString(),
     candidates,
-    recipients: aggregated.size,
+    recipients: toSend.size,
     sendResult
   };
 }

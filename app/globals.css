@@ -3261,8 +3261,110 @@ textarea {
   color: #fff;
 }
 
-.notif-confirm-send:hover {
+.notif-confirm-send:hover:not(:disabled) {
   background: var(--accent-strong);
+}
+
+.notif-confirm-send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.notif-confirm-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  padding: 0.5rem 0;
+}
+
+.notif-confirm-error {
+  margin: 0 0 1rem;
+  font-size: 0.82rem;
+  color: var(--danger);
+  background: #fff0ee;
+  border: 1px solid #f4b8b2;
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+}
+
+.notif-confirm-empty {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.notif-confirm-done {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
+.notif-confirm-selectall {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-bottom: 0.5rem;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.notif-confirm-recipients {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.notif-confirm-recipients li {
+  border-bottom: 1px solid var(--line);
+}
+
+.notif-confirm-recipients li:last-child {
+  border-bottom: none;
+}
+
+.notif-confirm-recipient {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem 0.7rem;
+  cursor: pointer;
+}
+
+.notif-confirm-recipient:hover {
+  background: #f4f8f6;
+}
+
+.notif-confirm-recipient input {
+  margin-top: 0.15rem;
+  flex-shrink: 0;
+}
+
+.notif-confirm-recipient-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.notif-confirm-recipient-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.notif-confirm-recipient-summary {
+  font-size: 0.74rem;
+  color: var(--muted);
 }
 
 /* ── Global AI Chat FAB ── */
