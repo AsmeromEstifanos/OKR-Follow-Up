@@ -46,7 +46,7 @@ type AggregatedBuild = {
 // settings. Pure computation — does not send anything.
 async function buildAggregatedReminders(now: Date): Promise<AggregatedBuild> {
   const settings = await readNotificationSettings();
-  const fromEmail = (settings.fromEmail || process.env.NOTIFICATION_FROM_EMAIL || "").trim();
+  const fromEmail = (process.env.NOTIFICATION_FROM_EMAIL || "").trim();
 
   const [periods, allObjectives, allKrs] = await Promise.all([
     listPeriods(),

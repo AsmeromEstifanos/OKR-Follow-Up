@@ -3821,15 +3821,6 @@ textarea {
   margin-top: 1rem;
 }
 
-.notif-settings-sender {
-  margin: 1rem 0;
-}
-
-.notif-settings-sender-field input {
-  min-width: 280px;
-  max-width: 100%;
-}
-
 .ai-options-row {
   display: flex;
   flex-wrap: wrap;

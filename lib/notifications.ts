@@ -262,7 +262,7 @@ function buildAggregatedEmail(
 }
 
 // Sends one aggregated reminder email per owner, from `fromEmail` (a mailbox in
-// the tenant configured on the notification settings page). Returns notConfigured
+// the tenant configured through NOTIFICATION_FROM_EMAIL). Returns notConfigured
 // when the Graph app credentials or sender mailbox are missing.
 export async function sendAggregatedReminders(
   grouped: Map<string, AggregatedReminder>,
