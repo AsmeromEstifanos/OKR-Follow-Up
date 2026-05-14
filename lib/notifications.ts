@@ -56,12 +56,18 @@ async function sendGraphEmail(
   subject: string,
   htmlBody: string
 ): Promise<void> {
+  // Temporary safety valve: when set, all reminder emails are redirected to a
+  // single address so testing doesn't spam real owners. Remove the env var to go live.
+  const testRecipient = (process.env.NOTIFICATION_TEST_RECIPIENT ?? "").trim();
+  const actualRecipient = testRecipient || toEmail;
+  const actualSubject = testRecipient ? `[TEST → ${toEmail}] ${subject}` : subject;
+
   const url = `${GRAPH_BASE_URL}/users/${encodeURIComponent(fromEmail)}/sendMail`;
   const payload = {
     message: {
-      subject,
+      subject: actualSubject,
       body: { contentType: "HTML", content: htmlBody },
-      toRecipients: [{ emailAddress: { address: toEmail } }]
+      toRecipients: [{ emailAddress: { address: actualRecipient } }]
     },
     saveToSentItems: false
   };
@@ -78,7 +84,7 @@ async function sendGraphEmail(
 
   if (!response.ok) {
     const message = await response.text();
-    throw new Error(`Failed to send email to ${toEmail}: ${response.status} ${message}`);
+    throw new Error(`Failed to send email to ${actualRecipient}: ${response.status} ${message}`);
   }
 }
 
