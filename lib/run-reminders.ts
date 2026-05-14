@@ -37,10 +37,11 @@ export async function runReminders(): Promise<ReminderRunResult> {
   const activePeriodKeys = new Set(periods.filter((p) => p.status === "Active").map((p) => p.periodKey));
 
   const aggregated = new Map<string, AggregatedReminder>();
-  const entryFor = (email: string): AggregatedReminder => {
+  const entryFor = (email: string, ownerName?: string | null): AggregatedReminder => {
     let entry = aggregated.get(email);
     if (!entry) {
       entry = {
+        ownerName: "",
         preDeadlineKrs: [],
         overdueCheckInKrs: [],
         atRiskObjectives: [],
@@ -48,6 +49,10 @@ export async function runReminders(): Promise<ReminderRunResult> {
         digestKrs: []
       };
       aggregated.set(email, entry);
+    }
+    const trimmedName = (ownerName ?? "").trim();
+    if (trimmedName && !entry.ownerName) {
+      entry.ownerName = trimmedName;
     }
     return entry;
   };
@@ -62,7 +67,7 @@ export async function runReminders(): Promise<ReminderRunResult> {
       if (days === null || days < 0 || days > settings.preDeadline.daysBefore) continue;
       const email = lowerEmail(kr.ownerEmail);
       if (!email) continue;
-      entryFor(email).preDeadlineKrs.push(kr);
+      entryFor(email, kr.owner).preDeadlineKrs.push(kr);
       candidates.preDeadline++;
     }
   }
@@ -73,7 +78,7 @@ export async function runReminders(): Promise<ReminderRunResult> {
       if (!period || !isMissingCheckin(kr.lastCheckinAt, period.status, now)) continue;
       const email = lowerEmail(kr.ownerEmail);
       if (!email) continue;
-      entryFor(email).overdueCheckInKrs.push(kr);
+      entryFor(email, kr.owner).overdueCheckInKrs.push(kr);
       candidates.overdueCheckIn++;
     }
   }
@@ -85,7 +90,7 @@ export async function runReminders(): Promise<ReminderRunResult> {
       if (obj.rag !== "Red" && obj.rag !== "Amber") continue;
       const email = lowerEmail(obj.ownerEmail);
       if (!email) continue;
-      entryFor(email).atRiskObjectives.push(obj);
+      entryFor(email, obj.owner).atRiskObjectives.push(obj);
       candidates.atRiskAlert++;
     }
   }
@@ -97,14 +102,14 @@ export async function runReminders(): Promise<ReminderRunResult> {
       if (!activePeriodKeys.has(obj.periodKey)) continue;
       const email = lowerEmail(obj.ownerEmail);
       if (!email) continue;
-      entryFor(email).digestObjectives.push(obj);
+      entryFor(email, obj.owner).digestObjectives.push(obj);
       candidates.weeklyDigest++;
     }
     for (const kr of allKrs) {
       if (!activePeriodKeys.has(kr.periodKey)) continue;
       const email = lowerEmail(kr.ownerEmail);
       if (!email) continue;
-      entryFor(email).digestKrs.push(kr);
+      entryFor(email, kr.owner).digestKrs.push(kr);
     }
   }
 

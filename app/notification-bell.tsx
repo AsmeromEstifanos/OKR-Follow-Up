@@ -130,6 +130,13 @@ export default function NotificationBell({ userEmail, isAdmin = false }: Props):
   }
 
   async function handleSendReminders(): Promise<void> {
+    const confirmed = window.confirm(
+      "Send reminder emails now? This dispatches the same aggregated reminders as the daily scheduler."
+    );
+    if (!confirmed) {
+      return;
+    }
+
     setIsSending(true);
     setSendResult("");
 
@@ -222,9 +229,7 @@ export default function NotificationBell({ userEmail, isAdmin = false }: Props):
 
           {sendResult && <p className="notif-send-result">{sendResult}</p>}
 
-          {count === 0 ? (
-            <p className="notif-empty">You are all caught up.</p>
-          ) : (
+          {count > 0 && (
             <ul className="notif-list">
               {notifications.map((item, index) => {
                 if (item.kind === "missing-checkin") {

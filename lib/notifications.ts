@@ -259,6 +259,7 @@ export async function sendAtRiskAlerts(
 }
 
 export type AggregatedReminder = {
+  ownerName: string;
   preDeadlineKrs: KeyResult[];
   overdueCheckInKrs: KeyResult[];
   atRiskObjectives: Objective[];
@@ -400,10 +401,12 @@ function buildAggregatedEmail(
       ? "here is everything in your OKRs that needs attention right now."
       : "here is a snapshot of your OKRs this week.";
 
+  const firstName = (reminder.ownerName.trim() || ownerEmail.split("@")[0]).split(/\s+/)[0];
+
   const html = `
 <div style="font-family:'Trebuchet MS',sans-serif;max-width:620px;margin:0 auto;padding:24px;background:#f7f6ef;border-radius:12px">
   <h1 style="color:#183038;font-size:1.3rem;margin-bottom:4px">OKR Follow-Up</h1>
-  <p style="color:#4f6770;margin-top:0">Hi ${ownerEmail.split("@")[0]}, ${intro}</p>
+  <p style="color:#4f6770;margin-top:0">Hi ${firstName}, ${intro}</p>
   ${sections}
   <p style="color:#4f6770;margin-top:20px;font-size:0.875rem">Open the OKR Follow-Up system to update progress, check in, or flag blockers.</p>
 </div>`;

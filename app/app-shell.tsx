@@ -249,13 +249,13 @@ export default function AppShell({ children }: Props): JSX.Element {
         }}
       >
         <div className="ln-sidebar-header">
+          {currentUserEmail ? (
+            <NotificationBell userEmail={currentUserEmail} isAdmin={isAdminUser} />
+          ) : null}
           {!isNavCollapsed ? (
             <div className="ln-brand-wrap">
               <span className="ln-brand-title">OKR Follow-Up</span>
             </div>
-          ) : null}
-          {currentUserEmail ? (
-            <NotificationBell userEmail={currentUserEmail} isAdmin={isAdminUser} />
           ) : null}
           {isMobile ? (
             <button

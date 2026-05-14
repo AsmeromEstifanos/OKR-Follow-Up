@@ -119,10 +119,14 @@ a {
 .ln-sidebar-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 0.5rem;
   padding: 1rem 0.9rem;
   border-bottom: 1px solid #36506d;
+}
+
+.ln-sidebar-header .ln-toggle-btn {
+  margin-left: auto;
 }
 
 .ln-brand-wrap {
