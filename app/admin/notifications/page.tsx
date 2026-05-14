@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 const DAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 const FALLBACK: NotificationSettings = {
+  fromEmail: "",
   preDeadline: { enabled: true, daysBefore: 3, progressThreshold: 80 },
   overdueCheckIn: { enabled: true },
   weeklyDigest: { enabled: false, dayOfWeek: 1 },
@@ -95,6 +96,26 @@ export default function NotificationSettingsPage(): JSX.Element {
 
       {error ? <p className="message danger">{error}</p> : null}
       {message ? <p className="message success">{message}</p> : null}
+
+      <section className="config-option-card notif-settings-sender">
+        <h3 className="config-option-title">Sender email</h3>
+        <p className="meta">
+          The mailbox reminder emails are sent from. Must be a real mailbox in your Microsoft 365
+          tenant that the app has permission to send as.
+        </p>
+        <div className="notif-settings-fields">
+          <label className="notif-settings-sender-field">
+            From address
+            <input
+              type="email"
+              placeholder="okr-noreply@your-domain.com"
+              value={settings.fromEmail}
+              onChange={(e) => setSettings((s) => ({ ...s, fromEmail: e.target.value }))}
+              disabled={isSaving}
+            />
+          </label>
+        </div>
+      </section>
 
       <div className="notif-settings-grid">
         <section className="config-option-card">

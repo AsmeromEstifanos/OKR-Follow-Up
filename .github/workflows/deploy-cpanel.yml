@@ -57,7 +57,6 @@ jobs:
           SECRET_SCHEDULER_SECRET: ${{ secrets.SCHEDULER_SECRET }}
           SECRET_AZURE_APP_CLIENT_SECRET: ${{ secrets.AZURE_APP_CLIENT_SECRET }}
           SECRET_NOTIFICATION_FROM_EMAIL: ${{ secrets.NOTIFICATION_FROM_EMAIL }}
-          SECRET_NOTIFICATION_TEST_RECIPIENT: ${{ secrets.NOTIFICATION_TEST_RECIPIENT }}
         run: |
           : > .env.deploy
           if [ -n "$SECRET_OPENAI_API_KEY" ]; then
@@ -71,9 +70,6 @@ jobs:
           fi
           if [ -n "$SECRET_NOTIFICATION_FROM_EMAIL" ]; then
             printf 'NOTIFICATION_FROM_EMAIL=%s\n' "$SECRET_NOTIFICATION_FROM_EMAIL" >> .env.deploy
-          fi
-          if [ -n "$SECRET_NOTIFICATION_TEST_RECIPIENT" ]; then
-            printf 'NOTIFICATION_TEST_RECIPIENT=%s\n' "$SECRET_NOTIFICATION_TEST_RECIPIENT" >> .env.deploy
           fi
 
       - name: Create deployment archive

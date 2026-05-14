@@ -2,6 +2,7 @@ import { promises as fs } from "fs";
 import path from "path";
 
 export type NotificationSettings = {
+  fromEmail: string;
   preDeadline: {
     enabled: boolean;
     daysBefore: number;
@@ -20,6 +21,7 @@ export type NotificationSettings = {
 };
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
+  fromEmail: "",
   preDeadline: {
     enabled: true,
     daysBefore: 3,
@@ -51,6 +53,7 @@ function clampNumber(value: unknown, min: number, max: number, fallback: number)
 function normalize(input: unknown): NotificationSettings {
   const raw = (input ?? {}) as Partial<NotificationSettings>;
   return {
+    fromEmail: typeof raw.fromEmail === "string" ? raw.fromEmail.trim() : DEFAULT_NOTIFICATION_SETTINGS.fromEmail,
     preDeadline: {
       enabled: Boolean(raw.preDeadline?.enabled ?? DEFAULT_NOTIFICATION_SETTINGS.preDeadline.enabled),
       daysBefore: clampNumber(raw.preDeadline?.daysBefore, 1, 30, DEFAULT_NOTIFICATION_SETTINGS.preDeadline.daysBefore),

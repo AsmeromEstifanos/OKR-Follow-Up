@@ -29,7 +29,6 @@ type ReminderLogEntry = {
 type ReminderRecipient = {
   email: string;
   name: string;
-  summary: string;
 };
 
 type ConfirmStage = "idle" | "loading" | "select" | "sending" | "done";
@@ -440,9 +439,8 @@ export default function NotificationBell({ userEmail, isAdmin = false }: Props):
                               checked={selectedEmails.has(recipient.email)}
                               onChange={() => toggleRecipient(recipient.email)}
                             />
-                            <span className="notif-confirm-recipient-text">
-                              <span className="notif-confirm-recipient-name">{recipient.name}</span>
-                              <span className="notif-confirm-recipient-summary">{recipient.summary}</span>
+                            <span className="notif-confirm-recipient-name" title={recipient.email}>
+                              {recipient.name}
                             </span>
                           </label>
                         </li>

@@ -3334,9 +3334,9 @@ textarea {
 
 .notif-confirm-recipient {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem 0.7rem;
+  padding: 0.4rem 0.7rem;
   cursor: pointer;
 }
 
@@ -3345,26 +3345,16 @@ textarea {
 }
 
 .notif-confirm-recipient input {
-  margin-top: 0.15rem;
   flex-shrink: 0;
-}
-
-.notif-confirm-recipient-text {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  min-width: 0;
 }
 
 .notif-confirm-recipient-name {
   font-size: 0.82rem;
   font-weight: 600;
   color: var(--ink);
-}
-
-.notif-confirm-recipient-summary {
-  font-size: 0.74rem;
-  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ── Global AI Chat FAB ── */
@@ -3818,6 +3808,15 @@ textarea {
 
 .notif-settings-save-row {
   margin-top: 1rem;
+}
+
+.notif-settings-sender {
+  margin: 1rem 0;
+}
+
+.notif-settings-sender-field input {
+  min-width: 280px;
+  max-width: 100%;
 }
 
 .ai-options-row {

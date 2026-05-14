@@ -39,12 +39,14 @@ function lowerEmail(value: string | null | undefined): string {
 type AggregatedBuild = {
   aggregated: Map<string, AggregatedReminder>;
   candidates: { preDeadline: number; overdueCheckIn: number; atRiskAlert: number; weeklyDigest: number };
+  fromEmail: string;
 };
 
 // Builds the per-owner aggregated reminder map from live OKR data + saved
 // settings. Pure computation — does not send anything.
 async function buildAggregatedReminders(now: Date): Promise<AggregatedBuild> {
   const settings = await readNotificationSettings();
+  const fromEmail = (settings.fromEmail || process.env.NOTIFICATION_FROM_EMAIL || "").trim();
 
   const [periods, allObjectives, allKrs] = await Promise.all([
     listPeriods(),
@@ -131,7 +133,7 @@ async function buildAggregatedReminders(now: Date): Promise<AggregatedBuild> {
     }
   }
 
-  return { aggregated, candidates };
+  return { aggregated, candidates, fromEmail };
 }
 
 function summarizeReminder(reminder: AggregatedReminder): string {
@@ -187,7 +189,7 @@ export async function previewReminders(): Promise<ReminderPreviewResult> {
 // (no filter = everyone) and the admin "Send Reminders" button (with selection).
 export async function runReminders(recipientFilter?: string[]): Promise<ReminderRunResult> {
   const now = new Date();
-  const { aggregated, candidates } = await buildAggregatedReminders(now);
+  const { aggregated, candidates, fromEmail } = await buildAggregatedReminders(now);
 
   let toSend = aggregated;
   if (recipientFilter) {
@@ -197,7 +199,7 @@ export async function runReminders(recipientFilter?: string[]): Promise<Reminder
 
   let sendResult: SendRemindersResult | { error: string };
   try {
-    sendResult = await sendAggregatedReminders(toSend);
+    sendResult = await sendAggregatedReminders(toSend, fromEmail);
   } catch (err) {
     sendResult = { error: err instanceof Error ? err.message : String(err) };
   }
