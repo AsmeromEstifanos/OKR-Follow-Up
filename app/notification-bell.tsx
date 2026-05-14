@@ -104,15 +104,28 @@ export default function NotificationBell({ userEmail, isAdmin = false }: Props):
       }
 
       const result = (await response.json()) as {
-        missingCheckIns: { emailsSent: number; notConfigured?: boolean };
-        atRiskAlerts: { emailsSent: number };
+        recipients?: number;
+        sendResult?: {
+          emailsSent?: number;
+          skipped?: number;
+          errors?: string[];
+          notConfigured?: boolean;
+        };
+        error?: string;
       };
 
-      if (result.missingCheckIns.notConfigured) {
+      const send = result.sendResult;
+      if (result.error) {
+        setSendResult(result.error);
+      } else if (!send || "error" in send) {
+        setSendResult("Reminder run failed.");
+      } else if (send.notConfigured) {
         setSendResult("Email not configured — set NOTIFICATION_FROM_EMAIL in environment.");
       } else {
-        const total = result.missingCheckIns.emailsSent + result.atRiskAlerts.emailsSent;
-        setSendResult(`${total} email${total !== 1 ? "s" : ""} sent.`);
+        const sent = send.emailsSent ?? 0;
+        const errorCount = send.errors?.length ?? 0;
+        const base = `${sent} email${sent !== 1 ? "s" : ""} sent.`;
+        setSendResult(errorCount > 0 ? `${base} ${errorCount} failed.` : base);
       }
     } catch {
       setSendResult("Failed to send reminders.");

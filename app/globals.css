@@ -242,6 +242,7 @@ a {
 .shell-auth-wrap {
   display: grid;
   gap: 0.32rem;
+  flex: 1;
 }
 
 .shell-auth-btn {
