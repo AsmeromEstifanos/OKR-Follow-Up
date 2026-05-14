@@ -3223,6 +3223,10 @@ textarea {
   color: var(--ink);
 }
 
+.notif-confirm-card-preview {
+  width: min(760px, 94vw);
+}
+
 .notif-confirm-title {
   font-size: 0.95rem;
   font-weight: 700;
@@ -3237,6 +3241,7 @@ textarea {
 }
 
 .notif-confirm-cancel,
+.notif-confirm-preview-btn,
 .notif-confirm-send {
   border-radius: 8px;
   padding: 0.45rem 1rem;
@@ -3254,6 +3259,21 @@ textarea {
 
 .notif-confirm-cancel:hover {
   background: #f4f8f6;
+}
+
+.notif-confirm-preview-btn {
+  border: 1px solid #a7cfc1;
+  background: #e8f6f0;
+  color: #0f5a4d;
+}
+
+.notif-confirm-preview-btn:hover:not(:disabled) {
+  background: #d8efe6;
+}
+
+.notif-confirm-preview-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .notif-confirm-send {
@@ -3366,6 +3386,73 @@ textarea {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.notif-confirm-recipient-summary {
+  flex: 0 0 auto;
+  max-width: 42%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.notif-email-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.notif-email-preview-toolbar label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.notif-email-preview-toolbar select {
+  width: 100%;
+  min-width: 0;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: #fff;
+}
+
+.notif-email-preview-subject {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfb;
+}
+
+.notif-email-preview-subject span {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.notif-email-preview-subject strong {
+  font-size: 0.86rem;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.notif-email-preview-frame {
+  width: 100%;
+  height: min(420px, 52vh);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
 }
 
 /* ── Global AI Chat FAB ── */

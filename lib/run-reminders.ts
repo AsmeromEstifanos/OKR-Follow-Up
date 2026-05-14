@@ -1,5 +1,10 @@
 import { readNotificationSettings } from "@/lib/notification-settings";
-import { sendAggregatedReminders, type AggregatedReminder, type SendRemindersResult } from "@/lib/notifications";
+import {
+  buildAggregatedEmail,
+  sendAggregatedReminders,
+  type AggregatedReminder,
+  type SendRemindersResult
+} from "@/lib/notifications";
 import { isMissingCheckin } from "@/lib/okr-rules";
 import { listKeyResults, listObjectives, listPeriods, logUserActivity } from "@/lib/store";
 
@@ -14,6 +19,8 @@ export type ReminderRecipientPreview = {
   email: string;
   name: string;
   summary: string;
+  subject: string;
+  html: string;
   preDeadline: number;
   overdueCheckIn: number;
   atRisk: number;
@@ -173,6 +180,7 @@ export async function previewReminders(): Promise<ReminderPreviewResult> {
       email,
       name: reminder.ownerName || email,
       summary: summarizeReminder(reminder),
+      ...buildAggregatedEmail(email, reminder),
       preDeadline: reminder.preDeadlineKrs.length,
       overdueCheckIn: reminder.overdueCheckInKrs.length,
       atRisk: reminder.atRiskObjectives.length,

@@ -220,7 +220,7 @@ function digestSection(objectives: Objective[], krs: KeyResult[]): string {
   return `<h2 ${SECTION_HEADING}>Weekly snapshot</h2>${objTable}${krTable}`;
 }
 
-function buildAggregatedEmail(
+export function buildAggregatedEmail(
   ownerEmail: string,
   reminder: AggregatedReminder
 ): { subject: string; html: string } {
