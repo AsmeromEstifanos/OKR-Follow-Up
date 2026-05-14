@@ -252,99 +252,161 @@ export async function sendAtRiskAlerts(
   return { emailsSent, skipped, errors };
 }
 
-function buildPreDeadlineEmailHtml(ownerEmail: string, krs: KeyResult[], daysBefore: number): string {
+export type AggregatedReminder = {
+  preDeadlineKrs: KeyResult[];
+  overdueCheckInKrs: KeyResult[];
+  atRiskObjectives: Objective[];
+  digestObjectives: Objective[];
+  digestKrs: KeyResult[];
+};
+
+const SECTION_HEADING = 'style="color:#183038;font-size:1.05rem;margin:22px 0 8px"';
+const TABLE_OPEN =
+  '<table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px #0002">';
+const CELL = 'style="padding:8px 12px"';
+
+function thRow(color: string, headers: string[]): string {
+  const cells = headers
+    .map((h) => `<th style="padding:8px 12px;text-align:left">${h}</th>`)
+    .join("");
+  return `<thead><tr style="background:${color};color:#fff">${cells}</tr></thead>`;
+}
+
+function overdueSection(krs: KeyResult[]): string {
+  if (krs.length === 0) return "";
+  const rows = krs
+    .map(
+      (kr) =>
+        `<tr style="border-bottom:1px solid #e2e8f0">
+          <td ${CELL}>${kr.title}</td>
+          <td ${CELL}>${kr.krCode ?? kr.krKey}</td>
+          <td ${CELL}>${kr.progressPct}%</td>
+          <td ${CELL}>${kr.dueDate ?? "—"}</td>
+        </tr>`
+    )
+    .join("");
+  return `<h2 ${SECTION_HEADING}>Overdue check-ins (${krs.length})</h2>
+  <p style="color:#4f6770;margin:0 0 8px;font-size:0.875rem">These key results are missing a check-in:</p>
+  ${TABLE_OPEN}${thRow("#0f766e", ["Key Result", "Code", "Progress", "Due Date"])}<tbody>${rows}</tbody></table>`;
+}
+
+function preDeadlineSection(krs: KeyResult[]): string {
+  if (krs.length === 0) return "";
   const rows = krs
     .map((kr) => {
       const daysLeft = kr.dueDate
         ? Math.max(0, Math.ceil((new Date(kr.dueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
         : "—";
       return `<tr style="border-bottom:1px solid #e2e8f0">
-        <td style="padding:8px 12px">${kr.title}</td>
-        <td style="padding:8px 12px">${kr.krCode ?? kr.krKey}</td>
-        <td style="padding:8px 12px">${kr.progressPct}%</td>
-        <td style="padding:8px 12px">${kr.dueDate ?? "—"}</td>
+        <td ${CELL}>${kr.title}</td>
+        <td ${CELL}>${kr.krCode ?? kr.krKey}</td>
+        <td ${CELL}>${kr.progressPct}%</td>
+        <td ${CELL}>${kr.dueDate ?? "—"}</td>
         <td style="padding:8px 12px;font-weight:700">${daysLeft}</td>
       </tr>`;
     })
     .join("");
-
-  return `
-<div style="font-family:'Trebuchet MS',sans-serif;max-width:600px;margin:0 auto;padding:24px;background:#f7f6ef;border-radius:12px">
-  <h1 style="color:#183038;font-size:1.3rem;margin-bottom:4px">Upcoming OKR Deadlines</h1>
-  <p style="color:#4f6770;margin-top:0">Hi ${ownerEmail.split("@")[0]}, the following key results are due within ${daysBefore} day${daysBefore === 1 ? "" : "s"} and need attention:</p>
-  <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px #0002">
-    <thead>
-      <tr style="background:#a55316;color:#fff">
-        <th style="padding:8px 12px;text-align:left">Key Result</th>
-        <th style="padding:8px 12px;text-align:left">Code</th>
-        <th style="padding:8px 12px;text-align:left">Progress</th>
-        <th style="padding:8px 12px;text-align:left">Due Date</th>
-        <th style="padding:8px 12px;text-align:left">Days Left</th>
-      </tr>
-    </thead>
-    <tbody>${rows}</tbody>
-  </table>
-  <p style="color:#4f6770;margin-top:16px;font-size:0.875rem">Please update progress or flag blockers in the OKR Follow-Up system.</p>
-</div>`;
+  return `<h2 ${SECTION_HEADING}>Upcoming deadlines (${krs.length})</h2>
+  <p style="color:#4f6770;margin:0 0 8px;font-size:0.875rem">These key results are due soon and below target:</p>
+  ${TABLE_OPEN}${thRow("#a55316", ["Key Result", "Code", "Progress", "Due Date", "Days Left"])}<tbody>${rows}</tbody></table>`;
 }
 
-function buildWeeklyDigestEmailHtml(
-  ownerEmail: string,
-  ownedObjectives: Objective[],
-  ownedKrs: KeyResult[]
-): string {
-  const objRows = ownedObjectives
+function atRiskSection(objectives: Objective[]): string {
+  if (objectives.length === 0) return "";
+  const rows = objectives
     .map(
       (obj) =>
         `<tr style="border-bottom:1px solid #e2e8f0">
-          <td style="padding:8px 12px">${obj.title}</td>
-          <td style="padding:8px 12px">${obj.objectiveCode ?? obj.objectiveKey}</td>
-          <td style="padding:8px 12px">${obj.progressPct}%</td>
+          <td ${CELL}>${obj.title}</td>
+          <td ${CELL}>${obj.objectiveCode ?? obj.objectiveKey}</td>
+          <td style="padding:8px 12px;color:#a55316;font-weight:700">${obj.rag}</td>
+          <td ${CELL}>${obj.progressPct}%</td>
+        </tr>`
+    )
+    .join("");
+  return `<h2 ${SECTION_HEADING}>At-risk objectives (${objectives.length})</h2>
+  <p style="color:#4f6770;margin:0 0 8px;font-size:0.875rem">These objectives are rated Red or Amber:</p>
+  ${TABLE_OPEN}${thRow("#9a2d25", ["Objective", "Code", "RAG", "Progress"])}<tbody>${rows}</tbody></table>`;
+}
+
+function digestSection(objectives: Objective[], krs: KeyResult[]): string {
+  if (objectives.length === 0 && krs.length === 0) return "";
+  const objRows = objectives
+    .map(
+      (obj) =>
+        `<tr style="border-bottom:1px solid #e2e8f0">
+          <td ${CELL}>${obj.title}</td>
+          <td ${CELL}>${obj.objectiveCode ?? obj.objectiveKey}</td>
+          <td ${CELL}>${obj.progressPct}%</td>
           <td style="padding:8px 12px;font-weight:700;color:${obj.rag === "Red" ? "#9a2d25" : obj.rag === "Amber" ? "#a55316" : "#1e6a3d"}">${obj.rag}</td>
         </tr>`
     )
     .join("");
-
-  const krRows = ownedKrs
+  const krRows = krs
     .map(
       (kr) =>
         `<tr style="border-bottom:1px solid #e2e8f0">
-          <td style="padding:8px 12px">${kr.title}</td>
-          <td style="padding:8px 12px">${kr.krCode ?? kr.krKey}</td>
-          <td style="padding:8px 12px">${kr.progressPct}%</td>
-          <td style="padding:8px 12px">${kr.dueDate ?? "—"}</td>
+          <td ${CELL}>${kr.title}</td>
+          <td ${CELL}>${kr.krCode ?? kr.krKey}</td>
+          <td ${CELL}>${kr.progressPct}%</td>
+          <td ${CELL}>${kr.dueDate ?? "—"}</td>
         </tr>`
     )
     .join("");
+  const objTable =
+    objectives.length > 0
+      ? `<h3 style="color:#183038;font-size:0.95rem;margin:14px 0 6px">Your objectives (${objectives.length})</h3>
+         ${TABLE_OPEN}${thRow("#0f766e", ["Title", "Code", "Progress", "RAG"])}<tbody>${objRows}</tbody></table>`
+      : "";
+  const krTable =
+    krs.length > 0
+      ? `<h3 style="color:#183038;font-size:0.95rem;margin:14px 0 6px">Your key results (${krs.length})</h3>
+         ${TABLE_OPEN}${thRow("#0f766e", ["Title", "Code", "Progress", "Due"])}<tbody>${krRows}</tbody></table>`
+      : "";
+  return `<h2 ${SECTION_HEADING}>Weekly snapshot</h2>${objTable}${krTable}`;
+}
 
-  return `
-<div style="font-family:'Trebuchet MS',sans-serif;max-width:600px;margin:0 auto;padding:24px;background:#f7f6ef;border-radius:12px">
-  <h1 style="color:#183038;font-size:1.3rem;margin-bottom:4px">Your Weekly OKR Digest</h1>
-  <p style="color:#4f6770;margin-top:0">Hi ${ownerEmail.split("@")[0]}, here is a snapshot of your OKRs this week.</p>
+function buildAggregatedEmail(
+  ownerEmail: string,
+  reminder: AggregatedReminder
+): { subject: string; html: string } {
+  const sections = [
+    overdueSection(reminder.overdueCheckInKrs),
+    preDeadlineSection(reminder.preDeadlineKrs),
+    atRiskSection(reminder.atRiskObjectives),
+    digestSection(reminder.digestObjectives, reminder.digestKrs)
+  ]
+    .filter(Boolean)
+    .join("");
 
-  ${ownedObjectives.length > 0
-    ? `<h2 style="color:#183038;font-size:1.05rem;margin:20px 0 8px">Objectives (${ownedObjectives.length})</h2>
-       <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px #0002">
-         <thead><tr style="background:#0f766e;color:#fff"><th style="padding:8px 12px;text-align:left">Title</th><th style="padding:8px 12px;text-align:left">Code</th><th style="padding:8px 12px;text-align:left">Progress</th><th style="padding:8px 12px;text-align:left">RAG</th></tr></thead>
-         <tbody>${objRows}</tbody>
-       </table>`
-    : ""}
+  const actionableCount =
+    reminder.overdueCheckInKrs.length +
+    reminder.preDeadlineKrs.length +
+    reminder.atRiskObjectives.length;
 
-  ${ownedKrs.length > 0
-    ? `<h2 style="color:#183038;font-size:1.05rem;margin:20px 0 8px">Key Results (${ownedKrs.length})</h2>
-       <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px #0002">
-         <thead><tr style="background:#0f766e;color:#fff"><th style="padding:8px 12px;text-align:left">Title</th><th style="padding:8px 12px;text-align:left">Code</th><th style="padding:8px 12px;text-align:left">Progress</th><th style="padding:8px 12px;text-align:left">Due</th></tr></thead>
-         <tbody>${krRows}</tbody>
-       </table>`
-    : ""}
+  const subject =
+    actionableCount > 0
+      ? `Your OKR reminders — ${actionableCount} item${actionableCount === 1 ? "" : "s"} need attention`
+      : "Your weekly OKR digest";
 
-  <p style="color:#4f6770;margin-top:16px;font-size:0.875rem">Open the OKR Follow-Up system to update progress, check in, or flag blockers.</p>
+  const intro =
+    actionableCount > 0
+      ? "here is everything in your OKRs that needs attention right now."
+      : "here is a snapshot of your OKRs this week.";
+
+  const html = `
+<div style="font-family:'Trebuchet MS',sans-serif;max-width:620px;margin:0 auto;padding:24px;background:#f7f6ef;border-radius:12px">
+  <h1 style="color:#183038;font-size:1.3rem;margin-bottom:4px">OKR Follow-Up</h1>
+  <p style="color:#4f6770;margin-top:0">Hi ${ownerEmail.split("@")[0]}, ${intro}</p>
+  ${sections}
+  <p style="color:#4f6770;margin-top:20px;font-size:0.875rem">Open the OKR Follow-Up system to update progress, check in, or flag blockers.</p>
 </div>`;
+
+  return { subject, html };
 }
 
-export async function sendPreDeadlineReminders(
-  grouped: Map<string, KeyResult[]>,
-  daysBefore: number
+export async function sendAggregatedReminders(
+  grouped: Map<string, AggregatedReminder>
 ): Promise<SendRemindersResult> {
   const config = getStorageConfig();
   if (!config) {
@@ -356,52 +418,22 @@ export async function sendPreDeadlineReminders(
   let skipped = 0;
   const errors: string[] = [];
 
-  for (const [ownerEmail, krs] of grouped) {
-    if (!ownerEmail || !ownerEmail.includes("@") || krs.length === 0) {
+  for (const [ownerEmail, reminder] of grouped) {
+    const hasContent =
+      reminder.preDeadlineKrs.length > 0 ||
+      reminder.overdueCheckInKrs.length > 0 ||
+      reminder.atRiskObjectives.length > 0 ||
+      reminder.digestObjectives.length > 0 ||
+      reminder.digestKrs.length > 0;
+
+    if (!ownerEmail || !ownerEmail.includes("@") || !hasContent) {
       skipped++;
       continue;
     }
 
     try {
-      const html = buildPreDeadlineEmailHtml(ownerEmail, krs, daysBefore);
-      await sendGraphEmail(
-        token,
-        config.fromEmail,
-        ownerEmail,
-        `Reminder: ${krs.length} OKR${krs.length > 1 ? "s" : ""} due within ${daysBefore} day${daysBefore === 1 ? "" : "s"}`,
-        html
-      );
-      emailsSent++;
-    } catch (err) {
-      errors.push(err instanceof Error ? err.message : String(err));
-    }
-  }
-
-  return { emailsSent, skipped, errors };
-}
-
-export async function sendWeeklyDigest(
-  grouped: Map<string, { objectives: Objective[]; krs: KeyResult[] }>
-): Promise<SendRemindersResult> {
-  const config = getStorageConfig();
-  if (!config) {
-    return { emailsSent: 0, skipped: grouped.size, errors: [], notConfigured: true };
-  }
-
-  const token = await acquireToken(config);
-  let emailsSent = 0;
-  let skipped = 0;
-  const errors: string[] = [];
-
-  for (const [ownerEmail, { objectives, krs }] of grouped) {
-    if (!ownerEmail || !ownerEmail.includes("@") || (objectives.length === 0 && krs.length === 0)) {
-      skipped++;
-      continue;
-    }
-
-    try {
-      const html = buildWeeklyDigestEmailHtml(ownerEmail, objectives, krs);
-      await sendGraphEmail(token, config.fromEmail, ownerEmail, "Your weekly OKR digest", html);
+      const { subject, html } = buildAggregatedEmail(ownerEmail, reminder);
+      await sendGraphEmail(token, config.fromEmail, ownerEmail, subject, html);
       emailsSent++;
     } catch (err) {
       errors.push(err instanceof Error ? err.message : String(err));
