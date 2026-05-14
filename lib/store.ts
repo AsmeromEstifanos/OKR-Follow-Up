@@ -40,6 +40,7 @@ import {
 import {
   appendActivityLogEntry,
   listActivityLogEntries,
+  listCommentCounts,
   appendAuthLogEntry,
   appendComment,
   listComments,
@@ -623,6 +624,15 @@ export async function getActivityLogEntries(
   }
 
   return listActivityLogEntries(entityType, limit);
+}
+
+export async function getCommentCounts(): Promise<Record<string, { count: number; latestAt: string }>> {
+  const status = getSharePointStorageStatus();
+  if (!status.enabled) {
+    return {};
+  }
+
+  return listCommentCounts();
 }
 
 export async function createComment(input: CreateCommentInput): Promise<Comment | null> {

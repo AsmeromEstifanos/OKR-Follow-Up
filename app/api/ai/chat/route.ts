@@ -123,11 +123,11 @@ function buildOkrContext(
 function buildSystemPrompt(userEmail: string | undefined, userName: string | undefined): string {
   let userLine: string;
   if (userName && userEmail) {
-    userLine = `The user you are speaking with is ${userName} (${userEmail}). When they say "I", "me", or "my", refer to their data in the OKR context above. You may address them by their first name.`;
+    userLine = `The user you are speaking with is ${userName} (${userEmail}). You may address them by their first name. When they say "I", "me", "my", "mine", an objective or key result is theirs ONLY if its Owner email exactly matches ${userEmail}. Never assume an objective or KR belongs to them just because it appears in the data, the current venture, or the current view.`;
   } else if (userEmail) {
-    userLine = `The user you are speaking with is signed in as: ${userEmail}. When they say "I", "me", or "my", refer to their data in the OKR context above.`;
+    userLine = `The user you are speaking with is signed in as: ${userEmail}. When they say "I", "me", "my", "mine", an objective or key result is theirs ONLY if its Owner email exactly matches ${userEmail}. Never assume an objective or KR belongs to them just because it appears in the data or the current view.`;
   } else {
-    userLine = "The signed-in user is unknown.";
+    userLine = "The signed-in user is unknown. Do not claim any objective or KR belongs to them.";
   }
 
   return `You are an OKR assistant embedded in an OKR tracking system. You have been given the complete, live OKR data for the organisation below, including objectives, key results, milestones, check-ins, and team members.
@@ -145,6 +145,7 @@ RULES:
 6. Use bullet points where helpful. Keep responses tight — a few lines is better than a page.
 7. Format your response in a markdown table when the data is comparative or tabular by nature — for example, when listing multiple items with the same fields (e.g. several objectives with progress + RAG + owner, several departments with stats, KRs with progress + due date, side-by-side comparisons). Default to a table in those cases without being asked. Keep tables to the columns the user needs; do not add columns just to fill space. Use plain bullets or prose when the data is a simple list or a single item.
 8. If information is missing or unclear from the data, say so honestly.
+9. NEVER ASSUME OWNERSHIP. When the user asks about "my OKRs", "my objectives", "my key results", or anything about what belongs to them, include ONLY items whose Owner email exactly matches the signed-in user's email. If none match, say so plainly (e.g. "You don't own any objectives in this data."). Do not present other people's OKRs as if they were the user's — every objective and KR has its own explicit owner shown in the data, and you must respect it.
 
 INTERACTIVE OPTIONS (MANDATORY):
 You MUST append an [OPTIONS] block at the END of any response that asks the user a question with a small set of concrete answers. This is not optional — if your message ends with a question that has anticipated answers, the [OPTIONS] block is REQUIRED. The UI renders these as clickable buttons.

@@ -2379,7 +2379,7 @@ textarea {
   position: absolute;
   top: -5px;
   right: -5px;
-  background: var(--danger);
+  background: #6b7d85;
   color: #fff;
   border-radius: 999px;
   min-width: 1rem;
@@ -2392,6 +2392,10 @@ textarea {
   padding: 0 0.18rem;
   pointer-events: none;
   line-height: 1;
+}
+
+.chat-icon-badge-unread {
+  background: var(--danger);
 }
 
 /* ── Chat Modal ── */

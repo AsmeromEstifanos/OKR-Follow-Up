@@ -2296,6 +2296,37 @@ export async function listComments(entityType: string, entityKey: string): Promi
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
+export async function listCommentCounts(): Promise<Record<string, { count: number; latestAt: string }>> {
+  const config = getStorageConfig();
+  if (!config.enabled) {
+    return {};
+  }
+
+  const { siteId, listIds } = await ensureAtomicTargets(config);
+  const items = await listItems(config, siteId, listIds.comments, ["EntityType", "EntityKey", "CreatedAt"]);
+
+  const counts: Record<string, { count: number; latestAt: string }> = {};
+  for (const item of items) {
+    const entityType = asString(item.fields?.EntityType).trim();
+    const entityKey = asString(item.fields?.EntityKey).trim();
+    const createdAt = asString(item.fields?.CreatedAt);
+    if (!entityType || !entityKey) continue;
+
+    const id = `${entityType}::${entityKey}`;
+    const existing = counts[id];
+    if (existing) {
+      existing.count += 1;
+      if (createdAt > existing.latestAt) {
+        existing.latestAt = createdAt;
+      }
+    } else {
+      counts[id] = { count: 1, latestAt: createdAt };
+    }
+  }
+
+  return counts;
+}
+
 export async function appendComment(input: {
   entityType: string;
   entityKey: string;
