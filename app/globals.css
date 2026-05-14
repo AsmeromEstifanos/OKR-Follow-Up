@@ -3350,7 +3350,10 @@ textarea {
 }
 
 .notif-confirm-recipient input {
-  flex-shrink: 0;
+  width: auto;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
 }
 
 .notif-confirm-recipient-name {
@@ -3360,7 +3363,9 @@ textarea {
   font-weight: 600;
   line-height: 1.35;
   color: var(--ink);
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ── Global AI Chat FAB ── */
