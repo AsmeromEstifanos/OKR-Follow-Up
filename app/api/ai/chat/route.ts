@@ -8,13 +8,6 @@ export const runtime = "nodejs";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 type RequestBody = { messages?: ChatMessage[]; userEmail?: string; userName?: string };
-type OkrData = {
-  periods: Period[];
-  objectives: Objective[];
-  keyResults: KeyResult[];
-  checkIns: CheckIn[];
-  milestones: Milestone[];
-};
 
 function getClient(): OpenAI | null {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -127,240 +120,6 @@ function buildOkrContext(
   return lines.join("\n");
 }
 
-function normalizeText(value: string | null | undefined): string {
-  return (value ?? "").toLowerCase().replace(/[^a-z0-9@._\s-]+/g, " ").replace(/\s+/g, " ").trim();
-}
-
-function isBroadQuestion(question: string): boolean {
-  const q = normalizeText(question);
-  return [
-    "all okr",
-    "all objective",
-    "all key result",
-    "everything",
-    "entire",
-    "organization",
-    "organisation",
-    "company",
-    "overall",
-    "dashboard",
-    "summary of okr",
-    "okr summary",
-    "breakdown",
-    "compare departments",
-    "compare ventures"
-  ].some((term) => q.includes(term));
-}
-
-function latestCheckInsByKr(checkIns: CheckIn[]): Map<string, CheckIn> {
-  const latest = new Map<string, CheckIn>();
-  for (const ci of checkIns) {
-    const existing = latest.get(ci.krKey);
-    if (!existing || ci.checkInAt > existing.checkInAt) {
-      latest.set(ci.krKey, ci);
-    }
-  }
-  return latest;
-}
-
-function uniqueTokens(text: string): string[] {
-  return [...new Set(normalizeText(text).split(" ").filter((token) => token.length >= 3))];
-}
-
-function scoreTextMatch(questionTokens: string[], fields: string[]): number {
-  const haystack = normalizeText(fields.join(" "));
-  let score = 0;
-  for (const token of questionTokens) {
-    if (haystack.includes(token)) score++;
-  }
-  return score;
-}
-
-function buildFocusedOkrContext(data: OkrData, question: string, userEmail?: string): string {
-  if (isBroadQuestion(question)) {
-    return buildOkrContext(data.periods, data.objectives, data.keyResults, data.checkIns, data.milestones);
-  }
-
-  const q = normalizeText(question);
-  const tokens = uniqueTokens(question);
-  const activePeriodKeys = new Set(data.periods.filter((p) => p.status === "Active").map((p) => p.periodKey));
-  const latestCheckIn = latestCheckInsByKr(data.checkIns);
-  const selectedObjectives = new Map<string, Objective>();
-  const selectedKrs = new Map<string, KeyResult>();
-
-  function addObjective(objective: Objective): void {
-    selectedObjectives.set(objective.objectiveKey, objective);
-    for (const kr of data.keyResults) {
-      if (kr.objectiveKey === objective.objectiveKey) {
-        selectedKrs.set(kr.krKey, kr);
-      }
-    }
-  }
-
-  function addKr(kr: KeyResult): void {
-    selectedKrs.set(kr.krKey, kr);
-    const objective = data.objectives.find((obj) => obj.objectiveKey === kr.objectiveKey);
-    if (objective) selectedObjectives.set(objective.objectiveKey, objective);
-  }
-
-  const asksMine = /\b(my|mine|me|i own|assigned to me)\b/.test(q);
-  if (asksMine && userEmail) {
-    const email = userEmail.toLowerCase();
-    data.objectives.filter((obj) => obj.ownerEmail?.toLowerCase() === email).forEach(addObjective);
-    data.keyResults.filter((kr) => kr.ownerEmail?.toLowerCase() === email).forEach(addKr);
-  }
-
-  const asksRisk = /\b(risk|risks|risky|red|amber|blocker|blockers|blocked|support|attention)\b/.test(q);
-  if (asksRisk) {
-    data.objectives
-      .filter((obj) => activePeriodKeys.has(obj.periodKey) && (obj.rag === "Red" || obj.rag === "Amber" || Boolean(obj.blockers)))
-      .forEach(addObjective);
-    data.keyResults
-      .filter((kr) => activePeriodKeys.has(kr.periodKey) && (Boolean(kr.blockers) || Boolean(kr.supportNeeded)))
-      .forEach(addKr);
-  }
-
-  const asksCheckIn = /\b(check-in|checkin|check in|overdue|missing update|no recent)\b/.test(q);
-  if (asksCheckIn) {
-    data.keyResults
-      .filter((kr) => activePeriodKeys.has(kr.periodKey) && !latestCheckIn.has(kr.krKey))
-      .forEach(addKr);
-  }
-
-  for (const obj of data.objectives) {
-    const fields = [
-      obj.objectiveKey,
-      obj.objectiveCode ?? "",
-      obj.title,
-      obj.owner ?? "",
-      obj.ownerEmail ?? "",
-      obj.department,
-      obj.ventureName ?? "",
-      obj.strategicTheme
-    ];
-    if (fields.some((field) => field && q.includes(normalizeText(field)))) {
-      addObjective(obj);
-    }
-  }
-
-  for (const kr of data.keyResults) {
-    const fields = [
-      kr.krKey,
-      kr.krCode ?? "",
-      kr.title,
-      kr.owner ?? "",
-      kr.ownerEmail ?? "",
-      kr.status
-    ];
-    if (fields.some((field) => field && q.includes(normalizeText(field)))) {
-      addKr(kr);
-    }
-  }
-
-  if (selectedObjectives.size === 0 && selectedKrs.size === 0) {
-    const objectiveScores = data.objectives
-      .filter((obj) => activePeriodKeys.has(obj.periodKey))
-      .map((obj) => ({
-        obj,
-        score: scoreTextMatch(tokens, [
-          obj.title,
-          obj.objectiveCode ?? "",
-          obj.department,
-          obj.ventureName ?? "",
-          obj.owner ?? "",
-          obj.ownerEmail ?? "",
-          obj.blockers ?? "",
-          obj.notes ?? ""
-        ])
-      }))
-      .filter((entry) => entry.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 8);
-    objectiveScores.forEach(({ obj }) => addObjective(obj));
-
-    const krScores = data.keyResults
-      .filter((kr) => activePeriodKeys.has(kr.periodKey))
-      .map((kr) => ({
-        kr,
-        score: scoreTextMatch(tokens, [
-          kr.title,
-          kr.krCode ?? "",
-          kr.owner ?? "",
-          kr.ownerEmail ?? "",
-          kr.status,
-          kr.blockers ?? "",
-          kr.supportNeeded ?? "",
-          kr.notes ?? ""
-        ])
-      }))
-      .filter((entry) => entry.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 12);
-    krScores.forEach(({ kr }) => addKr(kr));
-  }
-
-  if (selectedObjectives.size === 0 && selectedKrs.size === 0) {
-    const activeObjectives = data.objectives.filter((obj) => activePeriodKeys.has(obj.periodKey));
-    return [
-      "=== COMPACT ACTIVE OKR CATALOG ===",
-      "No narrow match was found for the question. Use this compact catalog to answer only if sufficient; otherwise say what detail is missing.",
-      ...activeObjectives.map(
-        (obj) =>
-          `OBJECTIVE: ${obj.objectiveCode ?? obj.objectiveKey} — "${obj.title}" | ${obj.ventureName ?? "General"} / ${obj.department} | Owner: ${obj.ownerEmail ?? obj.owner ?? "unassigned"} | Progress: ${obj.progressPct}% | RAG: ${obj.rag}`
-      )
-    ].join("\n");
-  }
-
-  const objectiveList = [...selectedObjectives.values()].slice(0, 12);
-  const selectedObjectiveKeys = new Set(objectiveList.map((obj) => obj.objectiveKey));
-  const krList = [...selectedKrs.values()]
-    .filter((kr) => selectedObjectiveKeys.has(kr.objectiveKey) || selectedKrs.has(kr.krKey))
-    .slice(0, 30);
-  const krKeys = new Set(krList.map((kr) => kr.krKey));
-  const milestoneList = data.milestones.filter((m) => krKeys.has(m.krKey)).slice(0, 60);
-
-  const lines: string[] = [];
-  lines.push("=== FOCUSED OKR DATA ===");
-  lines.push(`Retrieval scope: ${objectiveList.length} objective(s), ${krList.length} key result(s).`);
-  lines.push("If the answer needs records outside this focused context, say that the current retrieved context is insufficient.");
-
-  for (const obj of objectiveList) {
-    lines.push(`\nOBJECTIVE: ${obj.objectiveCode ?? obj.objectiveKey} — "${obj.title}"`);
-    lines.push(
-      `  Venture/Department: ${obj.ventureName ?? "General"} / ${obj.department} | Owner: ${obj.ownerEmail ?? obj.owner ?? "unassigned"}`
-    );
-    lines.push(`  Progress: ${obj.progressPct}% | RAG: ${obj.rag} | Status: ${obj.status} | Confidence: ${obj.confidence}`);
-    if (obj.description) lines.push(`  Description: ${obj.description}`);
-    if (obj.blockers) lines.push(`  Blockers: ${obj.blockers}`);
-    if (obj.keyRisksDependency) lines.push(`  Risks/dependencies: ${obj.keyRisksDependency}`);
-    if (obj.notes) lines.push(`  Notes: ${obj.notes}`);
-
-    for (const kr of krList.filter((item) => item.objectiveKey === obj.objectiveKey)) {
-      const latest = latestCheckIn.get(kr.krKey);
-      lines.push(`  KR: ${kr.krCode ?? kr.krKey} — "${kr.title}"`);
-      lines.push(
-        `    Progress: ${kr.progressPct}% (${kr.currentValue}/${kr.targetValue} ${kr.metricType}) | Status: ${kr.status} | Due: ${kr.dueDate || "—"} | Owner: ${kr.ownerEmail ?? kr.owner ?? "unassigned"}`
-      );
-      if (kr.blockers) lines.push(`    Blockers: ${kr.blockers}`);
-      if (kr.supportNeeded) lines.push(`    Support needed: ${kr.supportNeeded}`);
-      if (kr.notes) lines.push(`    Notes: ${kr.notes}`);
-      if (latest) {
-        lines.push(`    Last check-in (${latest.checkInAt.slice(0, 10)}): ${latest.updateNotes || "(no notes)"}`);
-        if (latest.blockers) lines.push(`    Check-in blockers: ${latest.blockers}`);
-        if (latest.supportNeeded) lines.push(`    Check-in support needed: ${latest.supportNeeded}`);
-      } else {
-        lines.push("    Last check-in: NONE");
-      }
-
-      for (const m of milestoneList.filter((item) => item.krKey === kr.krKey)) {
-        lines.push(`    Milestone: "${m.title}" — Progress: ${m.progressPct}% | Weight: ${m.weight}`);
-      }
-    }
-  }
-
-  return lines.join("\n");
-}
-
 function buildSystemPrompt(userEmail: string | undefined, userName: string | undefined): string {
   let userLine: string;
   if (userName && userEmail) {
@@ -427,12 +186,12 @@ Keep it professional, warm, and concise.`;
 }
 
 const CONTEXT_TTL_MS = 10 * 60 * 1000;
-let dataCache: { data: OkrData; builtAt: number } | null = null;
+let contextCache: { text: string; builtAt: number } | null = null;
 
-async function getCachedOkrData(): Promise<OkrData> {
+async function getCachedOkrContext(): Promise<string> {
   const now = Date.now();
-  if (dataCache && now - dataCache.builtAt < CONTEXT_TTL_MS) {
-    return dataCache.data;
+  if (contextCache && now - contextCache.builtAt < CONTEXT_TTL_MS) {
+    return contextCache.text;
   }
 
   const [periods, objectives, keyResults, checkIns, milestones] = await Promise.all([
@@ -443,9 +202,9 @@ async function getCachedOkrData(): Promise<OkrData> {
     listMilestones({})
   ]);
 
-  const data = { periods, objectives, keyResults, checkIns, milestones };
-  dataCache = { data, builtAt: now };
-  return data;
+  const text = buildOkrContext(periods, objectives, keyResults, checkIns, milestones);
+  contextCache = { text, builtAt: now };
+  return text;
 }
 
 function jsonError(message: string, status: number): Response {
@@ -471,9 +230,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       return jsonError("At least one user message is required.", 400);
     }
 
-    const latestUserMessage = userMessages[userMessages.length - 1]?.content ?? "";
-    const okrData = await getCachedOkrData();
-    const okrContext = buildFocusedOkrContext(okrData, latestUserMessage, userEmail);
+    const okrContext = await getCachedOkrContext();
     const systemWithContext = `${buildSystemPrompt(userEmail, userName)}\n\n--- LIVE OKR DATA ---\n${okrContext}\n--- END OKR DATA ---`;
 
     const stream = await client.chat.completions.create({
