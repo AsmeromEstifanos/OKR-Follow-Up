@@ -4,6 +4,7 @@ import type { DashboardMe, KeyResult, Objective } from "@/lib/types";
 import { apiPath } from "@/lib/base-path";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 type Props = {
   userEmail: string;
@@ -59,9 +60,11 @@ export default function NotificationBell({ userEmail, isAdmin = false }: Props):
   const [sendResult, setSendResult] = useState<string>("");
   const [reminderLog, setReminderLog] = useState<ReminderLogEntry[]>([]);
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
+  const [isLogLoading, setIsLogLoading] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [panelPos, setPanelPos] = useState<{ top: number; left: number } | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const panelContentRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLButtonElement>(null);
 
   const loadNotifications = useCallback(async (): Promise<void> => {
@@ -86,6 +89,7 @@ export default function NotificationBell({ userEmail, isAdmin = false }: Props):
   const loadReminderLog = useCallback(async (): Promise<void> => {
     if (!userEmail || !isAdmin) return;
 
+    setIsLogLoading(true);
     try {
       const response = await fetch(apiPath("/api/notifications/log"), {
         headers: { "x-user-email": userEmail },
@@ -97,6 +101,8 @@ export default function NotificationBell({ userEmail, isAdmin = false }: Props):
       setReminderLog(Array.isArray(payload.log) ? payload.log : []);
     } catch {
       // silently ignore
+    } finally {
+      setIsLogLoading(false);
     }
   }, [userEmail, isAdmin]);
 
@@ -108,7 +114,10 @@ export default function NotificationBell({ userEmail, isAdmin = false }: Props):
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent): void {
-      if (panelRef.current && !panelRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const insideBell = panelRef.current?.contains(target) ?? false;
+      const insidePanel = panelContentRef.current?.contains(target) ?? false;
+      if (!insideBell && !insidePanel) {
         setIsOpen(false);
       }
     }
@@ -199,8 +208,9 @@ export default function NotificationBell({ userEmail, isAdmin = false }: Props):
         )}
       </button>
 
-      {isOpen && panelPos && (
+      {isOpen && panelPos && createPortal(
         <div
+          ref={panelContentRef}
           className="notif-panel"
           role="dialog"
           aria-label="Notifications"
@@ -271,7 +281,12 @@ export default function NotificationBell({ userEmail, isAdmin = false }: Props):
           {isAdmin && (
             <div className="notif-log-section">
               <div className="notif-log-heading">Reminder email log</div>
-              {reminderLog.length === 0 ? (
+              {isLogLoading ? (
+                <div className="notif-log-loading">
+                  <span className="notif-log-spinner" aria-hidden="true" />
+                  Loading log…
+                </div>
+              ) : reminderLog.length === 0 ? (
                 <p className="notif-log-empty">No reminder emails sent yet.</p>
               ) : (
                 <ul className="notif-log-list">
@@ -317,10 +332,11 @@ export default function NotificationBell({ userEmail, isAdmin = false }: Props):
               )}
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
 
-      {showConfirm && (
+      {showConfirm && createPortal(
         <div className="notif-confirm-overlay" role="dialog" aria-modal="true">
           <div className="notif-confirm-card">
             <div className="notif-confirm-title">Send reminder emails now?</div>
@@ -341,7 +357,8 @@ export default function NotificationBell({ userEmail, isAdmin = false }: Props):
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

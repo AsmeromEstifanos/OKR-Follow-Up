@@ -215,38 +215,31 @@ export default async function DashboardPage({
 
   return (
     <div className="dashboard-page">
-      <DashboardVentureTabs
+      <OkrBoard
         ventures={ventures}
         selectedVentureKey={selectedVenture?.ventureKey}
+        selectedVentureName={selectedVenture?.name ?? "SVH"}
+        ownerSections={ownerSections}
         adminEmails={adminEmails}
+        positionControls={
+          <DashboardPositionControls
+            selectedVentureKey={selectedVenture?.ventureKey}
+            existingPositionNames={configuredPositions}
+            adminEmails={adminEmails}
+          />
+        }
+        defaultPeriodKey={defaultPeriod?.periodKey}
+        defaultStartDate={defaultPeriod?.startDate}
+        defaultEndDate={defaultPeriod?.endDate}
+        defaultCycle={defaultCycle}
+        objectiveTypeOptions={fieldOptions.objectiveTypes}
+        objectiveStatusOptions={fieldOptions.objectiveStatuses}
+        objectiveCycleOptions={fieldOptions.objectiveCycles}
+        metricTypeOptions={fieldOptions.keyResultMetricTypes}
+        keyResultStatusOptions={fieldOptions.keyResultStatuses}
+        checkInFrequencyOptions={fieldOptions.checkInFrequencies}
+        groupColors={GROUP_COLORS}
       />
-
-      <section className="section">
-        <OkrBoard
-          selectedVentureKey={selectedVenture?.ventureKey}
-          selectedVentureName={selectedVenture?.name ?? "SVH"}
-          ownerSections={ownerSections}
-          adminEmails={adminEmails}
-          positionControls={
-            <DashboardPositionControls
-              selectedVentureKey={selectedVenture?.ventureKey}
-              existingPositionNames={configuredPositions}
-              adminEmails={adminEmails}
-            />
-          }
-          defaultPeriodKey={defaultPeriod?.periodKey}
-          defaultStartDate={defaultPeriod?.startDate}
-          defaultEndDate={defaultPeriod?.endDate}
-          defaultCycle={defaultCycle}
-          objectiveTypeOptions={fieldOptions.objectiveTypes}
-          objectiveStatusOptions={fieldOptions.objectiveStatuses}
-          objectiveCycleOptions={fieldOptions.objectiveCycles}
-          metricTypeOptions={fieldOptions.keyResultMetricTypes}
-          keyResultStatusOptions={fieldOptions.keyResultStatuses}
-          checkInFrequencyOptions={fieldOptions.checkInFrequencies}
-          groupColors={GROUP_COLORS}
-        />
-      </section>
     </div>
   );
 }

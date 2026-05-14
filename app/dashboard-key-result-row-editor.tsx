@@ -1,6 +1,7 @@
 "use client";
 
 import ChatIconButton from "@/app/chat-icon-button";
+import HighlightText from "@/app/highlight-text";
 import OwnerInput from "@/app/owner-input";
 import useCurrentUserEmail from "@/app/use-current-user-email";
 import { apiPath } from "@/lib/base-path";
@@ -19,6 +20,7 @@ type Props = {
   adminEmails: string[];
   forcedExpanded?: boolean | null;
   forceToken?: number;
+  highlightQuery?: string;
   metricTypeOptions: MetricType[];
   keyResultStatusOptions: KrStatus[];
   checkInFrequencyOptions: CheckInFrequency[];
@@ -226,6 +228,7 @@ export default function DashboardKeyResultRowEditor({
   adminEmails,
   forcedExpanded,
   forceToken,
+  highlightQuery = "",
   keyResultStatusOptions,
 }: Props): JSX.Element {
   const router = useRouter();
@@ -573,7 +576,9 @@ export default function DashboardKeyResultRowEditor({
             {isEditing ? (
               <input className="objective-row-input" value={title} onChange={(event) => setTitle(event.target.value)} autoFocus disabled={isSaving} />
             ) : (
-              <span className="objective-title-text">{keyResult.title}</span>
+              <span className="objective-title-text">
+                <HighlightText text={keyResult.title} query={highlightQuery} />
+              </span>
             )}
             {!isEditing && canEdit ? (
               <button
@@ -641,8 +646,10 @@ export default function DashboardKeyResultRowEditor({
         <td>
           {isEditing ? (
             <textarea className="objective-row-input" value={measurementRule} onChange={(event) => setMeasurementRule(event.target.value)} disabled={isSaving} />
+          ) : keyResult.measurementRule ? (
+            <HighlightText text={keyResult.measurementRule} query={highlightQuery} />
           ) : (
-            keyResult.measurementRule || "-"
+            "-"
           )}
         </td>
         <td>

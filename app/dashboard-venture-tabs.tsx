@@ -11,6 +11,7 @@ type Props = {
   ventures: Venture[];
   selectedVentureKey?: string;
   adminEmails: string[];
+  toolbar?: React.ReactNode;
 };
 
 type ApiError = {
@@ -41,7 +42,7 @@ function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
 }
 
-export default function DashboardVentureTabs({ ventures, selectedVentureKey, adminEmails }: Props): JSX.Element {
+export default function DashboardVentureTabs({ ventures, selectedVentureKey, adminEmails, toolbar }: Props): JSX.Element {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -269,6 +270,7 @@ export default function DashboardVentureTabs({ ventures, selectedVentureKey, adm
             Add Venture
           </button>
         ) : null}
+        {toolbar ? <div className="venture-tabs-toolbar">{toolbar}</div> : null}
       </div>
 
       {isAdmin && isAddingVenture ? (

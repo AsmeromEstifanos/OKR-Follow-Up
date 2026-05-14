@@ -1763,6 +1763,71 @@ textarea {
   flex-wrap: wrap;
 }
 
+.venture-tabs-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.board-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.board-search-icon {
+  position: absolute;
+  left: 0.55rem;
+  display: flex;
+  color: #4f6770;
+  pointer-events: none;
+}
+
+.board-search-input {
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 0.4rem 0.6rem 0.4rem 1.85rem;
+  border: 1px solid #c9d8d1;
+  border-radius: 8px;
+  background: #fff;
+  width: 240px;
+  max-width: 50vw;
+}
+
+.board-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px #20a68a33;
+}
+
+.board-collapse-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid #c9d8d1;
+  border-radius: 8px;
+  background: #fff;
+  color: #2d4a52;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.board-collapse-btn:hover {
+  background: #eef4f0;
+  color: #183038;
+}
+
+.search-highlight {
+  background: #ffe082;
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
 .analytics-health-layout {
   margin-top: 0.85rem;
   display: grid;
@@ -3022,6 +3087,31 @@ textarea {
   padding: 0 1rem 0.75rem;
   font-size: 0.78rem;
   color: var(--muted);
+}
+
+.notif-log-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 1rem 0.8rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.notif-log-spinner {
+  width: 0.85rem;
+  height: 0.85rem;
+  border: 2px solid #c9d8d1;
+  border-top-color: var(--accent);
+  border-radius: 999px;
+  animation: notif-log-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes notif-log-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .notif-log-list {

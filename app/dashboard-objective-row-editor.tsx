@@ -3,6 +3,7 @@
 import ChatIconButton from "@/app/chat-icon-button";
 import DashboardKeyResultControls from "@/app/dashboard-key-result-controls";
 import DashboardKeyResultRowEditor from "@/app/dashboard-key-result-row-editor";
+import HighlightText from "@/app/highlight-text";
 import OwnerInput from "@/app/owner-input";
 import useCurrentUserEmail from "@/app/use-current-user-email";
 import { apiPath } from "@/lib/base-path";
@@ -35,6 +36,7 @@ type Props = {
   adminEmails: string[];
   forcedExpanded?: boolean | null;
   forceToken?: number;
+  highlightQuery?: string;
   objectiveTypeOptions: ObjectiveType[];
   objectiveStatusOptions: ObjectiveStatus[];
   objectiveCycleOptions: OkrCycle[];
@@ -105,6 +107,7 @@ export default function DashboardObjectiveRowEditor({
   adminEmails,
   forcedExpanded,
   forceToken,
+  highlightQuery = "",
   objectiveTypeOptions,
   objectiveStatusOptions,
   objectiveCycleOptions,
@@ -273,7 +276,9 @@ export default function DashboardObjectiveRowEditor({
             {isEditing ? (
               <input className="objective-row-input" value={title} onChange={(event) => setTitle(event.target.value)} autoFocus disabled={isSaving} />
             ) : (
-              <span className="objective-title-text">{objective.title}</span>
+              <span className="objective-title-text">
+                <HighlightText text={objective.title} query={highlightQuery} />
+              </span>
             )}
             {!isEditing && canEdit ? (
               <button type="button" className="objective-edit-trigger" onClick={() => setIsEditing(true)} disabled={isSaving}>
@@ -321,8 +326,10 @@ export default function DashboardObjectiveRowEditor({
         <td>
           {isEditing ? (
             <textarea className="objective-row-input" value={intent} onChange={(event) => setIntent(event.target.value)} disabled={isSaving} />
+          ) : objective.description ? (
+            <HighlightText text={objective.description} query={highlightQuery} />
           ) : (
-            objective.description || "-"
+            "-"
           )}
         </td>
         <td className="chat-col-cell">
@@ -402,6 +409,7 @@ export default function DashboardObjectiveRowEditor({
                           adminEmails={adminEmails}
                           forcedExpanded={forcedExpanded}
                           forceToken={forceToken}
+                          highlightQuery={highlightQuery}
                           metricTypeOptions={metricTypeOptions}
                           keyResultStatusOptions={keyResultStatusOptions}
                           checkInFrequencyOptions={checkInFrequencyOptions}
