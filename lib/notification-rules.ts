@@ -88,6 +88,80 @@ function toLocal(now: Date): Date {
   return new Date(now.getTime() + getTimezoneOffsetHours() * 60 * 60 * 1000);
 }
 
+// Applies admin-configured overrides (hour/minute/dayOfWeek/dayOfMonth/message)
+// from settings on top of a rule definition. The rule "kind" (weekly vs monthly
+// vs lastWorkingDay) is fixed in code; only its parameters are editable.
+export function effectiveRule(
+  id: RuleId,
+  overrides: { hour?: number; minute?: number; dayOfWeek?: number; dayOfMonth?: number; message?: string } | undefined
+): RuleDefinition {
+  const def = RULE_DEFINITIONS[id];
+  if (!overrides) return def;
+
+  let schedule: RuleSchedule;
+  switch (def.schedule.kind) {
+    case "weekly":
+      schedule = {
+        kind: "weekly",
+        dayOfWeek: overrides.dayOfWeek ?? def.schedule.dayOfWeek,
+        hour: overrides.hour ?? def.schedule.hour,
+        minute: overrides.minute ?? def.schedule.minute
+      };
+      break;
+    case "monthly":
+      schedule = {
+        kind: "monthly",
+        dayOfMonth: overrides.dayOfMonth ?? def.schedule.dayOfMonth,
+        hour: overrides.hour ?? def.schedule.hour,
+        minute: overrides.minute ?? def.schedule.minute
+      };
+      break;
+    case "lastWorkingDay":
+      schedule = {
+        kind: "lastWorkingDay",
+        hour: overrides.hour ?? def.schedule.hour,
+        minute: overrides.minute ?? def.schedule.minute
+      };
+      break;
+  }
+
+  return {
+    ...def,
+    schedule,
+    scheduleLabel: formatScheduleLabel(schedule),
+    message: overrides.message?.trim() ? overrides.message : def.message
+  };
+}
+
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+function ordinal(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${n}st`;
+  if (mod10 === 2 && mod100 !== 12) return `${n}nd`;
+  if (mod10 === 3 && mod100 !== 13) return `${n}rd`;
+  return `${n}th`;
+}
+
+function formatTime(hour: number, minute: number): string {
+  const period = hour >= 12 ? "PM" : "AM";
+  const displayHour = hour % 12 === 0 ? 12 : hour % 12;
+  return `${displayHour}:${minute.toString().padStart(2, "0")} ${period}`;
+}
+
+export function formatScheduleLabel(schedule: RuleSchedule): string {
+  const time = formatTime(schedule.hour ?? 0, schedule.minute ?? 0);
+  switch (schedule.kind) {
+    case "weekly":
+      return `Every ${DAY_NAMES[schedule.dayOfWeek] ?? "Monday"}, ${time}`;
+    case "monthly":
+      return `${ordinal(schedule.dayOfMonth)} of every month, ${time}`;
+    case "lastWorkingDay":
+      return `Last working day of the month, ${time}`;
+  }
+}
+
 // Last Mon-Fri of the given month (month is 0-indexed). Computed using UTC
 // arithmetic to avoid picking up the server's local timezone.
 export function lastWorkingDayOfMonth(year: number, month: number): number {

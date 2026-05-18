@@ -1,5 +1,5 @@
 import type { KeyResult, Objective } from "@/lib/types";
-import { RULE_DEFINITIONS, type RuleId } from "@/lib/notification-rules";
+import type { RuleId } from "@/lib/notification-rules";
 
 const GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0";
 
@@ -110,6 +110,8 @@ export type SendRemindersResult = {
 // its own table layout — see the section builders below.
 export type RuleSection = {
   ruleId: RuleId;
+  ruleLabel: string;
+  ruleMessage: string;
   objectives: Objective[];
   krs: KeyResult[];
 };
@@ -196,9 +198,8 @@ function krsProgressTable(krs: KeyResult[], headerColor: string): string {
 // Each rule renders differently based on the "What it shows" column from the
 // notification settings table.
 function renderSection(section: RuleSection): string {
-  const rule = RULE_DEFINITIONS[section.ruleId];
-  const heading = `<h2 ${SECTION_HEADING}>${rule.label}</h2>
-  <p ${SECTION_INTRO}>${rule.message}</p>`;
+  const heading = `<h2 ${SECTION_HEADING}>${section.ruleLabel}</h2>
+  <p ${SECTION_INTRO}>${section.ruleMessage}</p>`;
 
   switch (section.ruleId) {
     case "weeklyDigest":
@@ -248,12 +249,12 @@ export function buildAggregatedEmail(
   // Subject: if exactly one rule fired, use its label; otherwise summarise.
   const subject =
     reminder.sections.length === 1
-      ? RULE_DEFINITIONS[reminder.sections[0].ruleId].label
+      ? reminder.sections[0].ruleLabel
       : `OKR reminders — ${reminder.sections.length} update${reminder.sections.length === 1 ? "" : "s"}`;
 
   const intro =
     reminder.sections.length === 1
-      ? RULE_DEFINITIONS[reminder.sections[0].ruleId].message
+      ? reminder.sections[0].ruleMessage
       : "here are the OKR updates that apply to you right now.";
 
   const html = `

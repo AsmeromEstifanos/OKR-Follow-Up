@@ -3950,6 +3950,63 @@ textarea {
   color: var(--ink);
 }
 
+.notif-rule-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 0.6rem 0;
+}
+
+.notif-rule-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.notif-rule-field input,
+.notif-rule-field select,
+.notif-rule-field textarea {
+  font-size: 0.85rem;
+  padding: 0.32rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #c9d2d5;
+  font-family: inherit;
+}
+
+.notif-rule-field input[type="time"],
+.notif-rule-field input[type="number"] {
+  width: 7rem;
+}
+
+.notif-rule-field-message {
+  display: block;
+  margin: 0.4rem 0;
+}
+
+.notif-rule-field-message textarea {
+  width: 100%;
+  resize: vertical;
+  margin-top: 0.2rem;
+}
+
+.notif-rule-reset {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-top: 0.5rem;
+  font: inherit;
+  font-size: 0.74rem;
+  color: var(--muted);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.notif-rule-reset:hover {
+  color: var(--ink);
+}
+
 .ai-options-row {
   display: flex;
   flex-wrap: wrap;

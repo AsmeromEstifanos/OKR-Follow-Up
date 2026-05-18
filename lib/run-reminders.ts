@@ -1,7 +1,7 @@
 import { readNotificationSettings } from "@/lib/notification-settings";
 import {
-  RULE_DEFINITIONS,
   RULE_IDS,
+  effectiveRule,
   ruleMatchesNow,
   type RuleId
 } from "@/lib/notification-rules";
@@ -39,15 +39,15 @@ function lowerEmail(value: string | null | undefined): string {
   return (value ?? "").trim().toLowerCase();
 }
 
-// Returns the subset of enabled rules whose schedule matches `now`.
-export function rulesFiringAt(
-  enabledRules: Set<RuleId>,
-  now: Date,
-  windowMinutes = 15
-): RuleId[] {
-  return RULE_IDS.filter(
-    (id) => enabledRules.has(id) && ruleMatchesNow(RULE_DEFINITIONS[id], now, windowMinutes)
-  );
+// Returns the subset of enabled rules whose (admin-customised) schedule
+// matches `now`.
+export async function rulesFiringAt(now: Date, windowMinutes = 15): Promise<RuleId[]> {
+  const settings = await readNotificationSettings();
+  return RULE_IDS.filter((id) => {
+    const cfg = settings.rules[id];
+    if (!cfg?.enabled) return false;
+    return ruleMatchesNow(effectiveRule(id, cfg), now, windowMinutes);
+  });
 }
 
 type RuleContent = {
@@ -125,6 +125,7 @@ type AggregatedBuild = {
 // Pure computation — does not send anything.
 async function buildAggregated(rulesToRun: RuleId[]): Promise<AggregatedBuild> {
   const fromEmail = (process.env.NOTIFICATION_FROM_EMAIL ?? "").trim();
+  const settings = await readNotificationSettings();
 
   const [periods, allObjectives, allKrs] = await Promise.all([
     listPeriods(),
@@ -139,6 +140,8 @@ async function buildAggregated(rulesToRun: RuleId[]): Promise<AggregatedBuild> {
   const aggregated = new Map<string, AggregatedReminder>();
 
   for (const ruleId of rulesToRun) {
+    const rule = effectiveRule(ruleId, settings.rules[ruleId]);
+
     const owners = new Set<string>();
     for (const obj of allObjectives) {
       if (!activePeriodKeys.has(obj.periodKey)) continue;
@@ -162,6 +165,8 @@ async function buildAggregated(rulesToRun: RuleId[]): Promise<AggregatedBuild> {
       }
       const section: RuleSection = {
         ruleId,
+        ruleLabel: rule.label,
+        ruleMessage: rule.message,
         objectives: content.objectives,
         krs: content.krs
       };
@@ -174,7 +179,7 @@ async function buildAggregated(rulesToRun: RuleId[]): Promise<AggregatedBuild> {
 
 function summarizeReminder(reminder: AggregatedReminder): string {
   if (reminder.sections.length === 0) return "no items";
-  return reminder.sections.map((s) => RULE_DEFINITIONS[s.ruleId].label).join(", ");
+  return reminder.sections.map((s) => s.ruleLabel).join(", ");
 }
 
 // Lists who would receive a reminder for the given rules and what each email

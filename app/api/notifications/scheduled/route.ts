@@ -1,4 +1,4 @@
-import { getEnabledRuleIds, logReminderRun, rulesFiringAt, runReminders } from "@/lib/run-reminders";
+import { logReminderRun, rulesFiringAt, runReminders } from "@/lib/run-reminders";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -13,8 +13,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   try {
     const now = new Date();
-    const enabled = new Set(await getEnabledRuleIds());
-    const firing = rulesFiringAt(enabled, now);
+    const firing = await rulesFiringAt(now);
 
     if (firing.length === 0) {
       return NextResponse.json({ ranAt: now.toISOString(), rulesRun: [], skipped: "no rules match this window" });

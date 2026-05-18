@@ -2,19 +2,53 @@
 
 import useCurrentUserEmail from "@/app/use-current-user-email";
 import { apiPath } from "@/lib/base-path";
-import type { NotificationSettings } from "@/lib/notification-settings";
-import { RULE_DEFINITIONS, RULE_IDS, type RuleId } from "@/lib/notification-rules";
+import type { NotificationSettings, RuleSettings } from "@/lib/notification-settings";
+import {
+  RULE_DEFINITIONS,
+  RULE_IDS,
+  effectiveRule,
+  formatScheduleLabel,
+  type RuleId
+} from "@/lib/notification-rules";
 import { useEffect, useState } from "react";
+
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+function defaultSettingsFor(id: RuleId): RuleSettings {
+  const def = RULE_DEFINITIONS[id];
+  return {
+    enabled: false,
+    hour: "hour" in def.schedule ? def.schedule.hour : 9,
+    minute: "minute" in def.schedule ? def.schedule.minute : 0,
+    dayOfWeek: def.schedule.kind === "weekly" ? def.schedule.dayOfWeek : 1,
+    dayOfMonth: def.schedule.kind === "monthly" ? def.schedule.dayOfMonth : 1,
+    message: def.message
+  };
+}
 
 function buildFallbackSettings(): NotificationSettings {
   const rules = RULE_IDS.reduce(
     (acc, id) => {
-      acc[id] = { enabled: false };
+      acc[id] = defaultSettingsFor(id);
       return acc;
     },
-    {} as Record<RuleId, { enabled: boolean }>
+    {} as Record<RuleId, RuleSettings>
   );
   return { rules };
+}
+
+function pad2(n: number): string {
+  return n.toString().padStart(2, "0");
+}
+
+function parseTimeInput(value: string): { hour: number; minute: number } | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isInteger(hour) || hour < 0 || hour > 23) return null;
+  if (!Number.isInteger(minute) || minute < 0 || minute > 59) return null;
+  return { hour, minute };
 }
 
 export default function NotificationSettingsPage(): JSX.Element {
@@ -78,10 +112,17 @@ export default function NotificationSettingsPage(): JSX.Element {
     }
   }
 
-  function toggleRule(id: RuleId, enabled: boolean): void {
+  function updateRule(id: RuleId, patch: Partial<RuleSettings>): void {
     setSettings((prev) => ({
       ...prev,
-      rules: { ...prev.rules, [id]: { enabled } }
+      rules: { ...prev.rules, [id]: { ...prev.rules[id], ...patch } }
+    }));
+  }
+
+  function resetRule(id: RuleId): void {
+    setSettings((prev) => ({
+      ...prev,
+      rules: { ...prev.rules, [id]: { ...defaultSettingsFor(id), enabled: prev.rules[id]?.enabled ?? false } }
     }));
   }
 
@@ -99,7 +140,7 @@ export default function NotificationSettingsPage(): JSX.Element {
         <h2>Notification Settings</h2>
       </header>
       <p className="meta">
-        Enable the scheduled reminder emails the OKR system should send. The scheduler runs every 15 minutes
+        Enable, schedule, and word the automated reminder emails the OKR system sends. The scheduler runs every 15 minutes
         and dispatches each enabled rule once on its configured day at the configured time.
       </p>
 
@@ -108,29 +149,93 @@ export default function NotificationSettingsPage(): JSX.Element {
 
       <div className="notif-rules-grid">
         {RULE_IDS.map((id) => {
-          const rule = RULE_DEFINITIONS[id];
-          const enabled = settings.rules[id]?.enabled ?? false;
+          const def = RULE_DEFINITIONS[id];
+          const cfg = settings.rules[id] ?? defaultSettingsFor(id);
+          const eff = effectiveRule(id, cfg);
+          const kind = def.schedule.kind;
+          const timeValue = `${pad2(cfg.hour)}:${pad2(cfg.minute)}`;
           return (
             <section key={id} className="config-option-card">
               <header className="notif-rule-head">
                 <div>
-                  <h3 className="config-option-title">{rule.label}</h3>
-                  <div className="notif-rule-schedule">{rule.scheduleLabel}</div>
+                  <h3 className="config-option-title">{def.label}</h3>
+                  <div className="notif-rule-schedule">{formatScheduleLabel(eff.schedule)}</div>
                 </div>
                 <label className="notif-settings-toggle">
                   <input
                     type="checkbox"
-                    checked={enabled}
-                    onChange={(e) => toggleRule(id, e.target.checked)}
+                    checked={cfg.enabled}
+                    onChange={(e) => updateRule(id, { enabled: e.target.checked })}
                     disabled={isSaving}
                   />
-                  <span>{enabled ? "On" : "Off"}</span>
+                  <span>{cfg.enabled ? "On" : "Off"}</span>
                 </label>
               </header>
-              <p className="notif-rule-message">&ldquo;{rule.message}&rdquo;</p>
+
+              <div className="notif-rule-fields">
+                {kind === "weekly" && (
+                  <label className="notif-rule-field">
+                    Day
+                    <select
+                      value={cfg.dayOfWeek}
+                      onChange={(e) => updateRule(id, { dayOfWeek: Number(e.target.value) })}
+                      disabled={isSaving || !cfg.enabled}
+                    >
+                      {DAY_NAMES.map((label, idx) => (
+                        <option key={idx} value={idx}>{label}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {kind === "monthly" && (
+                  <label className="notif-rule-field">
+                    Day of month
+                    <input
+                      type="number"
+                      min={1}
+                      max={31}
+                      value={cfg.dayOfMonth}
+                      onChange={(e) => updateRule(id, { dayOfMonth: Number(e.target.value) || 1 })}
+                      disabled={isSaving || !cfg.enabled}
+                    />
+                  </label>
+                )}
+                <label className="notif-rule-field">
+                  Time
+                  <input
+                    type="time"
+                    value={timeValue}
+                    onChange={(e) => {
+                      const parsed = parseTimeInput(e.target.value);
+                      if (parsed) updateRule(id, { hour: parsed.hour, minute: parsed.minute });
+                    }}
+                    disabled={isSaving || !cfg.enabled}
+                  />
+                </label>
+              </div>
+
+              <label className="notif-rule-field notif-rule-field-message">
+                Message
+                <textarea
+                  value={cfg.message}
+                  onChange={(e) => updateRule(id, { message: e.target.value })}
+                  disabled={isSaving || !cfg.enabled}
+                  rows={2}
+                />
+              </label>
+
               <p className="notif-rule-shows">
-                <span className="notif-rule-shows-label">What it shows:</span> {rule.contentLabel}
+                <span className="notif-rule-shows-label">What it shows:</span> {def.contentLabel}
               </p>
+
+              <button
+                type="button"
+                className="notif-rule-reset"
+                onClick={() => resetRule(id)}
+                disabled={isSaving}
+              >
+                Reset to defaults
+              </button>
             </section>
           );
         })}
