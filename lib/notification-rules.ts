@@ -70,11 +70,30 @@ export const RULE_DEFINITIONS: Record<RuleId, RuleDefinition> = {
   }
 };
 
-// Last Mon-Fri of the given month (month is 0-indexed, JS Date convention).
+// All schedule matching is done in the operations timezone (Africa/Addis_Ababa,
+// GMT+3, no DST) so a rule set to "8:30 AM" actually fires at local 8:30 AM
+// even though the cPanel server clock runs in UTC. Override with the
+// NOTIFICATION_TIMEZONE_OFFSET env var (hours, can be negative or fractional).
+function getTimezoneOffsetHours(): number {
+  const raw = process.env.NOTIFICATION_TIMEZONE_OFFSET;
+  if (!raw) return 3;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : 3;
+}
+
+// Returns a Date whose UTC fields represent the wall-clock time in the
+// configured timezone. Use the .getUTC* methods on the returned Date to read
+// year/month/day/hour/minute as a human in that timezone would.
+function toLocal(now: Date): Date {
+  return new Date(now.getTime() + getTimezoneOffsetHours() * 60 * 60 * 1000);
+}
+
+// Last Mon-Fri of the given month (month is 0-indexed). Computed using UTC
+// arithmetic to avoid picking up the server's local timezone.
 export function lastWorkingDayOfMonth(year: number, month: number): number {
-  const lastDay = new Date(year, month + 1, 0).getDate();
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
   for (let day = lastDay; day >= 1; day--) {
-    const dow = new Date(year, month, day).getDay();
+    const dow = new Date(Date.UTC(year, month, day)).getUTCDay();
     if (dow !== 0 && dow !== 6) {
       return day;
     }
@@ -82,27 +101,31 @@ export function lastWorkingDayOfMonth(year: number, month: number): number {
   return lastDay;
 }
 
-// True if the rule's scheduled day matches `now` (Monday for weekly rule,
-// dayOfMonth for monthly rule, etc.) — does not consider time-of-day.
+// True if the rule's scheduled day matches `now` in the operations timezone.
 export function ruleMatchesDay(rule: RuleDefinition, now: Date): boolean {
+  const local = toLocal(now);
   switch (rule.schedule.kind) {
     case "weekly":
-      return now.getDay() === rule.schedule.dayOfWeek;
+      return local.getUTCDay() === rule.schedule.dayOfWeek;
     case "monthly":
-      return now.getDate() === rule.schedule.dayOfMonth;
+      return local.getUTCDate() === rule.schedule.dayOfMonth;
     case "lastWorkingDay":
-      return now.getDate() === lastWorkingDayOfMonth(now.getFullYear(), now.getMonth());
+      return (
+        local.getUTCDate() === lastWorkingDayOfMonth(local.getUTCFullYear(), local.getUTCMonth())
+      );
     default:
       return false;
   }
 }
 
 // True if `now` falls within the rule's [hh:mm, hh:mm + windowMinutes) window
-// AND the day matches. With a 15-min cron, the rule fires exactly once on its
-// scheduled day in the first cron run after its scheduled time-of-day.
+// AND the day matches — all evaluated in the operations timezone. With a
+// 15-min cron, the rule fires exactly once on its scheduled day in the first
+// cron run after its scheduled time-of-day.
 export function ruleMatchesNow(rule: RuleDefinition, now: Date, windowMinutes = 15): boolean {
   if (!ruleMatchesDay(rule, now)) return false;
-  const minutesIntoDay = now.getHours() * 60 + now.getMinutes();
+  const local = toLocal(now);
+  const minutesIntoDay = local.getUTCHours() * 60 + local.getUTCMinutes();
   const ruleMinutesIntoDay =
     "hour" in rule.schedule ? rule.schedule.hour * 60 + rule.schedule.minute : 0;
   return (
