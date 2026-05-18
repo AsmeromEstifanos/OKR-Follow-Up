@@ -51,7 +51,7 @@ function parseTimeInput(value: string): { hour: number; minute: number } | null 
   return { hour, minute };
 }
 
-export default function NotificationSettingsPage(): JSX.Element {
+export default function NotificationSettingsSection(): JSX.Element {
   const userEmail = useCurrentUserEmail();
   const [settings, setSettings] = useState<NotificationSettings>(() => buildFallbackSettings());
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -127,21 +127,14 @@ export default function NotificationSettingsPage(): JSX.Element {
   }
 
   if (isLoading) {
-    return (
-      <div className="page-container">
-        <p className="meta">Loading notification settings…</p>
-      </div>
-    );
+    return <p className="meta">Loading notification settings…</p>;
   }
 
   return (
-    <div className="page-container">
-      <header className="section-header">
-        <h2>Notification Settings</h2>
-      </header>
+    <>
       <p className="meta">
-        Enable, schedule, and word the automated reminder emails the OKR system sends. The scheduler runs every 15 minutes
-        and dispatches each enabled rule once on its configured day at the configured time.
+        Enable, schedule, and word the automated reminder emails the OKR system sends. The scheduler runs
+        every 15 minutes and dispatches each enabled rule once on its configured day at the configured time.
       </p>
 
       {error ? <p className="message danger">{error}</p> : null}
@@ -246,6 +239,6 @@ export default function NotificationSettingsPage(): JSX.Element {
           {isSaving ? "Saving…" : "Save changes"}
         </button>
       </div>
-    </div>
+    </>
   );
 }

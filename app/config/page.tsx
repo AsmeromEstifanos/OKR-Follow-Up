@@ -1,10 +1,21 @@
 "use client";
 
+import NotificationSettingsSection from "@/app/notification-settings-section";
 import useCurrentUserEmail from "@/app/use-current-user-email";
 import OwnerInput from "@/app/owner-input";
 import { apiPath } from "@/lib/base-path";
 import type { AppConfig } from "@/lib/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
+
+type TabId = "admins" | "fields" | "rag" | "ventures" | "notifications";
+
+const TABS: { id: TabId; label: string }[] = [
+  { id: "admins", label: "Admins" },
+  { id: "fields", label: "Field Options" },
+  { id: "rag", label: "RAG" },
+  { id: "ventures", label: "Ventures" },
+  { id: "notifications", label: "Notifications" }
+];
 
 type ApiError = {
   error?: string;
@@ -86,24 +97,37 @@ function OptionEditor({
         <input
           value={addValue}
           onChange={(event) => onAddValueChange(event.target.value)}
-          placeholder={`Add ${title} option`}
+          placeholder="New option"
           disabled={disabled}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              onAdd();
+            }
+          }}
         />
         <button type="button" className="btn btn-add" onClick={onAdd} disabled={disabled}>
           Add
         </button>
       </div>
-      <div className="config-option-list">
+      <ul className="config-option-list">
         {options.map((value) => (
-          <div key={value} className="config-inline-row">
+          <li key={value} className="config-option-row">
             <span>{value}</span>
-            <button type="button" className="btn btn-danger" onClick={() => onRemove(value)} disabled={disabled}>
-              Remove
+            <button
+              type="button"
+              className="config-remove-btn"
+              onClick={() => onRemove(value)}
+              disabled={disabled}
+              aria-label={`Remove ${value}`}
+              title="Remove"
+            >
+              ×
             </button>
-          </div>
+          </li>
         ))}
-        {options.length === 0 ? <p className="meta">No options configured.</p> : null}
-      </div>
+        {options.length === 0 ? <li className="meta">No options configured.</li> : null}
+      </ul>
     </article>
   );
 }
@@ -112,6 +136,7 @@ export default function ConfigPage(): JSX.Element {
   const currentUserEmail = useCurrentUserEmail();
   const normalizedCurrentUser = normalizeEmail(currentUserEmail);
 
+  const [activeTab, setActiveTab] = useState<TabId>("admins");
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [state, setState] = useState<ApiActionState>("loading");
   const [message, setMessage] = useState<string>("");
@@ -493,8 +518,24 @@ export default function ConfigPage(): JSX.Element {
   return (
     <div>
       <h1 className="page-title">Configuration</h1>
-      <p className="subtitle">Manage admins, dropdown options, RAG ranges, ventures, and departments.</p>
+      <p className="subtitle">Manage admins, dropdown options, RAG ranges, ventures, departments, and notifications.</p>
 
+      <nav className="config-tabs" role="tablist" aria-label="Configuration sections">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            className={`config-tab ${activeTab === tab.id ? "config-tab-active" : ""}`}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+
+      {activeTab === "admins" && (
       <section className="section">
         <h2>Admin Users</h2>
         <div className="config-grid">
@@ -527,14 +568,23 @@ export default function ConfigPage(): JSX.Element {
                 {admin.displayName ? `${admin.displayName} ` : ""}
                 <span className="meta">({admin.email})</span>
               </span>
-              <button className="btn btn-danger" type="button" onClick={() => void removeAdmin(admin.email)} disabled={isBusy}>
-                Remove
+              <button
+                className="config-remove-btn"
+                type="button"
+                onClick={() => void removeAdmin(admin.email)}
+                disabled={isBusy}
+                aria-label={`Remove admin ${admin.email}`}
+                title="Remove admin"
+              >
+                ×
               </button>
             </div>
           ))}
         </div>
       </section>
+      )}
 
+      {activeTab === "fields" && (
       <section className="section">
         <h2>Dropdown Field Options</h2>
         <div className="config-option-grid">
@@ -617,7 +667,9 @@ export default function ConfigPage(): JSX.Element {
           </button>
         </div>
       </section>
+      )}
 
+      {activeTab === "rag" && (
       <section className="section">
         <h2>RAG Definition</h2>
         <div className="config-grid">
@@ -637,7 +689,9 @@ export default function ConfigPage(): JSX.Element {
           </button>
         </div>
       </section>
+      )}
 
+      {activeTab === "ventures" && (
       <section className="section">
         <h2>Ventures</h2>
         <div className="config-grid">
@@ -670,8 +724,15 @@ export default function ConfigPage(): JSX.Element {
                   <div>
                     <h3>{venture.name}</h3>
                   </div>
-                  <button className="btn btn-danger" type="button" onClick={() => void removeVenture(venture.ventureKey)} disabled={isBusy}>
-                    Delete
+                  <button
+                    className="config-remove-btn"
+                    type="button"
+                    onClick={() => void removeVenture(venture.ventureKey)}
+                    disabled={isBusy}
+                    aria-label={`Delete venture ${venture.name}`}
+                    title="Delete venture"
+                  >
+                    ×
                   </button>
                 </div>
 
@@ -684,12 +745,14 @@ export default function ConfigPage(): JSX.Element {
                       <li key={department.departmentKey}>
                         <span>{department.name}</span>
                         <button
-                          className="btn btn-danger"
+                          className="config-remove-btn"
                           type="button"
                           onClick={() => void removeDepartment(venture.ventureKey, department.departmentKey)}
                           disabled={isBusy}
+                          aria-label={`Delete department ${department.name}`}
+                          title="Delete department"
                         >
-                          Delete
+                          ×
                         </button>
                       </li>
                     ))}
@@ -723,6 +786,14 @@ export default function ConfigPage(): JSX.Element {
           </div>
         )}
       </section>
+      )}
+
+      {activeTab === "notifications" && (
+      <section className="section">
+        <h2>Notifications</h2>
+        <NotificationSettingsSection />
+      </section>
+      )}
 
       {message ? <p className="message">{message}</p> : null}
       {error ? <p className="message danger">{error}</p> : null}

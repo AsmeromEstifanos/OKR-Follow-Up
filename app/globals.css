@@ -1657,8 +1657,84 @@ textarea {
 
 .config-option-list {
   display: grid;
-  gap: 0.4rem;
+  gap: 0.25rem;
   align-content: start;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.config-option-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0.3rem 0.6rem;
+  background: #f6f8f7;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
+.config-remove-btn {
+  background: transparent;
+  border: none;
+  color: #94a3a8;
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 4px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.config-remove-btn:hover:not(:disabled) {
+  background: #fdecea;
+  color: var(--danger);
+}
+
+.config-remove-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.config-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 1rem 0 1.25rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.config-tab {
+  background: none;
+  border: none;
+  padding: 0.5rem 0.95rem;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 6px 6px 0 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.12s ease, border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.config-tab:hover {
+  color: var(--ink);
+  background: #f4f8f6;
+}
+
+.config-tab-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: transparent;
 }
 
 .kr-edit-grid {
