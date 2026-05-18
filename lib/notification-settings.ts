@@ -1,40 +1,24 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { RULE_IDS, type RuleId } from "@/lib/notification-rules";
 
 export type NotificationSettings = {
-  preDeadline: {
-    enabled: boolean;
-    daysBefore: number;
-    progressThreshold: number;
-  };
-  overdueCheckIn: {
-    enabled: boolean;
-  };
-  weeklyDigest: {
-    enabled: boolean;
-    dayOfWeek: number;
-  };
-  atRiskAlert: {
-    enabled: boolean;
-  };
+  rules: Record<RuleId, { enabled: boolean }>;
 };
 
+function defaultRules(): Record<RuleId, { enabled: boolean }> {
+  // Default everything to disabled — admin opts each rule in deliberately.
+  return RULE_IDS.reduce(
+    (acc, id) => {
+      acc[id] = { enabled: false };
+      return acc;
+    },
+    {} as Record<RuleId, { enabled: boolean }>
+  );
+}
+
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
-  preDeadline: {
-    enabled: true,
-    daysBefore: 3,
-    progressThreshold: 80
-  },
-  overdueCheckIn: {
-    enabled: true
-  },
-  weeklyDigest: {
-    enabled: false,
-    dayOfWeek: 1
-  },
-  atRiskAlert: {
-    enabled: true
-  }
+  rules: defaultRules()
 };
 
 function getSettingsFilePath(): string {
@@ -42,36 +26,23 @@ function getSettingsFilePath(): string {
   return path.join(dataDir, "notification-settings.json");
 }
 
-function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
-  const num = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(num)) return fallback;
-  return Math.max(min, Math.min(max, Math.round(num)));
-}
-
 function normalize(input: unknown): NotificationSettings {
-  const raw = (input ?? {}) as Partial<NotificationSettings>;
-  return {
-    preDeadline: {
-      enabled: Boolean(raw.preDeadline?.enabled ?? DEFAULT_NOTIFICATION_SETTINGS.preDeadline.enabled),
-      daysBefore: clampNumber(raw.preDeadline?.daysBefore, 1, 30, DEFAULT_NOTIFICATION_SETTINGS.preDeadline.daysBefore),
-      progressThreshold: clampNumber(
-        raw.preDeadline?.progressThreshold,
-        0,
-        100,
-        DEFAULT_NOTIFICATION_SETTINGS.preDeadline.progressThreshold
-      )
-    },
-    overdueCheckIn: {
-      enabled: Boolean(raw.overdueCheckIn?.enabled ?? DEFAULT_NOTIFICATION_SETTINGS.overdueCheckIn.enabled)
-    },
-    weeklyDigest: {
-      enabled: Boolean(raw.weeklyDigest?.enabled ?? DEFAULT_NOTIFICATION_SETTINGS.weeklyDigest.enabled),
-      dayOfWeek: clampNumber(raw.weeklyDigest?.dayOfWeek, 0, 6, DEFAULT_NOTIFICATION_SETTINGS.weeklyDigest.dayOfWeek)
-    },
-    atRiskAlert: {
-      enabled: Boolean(raw.atRiskAlert?.enabled ?? DEFAULT_NOTIFICATION_SETTINGS.atRiskAlert.enabled)
+  const raw = (input ?? {}) as Partial<NotificationSettings> & Record<string, unknown>;
+  const rawRules = (raw.rules ?? {}) as Partial<Record<RuleId, { enabled?: unknown }>>;
+
+  const rules = defaultRules();
+  for (const id of RULE_IDS) {
+    const entry = rawRules[id];
+    if (entry && typeof entry === "object" && "enabled" in entry) {
+      rules[id] = { enabled: Boolean(entry.enabled) };
     }
-  };
+  }
+
+  // Tolerate the older settings shape (preDeadline/overdueCheckIn/atRiskAlert/
+  // weeklyDigest, or fromEmail) by ignoring it — values aren't migrated, the
+  // admin just re-opts into the new rule list once.
+
+  return { rules };
 }
 
 export async function readNotificationSettings(): Promise<NotificationSettings> {

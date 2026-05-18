@@ -3908,6 +3908,48 @@ textarea {
   margin-top: 1rem;
 }
 
+.notif-rules-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.notif-rule-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.notif-rule-schedule {
+  font-size: 0.78rem;
+  color: var(--accent);
+  font-weight: 600;
+  margin-top: 0.15rem;
+}
+
+.notif-rule-message {
+  font-size: 0.85rem;
+  font-style: italic;
+  color: var(--ink);
+  margin: 0.6rem 0 0.4rem;
+  line-height: 1.4;
+}
+
+.notif-rule-shows {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.notif-rule-shows-label {
+  font-weight: 600;
+  color: var(--ink);
+}
+
 .ai-options-row {
   display: flex;
   flex-wrap: wrap;

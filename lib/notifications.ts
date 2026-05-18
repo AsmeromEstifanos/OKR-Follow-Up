@@ -1,4 +1,5 @@
 import type { KeyResult, Objective } from "@/lib/types";
+import { RULE_DEFINITIONS, type RuleId } from "@/lib/notification-rules";
 
 const GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0";
 
@@ -105,16 +106,21 @@ export type SendRemindersResult = {
   sentItems?: SentEmailRecord[];
 };
 
+// One section per rule that has content for a given owner. Each rule produces
+// its own table layout — see the section builders below.
+export type RuleSection = {
+  ruleId: RuleId;
+  objectives: Objective[];
+  krs: KeyResult[];
+};
+
 export type AggregatedReminder = {
   ownerName: string;
-  preDeadlineKrs: KeyResult[];
-  overdueCheckInKrs: KeyResult[];
-  atRiskObjectives: Objective[];
-  digestObjectives: Objective[];
-  digestKrs: KeyResult[];
+  sections: RuleSection[];
 };
 
 const SECTION_HEADING = 'style="color:#183038;font-size:1.05rem;margin:22px 0 8px"';
+const SECTION_INTRO = 'style="color:#4f6770;margin:0 0 8px;font-size:0.875rem"';
 const TABLE_OPEN =
   '<table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px #0002">';
 const CELL = 'style="padding:8px 12px"';
@@ -126,46 +132,19 @@ function thRow(color: string, headers: string[]): string {
   return `<thead><tr style="background:${color};color:#fff">${cells}</tr></thead>`;
 }
 
-function overdueSection(krs: KeyResult[]): string {
-  if (krs.length === 0) return "";
-  const rows = krs
-    .map(
-      (kr) =>
-        `<tr style="border-bottom:1px solid #e2e8f0">
-          <td ${CELL}>${kr.title}</td>
-          <td ${CELL}>${kr.krCode ?? kr.krKey}</td>
-          <td ${CELL}>${kr.progressPct}%</td>
-          <td ${CELL}>${kr.dueDate ?? "—"}</td>
-        </tr>`
-    )
-    .join("");
-  return `<h2 ${SECTION_HEADING}>Overdue check-ins (${krs.length})</h2>
-  <p style="color:#4f6770;margin:0 0 8px;font-size:0.875rem">These key results are missing a check-in:</p>
-  ${TABLE_OPEN}${thRow("#0f766e", ["Key Result", "Code", "Progress", "Due Date"])}<tbody>${rows}</tbody></table>`;
+function ragColor(rag: string): string {
+  if (rag === "Red") return "#9a2d25";
+  if (rag === "Amber") return "#a55316";
+  return "#1e6a3d";
 }
 
-function preDeadlineSection(krs: KeyResult[]): string {
-  if (krs.length === 0) return "";
-  const rows = krs
-    .map((kr) => {
-      const daysLeft = kr.dueDate
-        ? Math.max(0, Math.ceil((new Date(kr.dueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
-        : "—";
-      return `<tr style="border-bottom:1px solid #e2e8f0">
-        <td ${CELL}>${kr.title}</td>
-        <td ${CELL}>${kr.krCode ?? kr.krKey}</td>
-        <td ${CELL}>${kr.progressPct}%</td>
-        <td ${CELL}>${kr.dueDate ?? "—"}</td>
-        <td style="padding:8px 12px;font-weight:700">${daysLeft}</td>
-      </tr>`;
-    })
-    .join("");
-  return `<h2 ${SECTION_HEADING}>Upcoming deadlines (${krs.length})</h2>
-  <p style="color:#4f6770;margin:0 0 8px;font-size:0.875rem">These key results are due soon and below target:</p>
-  ${TABLE_OPEN}${thRow("#a55316", ["Key Result", "Code", "Progress", "Due Date", "Days Left"])}<tbody>${rows}</tbody></table>`;
+function statusLabel(obj: Objective): string {
+  if (obj.rag === "Red") return "At Risk";
+  if (obj.rag === "Amber") return "Needs Attention";
+  return "On Track";
 }
 
-function atRiskSection(objectives: Objective[]): string {
+function objectivesProgressTable(objectives: Objective[], headerColor: string): string {
   if (objectives.length === 0) return "";
   const rows = objectives
     .map(
@@ -173,30 +152,34 @@ function atRiskSection(objectives: Objective[]): string {
         `<tr style="border-bottom:1px solid #e2e8f0">
           <td ${CELL}>${obj.title}</td>
           <td ${CELL}>${obj.objectiveCode ?? obj.objectiveKey}</td>
-          <td style="padding:8px 12px;color:#a55316;font-weight:700">${obj.rag}</td>
           <td ${CELL}>${obj.progressPct}%</td>
+          <td style="padding:8px 12px;font-weight:700;color:${ragColor(obj.rag)}">${obj.rag}</td>
+          <td ${CELL}>${statusLabel(obj)}</td>
         </tr>`
     )
     .join("");
-  return `<h2 ${SECTION_HEADING}>At-risk objectives (${objectives.length})</h2>
-  <p style="color:#4f6770;margin:0 0 8px;font-size:0.875rem">These objectives are rated Red or Amber:</p>
-  ${TABLE_OPEN}${thRow("#9a2d25", ["Objective", "Code", "RAG", "Progress"])}<tbody>${rows}</tbody></table>`;
+  return `${TABLE_OPEN}${thRow(headerColor, ["Objective", "Code", "Progress", "RAG", "Status"])}<tbody>${rows}</tbody></table>`;
 }
 
-function digestSection(objectives: Objective[], krs: KeyResult[]): string {
-  if (objectives.length === 0 && krs.length === 0) return "";
-  const objRows = objectives
+function objectivesRagTable(objectives: Objective[], headerColor: string): string {
+  if (objectives.length === 0) return "";
+  const rows = objectives
     .map(
       (obj) =>
         `<tr style="border-bottom:1px solid #e2e8f0">
           <td ${CELL}>${obj.title}</td>
           <td ${CELL}>${obj.objectiveCode ?? obj.objectiveKey}</td>
           <td ${CELL}>${obj.progressPct}%</td>
-          <td style="padding:8px 12px;font-weight:700;color:${obj.rag === "Red" ? "#9a2d25" : obj.rag === "Amber" ? "#a55316" : "#1e6a3d"}">${obj.rag}</td>
+          <td style="padding:8px 12px;font-weight:700;color:${ragColor(obj.rag)}">${obj.rag}</td>
         </tr>`
     )
     .join("");
-  const krRows = krs
+  return `${TABLE_OPEN}${thRow(headerColor, ["Objective", "Code", "Progress", "RAG"])}<tbody>${rows}</tbody></table>`;
+}
+
+function krsProgressTable(krs: KeyResult[], headerColor: string): string {
+  if (krs.length === 0) return "";
+  const rows = krs
     .map(
       (kr) =>
         `<tr style="border-bottom:1px solid #e2e8f0">
@@ -207,54 +190,77 @@ function digestSection(objectives: Objective[], krs: KeyResult[]): string {
         </tr>`
     )
     .join("");
-  const objTable =
-    objectives.length > 0
-      ? `<h3 style="color:#183038;font-size:0.95rem;margin:14px 0 6px">Your objectives (${objectives.length})</h3>
-         ${TABLE_OPEN}${thRow("#0f766e", ["Title", "Code", "Progress", "RAG"])}<tbody>${objRows}</tbody></table>`
-      : "";
-  const krTable =
-    krs.length > 0
-      ? `<h3 style="color:#183038;font-size:0.95rem;margin:14px 0 6px">Your key results (${krs.length})</h3>
-         ${TABLE_OPEN}${thRow("#0f766e", ["Title", "Code", "Progress", "Due"])}<tbody>${krRows}</tbody></table>`
-      : "";
-  return `<h2 ${SECTION_HEADING}>Weekly snapshot</h2>${objTable}${krTable}`;
+  return `${TABLE_OPEN}${thRow(headerColor, ["Key Result", "Code", "Progress", "Due"])}<tbody>${rows}</tbody></table>`;
+}
+
+// Each rule renders differently based on the "What it shows" column from the
+// notification settings table.
+function renderSection(section: RuleSection): string {
+  const rule = RULE_DEFINITIONS[section.ruleId];
+  const heading = `<h2 ${SECTION_HEADING}>${rule.label}</h2>
+  <p ${SECTION_INTRO}>${rule.message}</p>`;
+
+  switch (section.ruleId) {
+    case "weeklyDigest":
+      return heading + objectivesProgressTable(section.objectives, "#0f766e");
+    case "endOfWeekReflection":
+      return (
+        heading +
+        objectivesRagTable(section.objectives, "#0f766e") +
+        (section.krs.length > 0
+          ? `<h3 style="color:#183038;font-size:0.95rem;margin:14px 0 6px">Your key results (${section.krs.length})</h3>` +
+            krsProgressTable(section.krs, "#0f766e")
+          : "")
+      );
+    case "midMonthCheckpoint":
+      return (
+        heading +
+        objectivesRagTable(section.objectives, "#a55316") +
+        (section.krs.length > 0
+          ? `<h3 style="color:#183038;font-size:0.95rem;margin:14px 0 6px">Related key results (${section.krs.length})</h3>` +
+            krsProgressTable(section.krs, "#a55316")
+          : "")
+      );
+    case "thirdWeekFocus":
+      return heading + objectivesProgressTable(section.objectives, "#9a2d25");
+    case "monthEndReadiness":
+      return (
+        heading +
+        objectivesRagTable(section.objectives, "#0f766e") +
+        (section.krs.length > 0
+          ? `<h3 style="color:#183038;font-size:0.95rem;margin:14px 0 6px">Key results (${section.krs.length})</h3>` +
+            krsProgressTable(section.krs, "#0f766e")
+          : "")
+      );
+    default:
+      return heading;
+  }
 }
 
 export function buildAggregatedEmail(
   ownerEmail: string,
   reminder: AggregatedReminder
 ): { subject: string; html: string } {
-  const sections = [
-    overdueSection(reminder.overdueCheckInKrs),
-    preDeadlineSection(reminder.preDeadlineKrs),
-    atRiskSection(reminder.atRiskObjectives),
-    digestSection(reminder.digestObjectives, reminder.digestKrs)
-  ]
-    .filter(Boolean)
-    .join("");
-
-  const actionableCount =
-    reminder.overdueCheckInKrs.length +
-    reminder.preDeadlineKrs.length +
-    reminder.atRiskObjectives.length;
-
-  const subject =
-    actionableCount > 0
-      ? `Your OKR reminders — ${actionableCount} item${actionableCount === 1 ? "" : "s"} need attention`
-      : "Your weekly OKR digest";
-
-  const intro =
-    actionableCount > 0
-      ? "here is everything in your OKRs that needs attention right now."
-      : "here is a snapshot of your OKRs this week.";
+  const sectionsHtml = reminder.sections.map(renderSection).join("");
 
   const firstName = (reminder.ownerName.trim() || ownerEmail.split("@")[0]).split(/\s+/)[0];
+
+  // Subject: if exactly one rule fired, use its label; otherwise summarise.
+  const subject =
+    reminder.sections.length === 1
+      ? RULE_DEFINITIONS[reminder.sections[0].ruleId].label
+      : `OKR reminders — ${reminder.sections.length} update${reminder.sections.length === 1 ? "" : "s"}`;
+
+  const intro =
+    reminder.sections.length === 1
+      ? RULE_DEFINITIONS[reminder.sections[0].ruleId].message
+      : "here are the OKR updates that apply to you right now.";
 
   const html = `
 <div style="font-family:'Trebuchet MS',sans-serif;max-width:620px;margin:0 auto;padding:24px;background:#f7f6ef;border-radius:12px">
   <h1 style="color:#183038;font-size:1.3rem;margin-bottom:4px">OKR Follow-Up</h1>
   <p style="color:#4f6770;margin-top:0">Hi ${firstName}, ${intro}</p>
-  ${sections}
+  ${sectionsHtml}
   <p style="color:#4f6770;margin-top:20px;font-size:0.875rem">Open the OKR Follow-Up system to update progress, check in, or flag blockers.</p>
 </div>`;
 
@@ -281,13 +287,7 @@ export async function sendAggregatedReminders(
   const sentItems: SentEmailRecord[] = [];
 
   for (const [ownerEmail, reminder] of grouped) {
-    const hasContent =
-      reminder.preDeadlineKrs.length > 0 ||
-      reminder.overdueCheckInKrs.length > 0 ||
-      reminder.atRiskObjectives.length > 0 ||
-      reminder.digestObjectives.length > 0 ||
-      reminder.digestKrs.length > 0;
-
+    const hasContent = reminder.sections.length > 0;
     if (!ownerEmail || !ownerEmail.includes("@") || !hasContent) {
       skipped++;
       continue;

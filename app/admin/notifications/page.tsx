@@ -3,20 +3,23 @@
 import useCurrentUserEmail from "@/app/use-current-user-email";
 import { apiPath } from "@/lib/base-path";
 import type { NotificationSettings } from "@/lib/notification-settings";
+import { RULE_DEFINITIONS, RULE_IDS, type RuleId } from "@/lib/notification-rules";
 import { useEffect, useState } from "react";
 
-const DAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-
-const FALLBACK: NotificationSettings = {
-  preDeadline: { enabled: true, daysBefore: 3, progressThreshold: 80 },
-  overdueCheckIn: { enabled: true },
-  weeklyDigest: { enabled: false, dayOfWeek: 1 },
-  atRiskAlert: { enabled: true }
-};
+function buildFallbackSettings(): NotificationSettings {
+  const rules = RULE_IDS.reduce(
+    (acc, id) => {
+      acc[id] = { enabled: false };
+      return acc;
+    },
+    {} as Record<RuleId, { enabled: boolean }>
+  );
+  return { rules };
+}
 
 export default function NotificationSettingsPage(): JSX.Element {
   const userEmail = useCurrentUserEmail();
-  const [settings, setSettings] = useState<NotificationSettings>(FALLBACK);
+  const [settings, setSettings] = useState<NotificationSettings>(() => buildFallbackSettings());
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
@@ -75,6 +78,13 @@ export default function NotificationSettingsPage(): JSX.Element {
     }
   }
 
+  function toggleRule(id: RuleId, enabled: boolean): void {
+    setSettings((prev) => ({
+      ...prev,
+      rules: { ...prev.rules, [id]: { enabled } }
+    }));
+  }
+
   if (isLoading) {
     return (
       <div className="page-container">
@@ -89,158 +99,41 @@ export default function NotificationSettingsPage(): JSX.Element {
         <h2>Notification Settings</h2>
       </header>
       <p className="meta">
-        Configure which automated reminder emails the scheduled job sends. The scheduler hits the API once
-        daily; only enabled rules below will actually dispatch emails.
+        Enable the scheduled reminder emails the OKR system should send. The scheduler runs every 15 minutes
+        and dispatches each enabled rule once on its configured day at the configured time.
       </p>
 
       {error ? <p className="message danger">{error}</p> : null}
       {message ? <p className="message success">{message}</p> : null}
 
-      <div className="notif-settings-grid">
-        <section className="config-option-card">
-          <header className="notif-settings-row">
-            <h3 className="config-option-title">Pre-deadline reminders</h3>
-            <label className="notif-settings-toggle">
-              <input
-                type="checkbox"
-                checked={settings.preDeadline.enabled}
-                onChange={(e) =>
-                  setSettings((s) => ({
-                    ...s,
-                    preDeadline: { ...s.preDeadline, enabled: e.target.checked }
-                  }))
-                }
-                disabled={isSaving}
-              />
-              <span>Enabled</span>
-            </label>
-          </header>
-          <p className="meta">
-            Emails KR owners when their KR is due soon and progress is below the threshold.
-          </p>
-          <div className="notif-settings-fields">
-            <label>
-              Days before due date
-              <input
-                type="number"
-                min={1}
-                max={30}
-                value={settings.preDeadline.daysBefore}
-                onChange={(e) =>
-                  setSettings((s) => ({
-                    ...s,
-                    preDeadline: { ...s.preDeadline, daysBefore: Number(e.target.value) || 0 }
-                  }))
-                }
-                disabled={isSaving || !settings.preDeadline.enabled}
-              />
-            </label>
-            <label>
-              Progress threshold (%)
-              <input
-                type="number"
-                min={0}
-                max={100}
-                value={settings.preDeadline.progressThreshold}
-                onChange={(e) =>
-                  setSettings((s) => ({
-                    ...s,
-                    preDeadline: { ...s.preDeadline, progressThreshold: Number(e.target.value) || 0 }
-                  }))
-                }
-                disabled={isSaving || !settings.preDeadline.enabled}
-              />
-            </label>
-          </div>
-        </section>
-
-        <section className="config-option-card">
-          <header className="notif-settings-row">
-            <h3 className="config-option-title">Overdue check-in reminders</h3>
-            <label className="notif-settings-toggle">
-              <input
-                type="checkbox"
-                checked={settings.overdueCheckIn.enabled}
-                onChange={(e) =>
-                  setSettings((s) => ({
-                    ...s,
-                    overdueCheckIn: { enabled: e.target.checked }
-                  }))
-                }
-                disabled={isSaving}
-              />
-              <span>Enabled</span>
-            </label>
-          </header>
-          <p className="meta">
-            Emails owners whose KRs have no recent check-in (uses the system-wide check-in window).
-          </p>
-        </section>
-
-        <section className="config-option-card">
-          <header className="notif-settings-row">
-            <h3 className="config-option-title">At-risk objective alerts</h3>
-            <label className="notif-settings-toggle">
-              <input
-                type="checkbox"
-                checked={settings.atRiskAlert.enabled}
-                onChange={(e) =>
-                  setSettings((s) => ({
-                    ...s,
-                    atRiskAlert: { enabled: e.target.checked }
-                  }))
-                }
-                disabled={isSaving}
-              />
-              <span>Enabled</span>
-            </label>
-          </header>
-          <p className="meta">Emails owners of objectives currently rated Red or Amber.</p>
-        </section>
-
-        <section className="config-option-card">
-          <header className="notif-settings-row">
-            <h3 className="config-option-title">Weekly digest</h3>
-            <label className="notif-settings-toggle">
-              <input
-                type="checkbox"
-                checked={settings.weeklyDigest.enabled}
-                onChange={(e) =>
-                  setSettings((s) => ({
-                    ...s,
-                    weeklyDigest: { ...s.weeklyDigest, enabled: e.target.checked }
-                  }))
-                }
-                disabled={isSaving}
-              />
-              <span>Enabled</span>
-            </label>
-          </header>
-          <p className="meta">
-            Sends each owner a snapshot of their active objectives and KRs once a week.
-          </p>
-          <div className="notif-settings-fields">
-            <label>
-              Day of week
-              <select
-                value={settings.weeklyDigest.dayOfWeek}
-                onChange={(e) =>
-                  setSettings((s) => ({
-                    ...s,
-                    weeklyDigest: { ...s.weeklyDigest, dayOfWeek: Number(e.target.value) }
-                  }))
-                }
-                disabled={isSaving || !settings.weeklyDigest.enabled}
-              >
-                {DAY_LABELS.map((label, idx) => (
-                  <option key={idx} value={idx}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-        </section>
+      <div className="notif-rules-grid">
+        {RULE_IDS.map((id) => {
+          const rule = RULE_DEFINITIONS[id];
+          const enabled = settings.rules[id]?.enabled ?? false;
+          return (
+            <section key={id} className="config-option-card">
+              <header className="notif-rule-head">
+                <div>
+                  <h3 className="config-option-title">{rule.label}</h3>
+                  <div className="notif-rule-schedule">{rule.scheduleLabel}</div>
+                </div>
+                <label className="notif-settings-toggle">
+                  <input
+                    type="checkbox"
+                    checked={enabled}
+                    onChange={(e) => toggleRule(id, e.target.checked)}
+                    disabled={isSaving}
+                  />
+                  <span>{enabled ? "On" : "Off"}</span>
+                </label>
+              </header>
+              <p className="notif-rule-message">&ldquo;{rule.message}&rdquo;</p>
+              <p className="notif-rule-shows">
+                <span className="notif-rule-shows-label">What it shows:</span> {rule.contentLabel}
+              </p>
+            </section>
+          );
+        })}
       </div>
 
       <div className="notif-settings-save-row">
