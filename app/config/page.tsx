@@ -1,5 +1,6 @@
 "use client";
 
+import NotificationActionsSection from "@/app/notification-actions-section";
 import NotificationSettingsSection from "@/app/notification-settings-section";
 import useCurrentUserEmail from "@/app/use-current-user-email";
 import OwnerInput from "@/app/owner-input";
@@ -792,6 +793,7 @@ export default function ConfigPage(): JSX.Element {
       <section className="section">
         <h2>Notifications</h2>
         <NotificationSettingsSection />
+        <NotificationActionsSection />
       </section>
       )}
 

@@ -81,6 +81,21 @@ export default function ChatIconButton({ entityType, entityKey, entityLabel }: P
     }
   }, [currentUserEmail, entityType, entityKey]);
 
+  // Auto-open when the URL carries ?openChat=<type>::<key> matching this
+  // button — the sidebar bell uses this to deep-link straight into a thread.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const openChat = params.get("openChat");
+    if (!openChat) return;
+    if (openChat !== `${entityType}::${entityKey}`) return;
+    handleOpen();
+    params.delete("openChat");
+    const newSearch = params.toString();
+    const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : "") + window.location.hash;
+    window.history.replaceState({}, "", newUrl);
+  }, [entityType, entityKey, handleOpen]);
+
   const handleClose = useCallback((): void => {
     setIsOpen(false);
     if (currentUserEmail) {

@@ -1,6 +1,13 @@
 import { apiPath } from "@/lib/base-path";
 
-export type CommentCount = { count: number; latestAt: string };
+export type CommentCount = {
+  count: number;
+  latestAt: string;
+  entityType?: "objective" | "kr";
+  entityKey?: string;
+  title?: string;
+};
+
 type CountsMap = Record<string, CommentCount>;
 
 let cachedPromise: Promise<CountsMap> | null = null;
