@@ -8,6 +8,12 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.13] — 2026-05-19
+### Fixed
+- Mention debug info now returned in POST response body as `_mentionDebug` and shown in chat UI, making the failure visible without server log access
+
+---
+
 ## [0.5.12] — 2026-05-19
 ### Changed
 - Version label now always visible in sidebar — shows `v0.5.12` when collapsed, `Version 0.5.12` when expanded
