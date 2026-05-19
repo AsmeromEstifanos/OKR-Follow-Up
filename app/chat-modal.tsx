@@ -162,9 +162,7 @@ export default function ChatModal({
     const cursor = inputRef.current?.selectionStart ?? body.length;
     const before = body.slice(0, mentionStart);
     const after = body.slice(cursor);
-    // Use @firstname (first word of displayName) in the body so it reads naturally
-    const firstName = user.displayName.split(/\s+/)[0] ?? user.displayName;
-    const token = `@${firstName} `;
+    const token = `@${user.displayName} `;
     const next = before + token + after;
     setBody(next);
     const email = user.mail || user.principalName;
@@ -195,8 +193,8 @@ export default function ChatModal({
     setError("");
 
     try {
-      // Resolve any @tokens in the body to emails (covers both dropdown-selected
-      // and manually typed mentions).
+      // Resolve manually typed @mentions not already in the ref (dropdown fills the ref automatically).
+      // Extract the first word after each @ as the suggest query — good enough for partial name matching.
       const tokens = [...new Set((body.match(/@(\S+)/g) ?? []).map((t) => t.slice(1).toLowerCase()))];
       if (tokens.length > 0) {
         const results = await Promise.allSettled(

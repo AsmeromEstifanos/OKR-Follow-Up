@@ -8,6 +8,12 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.18] — 2026-05-19
+### Changed
+- @mention dropdown now inserts the full display name (e.g. `@Asmerom Estifanos`) instead of just the first name
+
+---
+
 ## [0.5.17] — 2026-05-19
 ### Fixed
 - Chat bubbles from other users now left-align correctly (text and bubble were centering due to missing `align-items: flex-start` on the content column)
