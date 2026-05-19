@@ -1,7 +1,6 @@
 "use client";
 
 import { getCommentCounts, invalidateCommentCounts } from "@/lib/comment-counts";
-import { withBasePath } from "@/lib/base-path";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -37,12 +36,11 @@ function getLastRead(entityType: string, entityKey: string, userEmail: string): 
 }
 
 function entityHref(entityType: string, entityKey: string): string {
-  // withBasePath ensures the root path is correct even when deployed under a
-  // sub-path like /okr — a bare "/" would produce "/okr/?…" (trailing slash)
-  // which Next.js cannot match and returns 404.
+  // Next.js <Link> prepends basePath automatically, so we use a plain root-
+  // relative path. Passing withBasePath("/") here would double the prefix
+  // (e.g. /okr/okr?…).
   const target = encodeURIComponent(`${entityType}::${entityKey}`);
-  const root = withBasePath("/");
-  return `${root}?openChat=${target}`;
+  return `/?openChat=${target}`;
 }
 
 function BellIcon(): JSX.Element {

@@ -121,7 +121,13 @@ function shouldAttachOperationProgress(rawUrl: string, method: string): boolean 
     }
 
     const normalizedPath = stripBasePath(parsed.pathname);
-    return normalizedPath.startsWith("/api/") && !normalizedPath.startsWith("/api/operation-progress/");
+    return (
+      normalizedPath.startsWith("/api/") &&
+      !normalizedPath.startsWith("/api/operation-progress/") &&
+      !normalizedPath.startsWith("/api/comments/") &&
+      !normalizedPath.startsWith("/api/notifications/") &&
+      !normalizedPath.startsWith("/api/ai/")
+    );
   } catch {
     return false;
   }
