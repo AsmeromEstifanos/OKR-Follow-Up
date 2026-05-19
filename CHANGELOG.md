@@ -8,6 +8,12 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.11] — 2026-05-19
+### Fixed
+- @mention emails not sending: `mentionedEmails` was read from a stale React state closure in `handleSubmit`. Replaced state with a `useRef` so the submit handler always sees the emails added during the current draft, regardless of render timing.
+
+---
+
 ## [0.5.10] — 2026-05-19
 ### Fixed
 - Mention notification misconfiguration now throws (instead of silently returning) so the exact missing piece (config vs fromEmail) surfaces in the chat UI error message

@@ -77,8 +77,8 @@ export default function ChatModal({
   const [mentionSuggestions, setMentionSuggestions] = useState<UserSuggestion[]>([]);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [mentionStart, setMentionStart] = useState(0);
-  // Track emails of all users mentioned in the current draft
-  const [mentionedEmails, setMentionedEmails] = useState<string[]>([]);
+  // Use a ref so handleSubmit always reads the latest value without closure staleness
+  const mentionedEmailsRef = useRef<string[]>([]);
   const mentionDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -167,10 +167,10 @@ export default function ChatModal({
     const token = `@${firstName} `;
     const next = before + token + after;
     setBody(next);
-    setMentionedEmails((prev) => {
-      const email = user.mail || user.principalName;
-      return prev.includes(email) ? prev : [...prev, email];
-    });
+    const email = user.mail || user.principalName;
+    if (email && !mentionedEmailsRef.current.includes(email)) {
+      mentionedEmailsRef.current = [...mentionedEmailsRef.current, email];
+    }
     setMentionQuery(null);
     setMentionSuggestions([]);
     requestAnimationFrame(() => {
@@ -206,7 +206,7 @@ export default function ChatModal({
           authorName: displayName,
           body: body.trim(),
           entityTitle: title,
-          mentionedEmails: mentionedEmails.filter((e) => e !== currentUserEmail)
+          mentionedEmails: mentionedEmailsRef.current.filter((e) => e !== currentUserEmail)
         })
       });
 
@@ -224,7 +224,7 @@ export default function ChatModal({
       setComments(next);
       onCommentsLoaded(next);
       setBody("");
-      setMentionedEmails([]);
+      mentionedEmailsRef.current = [];
       inputRef.current?.focus();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to post comment.");
