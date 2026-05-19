@@ -24,21 +24,28 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const comment = await createComment(body);
 
     const mentionedEmails: string[] = Array.isArray(body.mentionedEmails) ? body.mentionedEmails : [];
+    let mentionError: string | undefined;
     if (mentionedEmails.length > 0) {
-      void sendMentionNotifications({
-        mentionedEmails,
-        authorEmail: body.authorEmail ?? "",
-        authorName: body.authorName ?? body.authorEmail ?? "",
-        messageBody: body.body ?? "",
-        entityType: body.entityType ?? "",
-        entityKey: body.entityKey ?? "",
-        entityTitle: body.entityTitle ?? ""
-      }).catch(() => {
-        // best-effort — never fail the comment POST
-      });
+      try {
+        await sendMentionNotifications({
+          mentionedEmails,
+          authorEmail: body.authorEmail ?? "",
+          authorName: body.authorName ?? body.authorEmail ?? "",
+          messageBody: body.body ?? "",
+          entityType: body.entityType ?? "",
+          entityKey: body.entityKey ?? "",
+          entityTitle: body.entityTitle ?? ""
+        });
+      } catch (err: unknown) {
+        mentionError = err instanceof Error ? err.message : String(err);
+        console.error("[mention-notify]", mentionError);
+      }
     }
 
-    return NextResponse.json(comment, { status: 201 });
+    return NextResponse.json(
+      mentionError ? { ...comment, mentionError } : comment,
+      { status: 201 }
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to create comment.";
     return NextResponse.json({ error: message }, { status: 400 });

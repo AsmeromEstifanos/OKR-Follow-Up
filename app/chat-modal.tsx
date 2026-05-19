@@ -215,7 +215,11 @@ export default function ChatModal({
         throw new Error(payload.error ?? "Failed to post.");
       }
 
-      const created = (await response.json()) as Comment;
+      const created = (await response.json()) as Comment & { mentionError?: string };
+      if (created.mentionError) {
+        console.warn("[mention-notify]", created.mentionError);
+        setError(`Message posted, but mention notification failed: ${created.mentionError}`);
+      }
       const next = [...comments, created];
       setComments(next);
       onCommentsLoaded(next);

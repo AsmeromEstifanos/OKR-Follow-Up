@@ -8,6 +8,12 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.9] — 2026-05-19
+### Fixed
+- Mention notification errors are now awaited and surfaced: if the Graph email send fails, the exact error is returned in the POST response and shown in the chat UI, making it diagnosable without needing server logs
+
+---
+
 ## [0.5.8] — 2026-05-19
 ### Added
 - **@mention support in chat** — type `@` in the message box to get a live dropdown of Azure AD users; select with keyboard (↑↓, Enter/Tab) or click; the chosen user's first name is inserted as a highlighted `@token` in the message
