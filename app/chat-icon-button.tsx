@@ -4,7 +4,7 @@ import type { Comment } from "@/lib/types";
 import { commentCountKey, getCommentCounts } from "@/lib/comment-counts";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import useCurrentUserEmail from "./use-current-user-email";
 
 const ChatModal = dynamic(() => import("@/app/chat-modal"), { ssr: false });
@@ -32,10 +32,10 @@ function getLastRead(entityType: string, entityKey: string, userEmail: string): 
 
 const LAST_READ_EVENT = "okr-chat-last-read-updated";
 
-function setLastRead(entityType: string, entityKey: string, userEmail: string): void {
+function setLastRead(entityType: string, entityKey: string, userEmail: string, atTimestamp?: string): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(getLastReadKey(entityType, entityKey, userEmail), new Date().toISOString());
+    localStorage.setItem(getLastReadKey(entityType, entityKey, userEmail), atTimestamp ?? new Date().toISOString());
     window.dispatchEvent(new CustomEvent(LAST_READ_EVENT));
   } catch {
     // ignore
@@ -56,6 +56,9 @@ function ChatIconButtonInner({ entityType, entityKey, entityLabel }: Props): JSX
   const [isOpen, setIsOpen] = useState(false);
   const [totalCount, setTotalCount] = useState<number>(0);
   const [unreadCount, setUnreadCount] = useState<number>(0);
+  // Tracks the createdAt of the latest comment seen in the modal so we mark
+  // read up to that point (not "now"), leaving future messages as unread.
+  const latestCommentAtRef = useRef<string>("");
 
   // Load the shared comment-count map once and pick out this entity's total +
   // exact unread count based on per-user last-read timestamp.
@@ -104,14 +107,17 @@ function ChatIconButtonInner({ entityType, entityKey, entityLabel }: Props): JSX
 
   const handleClose = useCallback((): void => {
     setIsOpen(false);
-    if (currentUserEmail) {
-      setLastRead(entityType, entityKey, currentUserEmail);
+    if (currentUserEmail && latestCommentAtRef.current) {
+      setLastRead(entityType, entityKey, currentUserEmail, latestCommentAtRef.current);
       setUnreadCount(0);
     }
   }, [currentUserEmail, entityType, entityKey]);
 
   const handleCommentsLoaded = useCallback((comments: Comment[]): void => {
     setTotalCount(comments.length);
+    // Track the newest comment timestamp so close marks read up to here only.
+    const latest = comments.map((c) => c.createdAt).sort().at(-1) ?? "";
+    latestCommentAtRef.current = latest;
   }, []);
 
   const showBadge = totalCount > 0;
