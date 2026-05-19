@@ -239,9 +239,6 @@ export default function ChatModal({
       }
 
       const created = (await response.json()) as Comment & { _mentionDebug?: string };
-      if (created._mentionDebug && created._mentionDebug !== "no-mentions") {
-        setError(`mention-debug: ${created._mentionDebug}`);
-      }
       const next = [...comments, created];
       setComments(next);
       onCommentsLoaded(next);

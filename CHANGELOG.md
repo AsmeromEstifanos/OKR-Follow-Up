@@ -8,6 +8,12 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.16] — 2026-05-19
+### Changed
+- Removed all mention-debug logging and `_mentionDebug` field from chat POST response
+
+---
+
 ## [0.5.15] — 2026-05-19
 ### Fixed
 - @mention email not sent when the author mentions themselves — the client was filtering out the sender's own email before posting; removed that filter so self-mentions are delivered

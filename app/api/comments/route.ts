@@ -24,10 +24,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const comment = await createComment(body);
 
     const mentionedEmails: string[] = Array.isArray(body.mentionedEmails) ? body.mentionedEmails : [];
-    let mentionDebug: string;
-    if (mentionedEmails.length === 0) {
-      mentionDebug = "no-mentions";
-    } else {
+    if (mentionedEmails.length > 0) {
       try {
         await sendMentionNotifications({
           mentionedEmails,
@@ -38,13 +35,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           entityKey: body.entityKey ?? "",
           entityTitle: body.entityTitle ?? ""
         });
-        mentionDebug = `sent:${mentionedEmails.join(",")}`;
       } catch (err: unknown) {
-        mentionDebug = `error:${err instanceof Error ? err.message : String(err)}`;
+        console.error("[mention-notify]", err instanceof Error ? err.message : err);
       }
     }
 
-    return NextResponse.json({ ...comment, _mentionDebug: mentionDebug }, { status: 201 });
+    return NextResponse.json(comment, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to create comment.";
     return NextResponse.json({ error: message }, { status: 400 });
