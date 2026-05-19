@@ -8,6 +8,12 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.19] — 2026-05-19
+### Fixed
+- @mention dropdown: name and email now left-aligned within each row
+
+---
+
 ## [0.5.18] — 2026-05-19
 ### Changed
 - @mention dropdown now inserts the full display name (e.g. `@Asmerom Estifanos`) instead of just the first name
