@@ -13,6 +13,12 @@ type Props = {
   onCommentsLoaded: (comments: Comment[]) => void;
 };
 
+type UserSuggestion = {
+  displayName: string;
+  principalName: string;
+  mail: string;
+};
+
 function getInitials(name: string): string {
   return name
     .split(/\s+/)
@@ -35,6 +41,23 @@ function formatTime(iso: string): string {
     d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+// Render a comment body with @mentions highlighted
+function renderBody(text: string): JSX.Element {
+  // Match @word or @"multi word" patterns
+  const parts = text.split(/(@\S+)/g);
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.startsWith("@") ? (
+          <span key={i} className="chat-mention">{part}</span>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  );
+}
+
 export default function ChatModal({
   entityType,
   entityKey,
@@ -48,6 +71,16 @@ export default function ChatModal({
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  // @mention state
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionSuggestions, setMentionSuggestions] = useState<UserSuggestion[]>([]);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const [mentionStart, setMentionStart] = useState(0);
+  // Track emails of all users mentioned in the current draft
+  const [mentionedEmails, setMentionedEmails] = useState<string[]>([]);
+  const mentionDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -79,15 +112,84 @@ export default function ChatModal({
   // Close on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        if (mentionQuery !== null) {
+          setMentionQuery(null);
+        } else {
+          onClose();
+        }
+      }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
+  }, [onClose, mentionQuery]);
+
+  // Fetch suggestions when mentionQuery changes
+  useEffect(() => {
+    if (mentionQuery === null) {
+      setMentionSuggestions([]);
+      return;
+    }
+
+    if (mentionDebounceRef.current) clearTimeout(mentionDebounceRef.current);
+    mentionDebounceRef.current = setTimeout(async () => {
+      try {
+        const url = apiPath(`/api/users/suggest?q=${encodeURIComponent(mentionQuery)}`);
+        const res = await fetch(url);
+        if (res.ok) {
+          const users = (await res.json()) as UserSuggestion[];
+          setMentionSuggestions(users.slice(0, 8));
+          setMentionIndex(0);
+        }
+      } catch {
+        setMentionSuggestions([]);
+      }
+    }, 150);
+  }, [mentionQuery]);
+
+  function detectMention(value: string, cursor: number): void {
+    const before = value.slice(0, cursor);
+    const match = /@(\S*)$/.exec(before);
+    if (match) {
+      setMentionQuery(match[1]);
+      setMentionStart(match.index);
+    } else {
+      setMentionQuery(null);
+    }
+  }
+
+  function insertMention(user: UserSuggestion): void {
+    const cursor = inputRef.current?.selectionStart ?? body.length;
+    const before = body.slice(0, mentionStart);
+    const after = body.slice(cursor);
+    // Use @firstname (first word of displayName) in the body so it reads naturally
+    const firstName = user.displayName.split(/\s+/)[0] ?? user.displayName;
+    const token = `@${firstName} `;
+    const next = before + token + after;
+    setBody(next);
+    setMentionedEmails((prev) => {
+      const email = user.mail || user.principalName;
+      return prev.includes(email) ? prev : [...prev, email];
+    });
+    setMentionQuery(null);
+    setMentionSuggestions([]);
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      const pos = before.length + token.length;
+      inputRef.current?.setSelectionRange(pos, pos);
+    });
+  }
+
+  function handleTextareaChange(e: React.ChangeEvent<HTMLTextAreaElement>): void {
+    const value = e.target.value;
+    setBody(value);
+    detectMention(value, e.target.selectionStart);
+  }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
     if (!body.trim() || !currentUserEmail) return;
+    if (mentionQuery !== null && mentionSuggestions.length > 0) return;
 
     setIsSubmitting(true);
     setError("");
@@ -102,7 +204,9 @@ export default function ChatModal({
           entityKey,
           authorEmail: currentUserEmail,
           authorName: displayName,
-          body: body.trim()
+          body: body.trim(),
+          entityTitle: title,
+          mentionedEmails: mentionedEmails.filter((e) => e !== currentUserEmail)
         })
       });
 
@@ -116,6 +220,7 @@ export default function ChatModal({
       setComments(next);
       onCommentsLoaded(next);
       setBody("");
+      setMentionedEmails([]);
       inputRef.current?.focus();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to post comment.");
@@ -137,12 +242,32 @@ export default function ChatModal({
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>): void {
+    if (mentionQuery !== null && mentionSuggestions.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setMentionIndex((i) => (i + 1) % mentionSuggestions.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setMentionIndex((i) => (i - 1 + mentionSuggestions.length) % mentionSuggestions.length);
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        insertMention(mentionSuggestions[mentionIndex]);
+        return;
+      }
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       const form = e.currentTarget.closest("form");
       form?.requestSubmit();
     }
   }
+
+  const showMentionDropdown = mentionQuery !== null && mentionSuggestions.length > 0;
 
   return (
     <>
@@ -194,7 +319,7 @@ export default function ChatModal({
                         <span className="chat-msg-author">{comment.authorName || comment.authorEmail}</span>
                       )}
                       <div className="chat-bubble">
-                        <p className="chat-bubble-text">{comment.body}</p>
+                        <p className="chat-bubble-text">{renderBody(comment.body)}</p>
                         <div className="chat-bubble-meta">
                           <span className="chat-msg-time">{formatTime(comment.createdAt)}</span>
                           {isOwn && (
@@ -225,16 +350,46 @@ export default function ChatModal({
 
         {/* Input */}
         <form className="chat-input-area" onSubmit={handleSubmit}>
-          <textarea
-            ref={inputRef}
-            className="chat-input"
-            placeholder="Type a message… (Enter to send, Shift+Enter for new line)"
-            rows={2}
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={isSubmitting || !currentUserEmail}
-          />
+          <div className="chat-input-wrap">
+            {showMentionDropdown && (
+              <ul
+                className="mention-dropdown"
+                role="listbox"
+                aria-label="User suggestions"
+              >
+                {mentionSuggestions.map((user, i) => (
+                  <li
+                    key={user.principalName}
+                    role="option"
+                    aria-selected={i === mentionIndex}
+                    className={`mention-option${i === mentionIndex ? " mention-option-active" : ""}`}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      insertMention(user);
+                    }}
+                  >
+                    <span className="mention-avatar">{getInitials(user.displayName)}</span>
+                    <span className="mention-info">
+                      <span className="mention-name">{user.displayName}</span>
+                      <span className="mention-email">{user.mail}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <textarea
+              ref={inputRef}
+              className="chat-input"
+              placeholder="Type a message… (@ to mention, Enter to send)"
+              rows={2}
+              value={body}
+              onChange={handleTextareaChange}
+              onKeyDown={handleKeyDown}
+              disabled={isSubmitting || !currentUserEmail}
+              aria-autocomplete="list"
+              aria-expanded={showMentionDropdown}
+            />
+          </div>
           {error && <p className="chat-input-error">{error}</p>}
           <button
             type="submit"

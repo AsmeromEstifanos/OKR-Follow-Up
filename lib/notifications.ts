@@ -271,6 +271,57 @@ export function buildAggregatedEmail(
 // Sends one aggregated reminder email per owner, from `fromEmail` (a mailbox in
 // the tenant configured through NOTIFICATION_FROM_EMAIL). Returns notConfigured
 // when the Graph app credentials or sender mailbox are missing.
+export type MentionNotificationParams = {
+  mentionedEmails: string[];
+  authorEmail: string;
+  authorName: string;
+  messageBody: string;
+  entityType: string;
+  entityKey: string;
+  entityTitle: string;
+};
+
+// Sends a mention notification email to each mentioned user.
+// Uses NOTIFICATION_FROM_EMAIL as the sender (same as reminder emails).
+// Silently no-ops if Graph credentials or sender email are not configured.
+export async function sendMentionNotifications(params: MentionNotificationParams): Promise<void> {
+  const config = getGraphAppConfig();
+  const fromEmail = (process.env.NOTIFICATION_FROM_EMAIL ?? "").trim();
+  if (!config || !fromEmail) return;
+
+  const token = await acquireToken(config);
+  const { mentionedEmails, authorName, authorEmail, messageBody, entityType, entityKey, entityTitle } = params;
+
+  const entityLabel = entityType === "kr" ? "Key Result" : "Objective";
+  const chatUrl = `${process.env.NEXT_PUBLIC_REDIRECT_URI ?? ""}/?openChat=${encodeURIComponent(`${entityType}::${entityKey}`)}`;
+  const senderLabel = authorName || authorEmail.split("@")[0];
+
+  const subject = `${senderLabel} mentioned you in a discussion`;
+  const html = `
+<div style="font-family:'Trebuchet MS',sans-serif;max-width:580px;margin:0 auto;padding:24px;background:#f7f6ef;border-radius:12px">
+  <h1 style="color:#183038;font-size:1.2rem;margin-bottom:4px">OKR Follow-Up</h1>
+  <p style="color:#4f6770;margin-top:0"><strong>${escapeHtml(senderLabel)}</strong> mentioned you in a discussion.</p>
+  <div style="background:#fff;border-radius:8px;padding:14px 18px;margin:16px 0;border-left:4px solid #0f766e">
+    <div style="color:#4f6770;font-size:0.8rem;margin-bottom:4px">${escapeHtml(entityLabel)}: ${escapeHtml(entityTitle || entityKey)}</div>
+    <p style="color:#183038;margin:0;white-space:pre-wrap">${escapeHtml(messageBody)}</p>
+  </div>
+  <a href="${chatUrl}" style="display:inline-block;background:#0f766e;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:0.9rem">Open discussion</a>
+  <p style="color:#4f6770;margin-top:20px;font-size:0.8rem">You received this because you were mentioned. Reply directly in OKR Follow-Up.</p>
+</div>`;
+
+  await Promise.allSettled(
+    mentionedEmails.map((email) => sendGraphEmail(token, fromEmail, email, subject, html))
+  );
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 export async function sendAggregatedReminders(
   grouped: Map<string, AggregatedReminder>,
   fromEmail: string

@@ -8,6 +8,14 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.8] — 2026-05-19
+### Added
+- **@mention support in chat** — type `@` in the message box to get a live dropdown of Azure AD users; select with keyboard (↑↓, Enter/Tab) or click; the chosen user's first name is inserted as a highlighted `@token` in the message
+- Mentioned users receive an email notification (via Graph API, same sender as reminder emails) with the message preview and a direct link to open the discussion — fires asynchronously so it never delays posting
+- `@tokens` in existing messages are rendered with a teal highlight so mentions stand out visually
+
+---
+
 ## [0.5.7] — 2026-05-19
 ### Changed
 - Notification panel items now show department as first line (in accent color), OBJ/KR code as second line, title bold if unread
