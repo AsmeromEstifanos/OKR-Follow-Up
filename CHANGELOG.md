@@ -8,6 +8,13 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.14] — 2026-05-19
+### Fixed
+- @mention emails now send even when the user types `@name` manually (not via dropdown): at submit time all `@tokens` in the body are resolved to emails via `/api/users/suggest` before the POST, so only dropdown selection is no longer required
+- Restored email preview pane in Send Reminders dialog (Preview button → iframe showing the exact email each recipient will receive, with recipient switcher)
+
+---
+
 ## [0.5.13] — 2026-05-19
 ### Fixed
 - Mention debug info now returned in POST response body as `_mentionDebug` and shown in chat UI, making the failure visible without server log access

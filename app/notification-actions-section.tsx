@@ -54,6 +54,8 @@ export default function NotificationActionsSection(): JSX.Element {
   const [confirmStage, setConfirmStage] = useState<ConfirmStage>("idle");
   const [previewRecipients, setPreviewRecipients] = useState<ReminderRecipient[]>([]);
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
+  const [previewEmail, setPreviewEmail] = useState<string>("");
+  const [isEmailPreviewOpen, setIsEmailPreviewOpen] = useState(false);
   const [confirmError, setConfirmError] = useState<string>("");
   const [sendSummary, setSendSummary] = useState<string>("");
 
@@ -85,6 +87,8 @@ export default function NotificationActionsSection(): JSX.Element {
     setSendSummary("");
     setPreviewRecipients([]);
     setSelectedEmails(new Set());
+    setPreviewEmail("");
+    setIsEmailPreviewOpen(false);
 
     try {
       const response = await fetch(apiPath("/api/notifications/remind"), {
@@ -103,6 +107,7 @@ export default function NotificationActionsSection(): JSX.Element {
       const recipients = Array.isArray(payload.recipients) ? payload.recipients : [];
       setPreviewRecipients(recipients);
       setSelectedEmails(new Set(recipients.map((r) => r.email)));
+      setPreviewEmail(recipients[0]?.email ?? "");
       setConfirmStage("select");
     } catch {
       setConfirmError("Failed to load recipients.");
@@ -116,22 +121,45 @@ export default function NotificationActionsSection(): JSX.Element {
     setSendSummary("");
     setPreviewRecipients([]);
     setSelectedEmails(new Set());
+    setPreviewEmail("");
+    setIsEmailPreviewOpen(false);
   }
 
   function toggleRecipient(email: string): void {
     setSelectedEmails((prev) => {
       const next = new Set(prev);
-      if (next.has(email)) next.delete(email); else next.add(email);
+      if (next.has(email)) {
+        next.delete(email);
+      } else {
+        next.add(email);
+      }
+      if (!next.has(previewEmail)) {
+        setPreviewEmail(next.values().next().value ?? "");
+      }
       return next;
     });
   }
 
   function toggleAllRecipients(): void {
-    setSelectedEmails((prev) =>
-      prev.size === previewRecipients.length
-        ? new Set<string>()
-        : new Set(previewRecipients.map((r) => r.email))
-    );
+    setSelectedEmails((prev) => {
+      const next =
+        prev.size === previewRecipients.length
+          ? new Set<string>()
+          : new Set(previewRecipients.map((r) => r.email));
+      setPreviewEmail(next.values().next().value ?? "");
+      if (next.size === 0) setIsEmailPreviewOpen(false);
+      return next;
+    });
+  }
+
+  function openEmailPreview(): void {
+    const fallbackEmail = selectedEmails.values().next().value ?? "";
+    if (!previewEmail || !selectedEmails.has(previewEmail)) {
+      setPreviewEmail(fallbackEmail);
+    }
+    if (fallbackEmail) {
+      setIsEmailPreviewOpen(true);
+    }
   }
 
   async function handleConfirmedSend(): Promise<void> {
@@ -182,6 +210,9 @@ export default function NotificationActionsSection(): JSX.Element {
   }
 
   const allSelected = previewRecipients.length > 0 && selectedEmails.size === previewRecipients.length;
+  const selectedPreviewRecipients = previewRecipients.filter((r) => selectedEmails.has(r.email));
+  const activePreview =
+    selectedPreviewRecipients.find((r) => r.email === previewEmail) ?? selectedPreviewRecipients[0];
 
   return (
     <div className="notif-actions">
@@ -257,7 +288,7 @@ export default function NotificationActionsSection(): JSX.Element {
 
       {confirmStage !== "idle" && createPortal(
         <div className="notif-confirm-overlay" role="dialog" aria-modal="true">
-          <div className="notif-confirm-card">
+          <div className={`notif-confirm-card${isEmailPreviewOpen ? " notif-confirm-card-preview" : ""}`}>
             {confirmStage === "loading" && (
               <div className="notif-confirm-loading">
                 <span className="notif-log-spinner" aria-hidden="true" />
@@ -272,6 +303,34 @@ export default function NotificationActionsSection(): JSX.Element {
                   <p className="notif-confirm-error">{confirmError}</p>
                 ) : previewRecipients.length === 0 ? (
                   <p className="notif-confirm-empty">No one needs a reminder right now.</p>
+                ) : isEmailPreviewOpen && activePreview ? (
+                  <div className="notif-email-preview">
+                    <div className="notif-email-preview-toolbar">
+                      <label>
+                        Recipient
+                        <select
+                          value={activePreview.email}
+                          onChange={(e) => setPreviewEmail(e.target.value)}
+                        >
+                          {selectedPreviewRecipients.map((r) => (
+                            <option key={r.email} value={r.email}>
+                              {r.name || r.email}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    <div className="notif-email-preview-subject">
+                      <span>Subject</span>
+                      <strong>{activePreview.subject ?? ""}</strong>
+                    </div>
+                    <iframe
+                      className="notif-email-preview-frame"
+                      title={`Reminder email preview for ${activePreview.name || activePreview.email}`}
+                      sandbox=""
+                      srcDoc={activePreview.html ?? ""}
+                    />
+                  </div>
                 ) : (
                   <>
                     <button
@@ -290,7 +349,12 @@ export default function NotificationActionsSection(): JSX.Element {
                               checked={selectedEmails.has(recipient.email)}
                               onChange={() => toggleRecipient(recipient.email)}
                             />
-                            <span className="notif-confirm-recipient-name">{recipient.name}</span>
+                            <span className="notif-confirm-recipient-name" title={recipient.email}>
+                              {recipient.name || recipient.email}
+                            </span>
+                            {recipient.summary ? (
+                              <span className="notif-confirm-recipient-summary">{recipient.summary}</span>
+                            ) : null}
                           </label>
                         </li>
                       ))}
@@ -298,9 +362,30 @@ export default function NotificationActionsSection(): JSX.Element {
                   </>
                 )}
                 <div className="notif-confirm-actions">
-                  <button type="button" className="notif-confirm-cancel" onClick={closeConfirm}>
-                    {previewRecipients.length === 0 ? "Close" : "Cancel"}
-                  </button>
+                  {isEmailPreviewOpen ? (
+                    <button type="button" className="notif-confirm-cancel" onClick={() => setIsEmailPreviewOpen(false)}>
+                      Back
+                    </button>
+                  ) : (
+                    <button type="button" className="notif-confirm-cancel" onClick={closeConfirm}>
+                      {previewRecipients.length === 0 ? "Close" : "Cancel"}
+                    </button>
+                  )}
+                  {!isEmailPreviewOpen && previewRecipients.length > 0 && (
+                    <button
+                      type="button"
+                      className="notif-confirm-preview-btn"
+                      onClick={openEmailPreview}
+                      disabled={selectedEmails.size === 0}
+                    >
+                      Preview
+                    </button>
+                  )}
+                  {isEmailPreviewOpen && (
+                    <button type="button" className="notif-confirm-cancel" onClick={closeConfirm}>
+                      Cancel
+                    </button>
+                  )}
                   {previewRecipients.length > 0 && (
                     <button
                       type="button"

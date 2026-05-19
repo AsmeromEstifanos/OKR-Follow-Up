@@ -195,6 +195,29 @@ export default function ChatModal({
     setError("");
 
     try {
+      // Resolve any @tokens in the body to emails (covers both dropdown-selected
+      // and manually typed mentions).
+      const tokens = [...new Set((body.match(/@(\S+)/g) ?? []).map((t) => t.slice(1).toLowerCase()))];
+      if (tokens.length > 0) {
+        const results = await Promise.allSettled(
+          tokens.map((token) =>
+            fetch(apiPath(`/api/users/suggest?q=${encodeURIComponent(token)}`))
+              .then((r) => (r.ok ? (r.json() as Promise<UserSuggestion[]>) : []))
+              .catch(() => [] as UserSuggestion[])
+          )
+        );
+        results.forEach((result) => {
+          if (result.status === "fulfilled") {
+            result.value.forEach((user) => {
+              const email = user.mail || user.principalName;
+              if (email && !mentionedEmailsRef.current.includes(email)) {
+                mentionedEmailsRef.current = [...mentionedEmailsRef.current, email];
+              }
+            });
+          }
+        });
+      }
+
       const displayName = currentUserEmail.split("@")[0] ?? currentUserEmail;
       const response = await fetch(apiPath("/api/comments"), {
         method: "POST",
