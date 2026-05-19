@@ -8,6 +8,12 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.17] — 2026-05-19
+### Fixed
+- Chat bubbles from other users now left-align correctly (text and bubble were centering due to missing `align-items: flex-start` on the content column)
+
+---
+
 ## [0.5.16] — 2026-05-19
 ### Changed
 - Removed all mention-debug logging and `_mentionDebug` field from chat POST response
