@@ -30,10 +30,13 @@ function getLastRead(entityType: string, entityKey: string, userEmail: string): 
   }
 }
 
+const LAST_READ_EVENT = "okr-chat-last-read-updated";
+
 function setLastRead(entityType: string, entityKey: string, userEmail: string): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(getLastReadKey(entityType, entityKey, userEmail), new Date().toISOString());
+    window.dispatchEvent(new CustomEvent(LAST_READ_EVENT));
   } catch {
     // ignore
   }
@@ -81,11 +84,7 @@ function ChatIconButtonInner({ entityType, entityKey, entityLabel }: Props): JSX
 
   const handleOpen = useCallback((): void => {
     setIsOpen(true);
-    if (currentUserEmail) {
-      setLastRead(entityType, entityKey, currentUserEmail);
-      setUnreadCount(0);
-    }
-  }, [currentUserEmail, entityType, entityKey]);
+  }, []);
 
   // Auto-open when the URL carries ?openChat=<type>::<key> matching this
   // button. useSearchParams re-fires on every client-side navigation so the
@@ -113,7 +112,6 @@ function ChatIconButtonInner({ entityType, entityKey, entityLabel }: Props): JSX
 
   const handleCommentsLoaded = useCallback((comments: Comment[]): void => {
     setTotalCount(comments.length);
-    setUnreadCount(0);
   }, []);
 
   const showBadge = totalCount > 0;

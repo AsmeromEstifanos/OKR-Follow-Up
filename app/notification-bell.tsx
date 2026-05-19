@@ -109,6 +109,16 @@ export default function NotificationBell({ userEmail }: Props): JSX.Element {
     return () => clearInterval(interval);
   }, [loadUnread]);
 
+  // Re-check unread counts when any chat modal closes and writes its
+  // last-read timestamp (same-tab custom event dispatched by setLastRead).
+  useEffect(() => {
+    function handleLastRead(): void {
+      void loadUnread();
+    }
+    window.addEventListener("okr-chat-last-read-updated", handleLastRead);
+    return () => window.removeEventListener("okr-chat-last-read-updated", handleLastRead);
+  }, [loadUnread]);
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent): void {
       const target = event.target as Node;
