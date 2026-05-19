@@ -9,14 +9,16 @@ type Props = {
   userEmail: string;
 };
 
-type UnreadThread = {
+type ChatThread = {
   id: string;
   entityType: "objective" | "kr";
   entityKey: string;
   title: string;
   code: string;
   parentObjectiveCode?: string;
+  totalCount: number;
   newCount: number;
+  hasUnread: boolean;
   latestAt: string;
 };
 
@@ -61,27 +63,24 @@ function ChatBubbleIcon(): JSX.Element {
 
 export default function NotificationBell({ userEmail }: Props): JSX.Element {
   const [isOpen, setIsOpen] = useState(false);
-  const [unread, setUnread] = useState<UnreadThread[]>([]);
+  const [threads, setThreads] = useState<ChatThread[]>([]);
   const [panelPos, setPanelPos] = useState<{ top: number; left: number } | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const panelContentRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLButtonElement>(null);
 
-  const loadUnread = useCallback(async (): Promise<void> => {
+  const loadThreads = useCallback(async (): Promise<void> => {
     if (!userEmail) return;
     const counts = await getCommentCounts();
-    const items: UnreadThread[] = [];
+    const items: ChatThread[] = [];
 
     for (const [id, entry] of Object.entries(counts)) {
       if (entry.count === 0 || !entry.entityType || !entry.entityKey) continue;
       const lr = getLastRead(entry.entityType, entry.entityKey, userEmail);
-      // Compute exact unread count from timestamps. If lastRead is unset (user
-      // never opened the thread), every comment is unread.
       const timestamps = entry.timestamps ?? [];
       const newCount = lr
         ? timestamps.filter((t) => t > lr).length
         : entry.count;
-      if (newCount === 0) continue;
       items.push({
         id,
         entityType: entry.entityType,
@@ -89,35 +88,41 @@ export default function NotificationBell({ userEmail }: Props): JSX.Element {
         title: entry.title ?? entry.entityKey,
         code: entry.code ?? entry.entityKey,
         parentObjectiveCode: entry.parentObjectiveCode,
+        totalCount: entry.count,
         newCount,
+        hasUnread: newCount > 0,
         latestAt: entry.latestAt
       });
     }
 
-    items.sort((a, b) => b.latestAt.localeCompare(a.latestAt));
-    setUnread(items);
+    // Unread threads first, then sort by most recent activity within each group.
+    items.sort((a, b) => {
+      if (a.hasUnread !== b.hasUnread) return a.hasUnread ? -1 : 1;
+      return b.latestAt.localeCompare(a.latestAt);
+    });
+    setThreads(items);
   }, [userEmail]);
 
   // Refresh the chat-count cache periodically so the badge stays current even
   // if the user leaves a tab open for hours.
   useEffect(() => {
-    void loadUnread();
+    void loadThreads();
     const interval = setInterval(() => {
       invalidateCommentCounts();
-      void loadUnread();
+      void loadThreads();
     }, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [loadUnread]);
+  }, [loadThreads]);
 
   // Re-check unread counts when any chat modal closes and writes its
   // last-read timestamp (same-tab custom event dispatched by setLastRead).
   useEffect(() => {
     function handleLastRead(): void {
-      void loadUnread();
+      void loadThreads();
     }
     window.addEventListener("okr-chat-last-read-updated", handleLastRead);
     return () => window.removeEventListener("okr-chat-last-read-updated", handleLastRead);
-  }, [loadUnread]);
+  }, [loadThreads]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent): void {
@@ -139,7 +144,7 @@ export default function NotificationBell({ userEmail }: Props): JSX.Element {
       const rect = bellRef.current.getBoundingClientRect();
       setPanelPos({ top: rect.bottom + 8, left: rect.left });
       invalidateCommentCounts();
-      void loadUnread();
+      void loadThreads();
     }
     setIsOpen((prev) => !prev);
   }
@@ -150,7 +155,7 @@ export default function NotificationBell({ userEmail }: Props): JSX.Element {
     // destination page marks the thread as read when the modal opens.
   }
 
-  const totalUnreadMessages = unread.reduce((sum, t) => sum + t.newCount, 0);
+  const totalUnreadMessages = threads.reduce((sum, t) => sum + t.newCount, 0);
   const badgeLabel = totalUnreadMessages > 9 ? "9+" : String(totalUnreadMessages);
 
   return (
@@ -180,11 +185,11 @@ export default function NotificationBell({ userEmail }: Props): JSX.Element {
         >
           <div className="notif-panel-header">Chat notifications</div>
 
-          {unread.length === 0 ? (
-            <p className="notif-empty">No new chat messages.</p>
+          {threads.length === 0 ? (
+            <p className="notif-empty">No chat messages yet.</p>
           ) : (
             <ul className="notif-list">
-              {unread.map((thread) => {
+              {threads.map((thread) => {
                 const breadcrumb =
                   thread.entityType === "kr"
                     ? thread.parentObjectiveCode
@@ -192,7 +197,7 @@ export default function NotificationBell({ userEmail }: Props): JSX.Element {
                       : `KR ${thread.code}`
                     : `OBJ ${thread.code}`;
                 return (
-                  <li key={thread.id} className="notif-item">
+                  <li key={thread.id} className={`notif-item${thread.hasUnread ? " notif-item-unread" : ""}`}>
                     <Link
                       href={entityHref(thread.entityType, thread.entityKey)}
                       className="notif-chat-row"
@@ -203,11 +208,19 @@ export default function NotificationBell({ userEmail }: Props): JSX.Element {
                       </span>
                       <span className="notif-chat-text">
                         <span className="notif-chat-meta">{breadcrumb}</span>
-                        <span className="notif-chat-title">{thread.title}</span>
+                        <span className={`notif-chat-title${thread.hasUnread ? " notif-chat-title-unread" : ""}`}>
+                          {thread.title}
+                        </span>
                       </span>
-                      <span className="notif-chat-count" aria-label={`${thread.newCount} new messages`}>
-                        {thread.newCount > 9 ? "9+" : thread.newCount}
-                      </span>
+                      {thread.hasUnread ? (
+                        <span className="notif-chat-count notif-chat-count-unread" aria-label={`${thread.newCount} unread`}>
+                          {thread.newCount > 9 ? "9+" : thread.newCount}
+                        </span>
+                      ) : (
+                        <span className="notif-chat-count notif-chat-count-read" aria-label={`${thread.totalCount} messages`}>
+                          {thread.totalCount > 9 ? "9+" : thread.totalCount}
+                        </span>
+                      )}
                     </Link>
                   </li>
                 );
