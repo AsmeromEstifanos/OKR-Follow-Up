@@ -229,7 +229,7 @@ export default function ChatModal({
           authorName: displayName,
           body: body.trim(),
           entityTitle: title,
-          mentionedEmails: mentionedEmailsRef.current.filter((e) => e !== currentUserEmail)
+          mentionedEmails: mentionedEmailsRef.current
         })
       });
 

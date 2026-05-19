@@ -8,6 +8,12 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.15] — 2026-05-19
+### Fixed
+- @mention email not sent when the author mentions themselves — the client was filtering out the sender's own email before posting; removed that filter so self-mentions are delivered
+
+---
+
 ## [0.5.14] — 2026-05-19
 ### Fixed
 - @mention emails now send even when the user types `@name` manually (not via dropdown): at submit time all `@tokens` in the body are resolved to emails via `/api/users/suggest` before the POST, so only dropdown selection is no longer required
