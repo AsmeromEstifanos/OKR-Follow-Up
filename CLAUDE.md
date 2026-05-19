@@ -2,6 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Versioning
+
+Every commit with code changes must update three things together:
+1. `version` in `package.json` — semver: patch for bug fixes, minor for new features
+2. The fallback version string in `app/app-shell.tsx` (search `NEXT_PUBLIC_APP_VERSION` — two occurrences)
+3. A new entry in `CHANGELOG.md` under `## [x.y.z] — YYYY-MM-DD`
+
 ## Commands
 
 ```bash
