@@ -24,6 +24,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const comment = await createComment(body);
 
     const mentionedEmails: string[] = Array.isArray(body.mentionedEmails) ? body.mentionedEmails : [];
+    console.log("[mention-notify] mentionedEmails received:", JSON.stringify(mentionedEmails));
     let mentionError: string | undefined;
     if (mentionedEmails.length > 0) {
       try {

@@ -8,6 +8,14 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.12] — 2026-05-19
+### Changed
+- Version label now always visible in sidebar — shows `v0.5.12` when collapsed, `Version 0.5.12` when expanded
+### Fixed
+- Added server-side console logging throughout the mention-notify path to diagnose why emails aren't sending
+
+---
+
 ## [0.5.11] — 2026-05-19
 ### Fixed
 - @mention emails not sending: `mentionedEmails` was read from a stale React state closure in `handleSubmit`. Replaced state with a `useRef` so the submit handler always sees the emails added during the current draft, regardless of render timing.
