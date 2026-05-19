@@ -3,7 +3,8 @@
 import type { Comment } from "@/lib/types";
 import { commentCountKey, getCommentCounts } from "@/lib/comment-counts";
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import useCurrentUserEmail from "./use-current-user-email";
 
 const ChatModal = dynamic(() => import("@/app/chat-modal"), { ssr: false });
@@ -46,8 +47,9 @@ function ChatBubbleIcon(): JSX.Element {
   );
 }
 
-export default function ChatIconButton({ entityType, entityKey, entityLabel }: Props): JSX.Element {
+function ChatIconButtonInner({ entityType, entityKey, entityLabel }: Props): JSX.Element {
   const currentUserEmail = useCurrentUserEmail();
+  const searchParams = useSearchParams();
   const [isOpen, setIsOpen] = useState(false);
   const [totalCount, setTotalCount] = useState<number>(0);
   const [unreadCount, setUnreadCount] = useState<number>(0);
@@ -86,19 +88,20 @@ export default function ChatIconButton({ entityType, entityKey, entityLabel }: P
   }, [currentUserEmail, entityType, entityKey]);
 
   // Auto-open when the URL carries ?openChat=<type>::<key> matching this
-  // button — the sidebar bell uses this to deep-link straight into a thread.
+  // button. useSearchParams re-fires on every client-side navigation so the
+  // modal opens even when the board is already mounted (no full page reload).
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    const openChat = params.get("openChat");
+    const openChat = searchParams.get("openChat");
     if (!openChat) return;
     if (openChat !== `${entityType}::${entityKey}`) return;
     handleOpen();
+    // Strip the param so the modal doesn't re-open on subsequent renders.
+    const params = new URLSearchParams(window.location.search);
     params.delete("openChat");
     const newSearch = params.toString();
     const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : "") + window.location.hash;
     window.history.replaceState({}, "", newUrl);
-  }, [entityType, entityKey, handleOpen]);
+  }, [searchParams, entityType, entityKey, handleOpen]);
 
   const handleClose = useCallback((): void => {
     setIsOpen(false);
@@ -149,5 +152,13 @@ export default function ChatIconButton({ entityType, entityKey, entityLabel }: P
         />
       )}
     </>
+  );
+}
+
+export default function ChatIconButton(props: Props): JSX.Element {
+  return (
+    <Suspense fallback={null}>
+      <ChatIconButtonInner {...props} />
+    </Suspense>
   );
 }
