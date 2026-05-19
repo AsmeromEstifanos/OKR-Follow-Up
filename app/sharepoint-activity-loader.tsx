@@ -60,10 +60,10 @@ function shouldTrackSharePointRequest(rawUrl: string): boolean {
       !normalizedPath.startsWith("/api/users/suggest") &&
       !normalizedPath.startsWith("/api/operation-progress/") &&
       !normalizedPath.startsWith("/api/authz/me") &&
-      !normalizedPath.startsWith("/api/ai/") &&
+      !(normalizedPath === "/api/ai" || normalizedPath.startsWith("/api/ai/")) &&
       !normalizedPath.startsWith("/api/dashboard/") &&
-      !normalizedPath.startsWith("/api/comments/") &&
-      !normalizedPath.startsWith("/api/notifications/")
+      !(normalizedPath === "/api/comments" || normalizedPath.startsWith("/api/comments/")) &&
+      !(normalizedPath === "/api/notifications" || normalizedPath.startsWith("/api/notifications/"))
     );
   }
 
@@ -79,10 +79,10 @@ function shouldTrackSharePointRequest(rawUrl: string): boolean {
         normalizedPath.startsWith("/api/users/suggest") ||
         normalizedPath.startsWith("/api/operation-progress/") ||
         normalizedPath.startsWith("/api/authz/me") ||
-        normalizedPath.startsWith("/api/ai/") ||
+        (normalizedPath === "/api/ai" || normalizedPath.startsWith("/api/ai/")) ||
         normalizedPath.startsWith("/api/dashboard/") ||
-        normalizedPath.startsWith("/api/comments/") ||
-        normalizedPath.startsWith("/api/notifications/")
+        (normalizedPath === "/api/comments" || normalizedPath.startsWith("/api/comments/")) ||
+        (normalizedPath === "/api/notifications" || normalizedPath.startsWith("/api/notifications/"))
       ) {
         return false;
       }
@@ -124,9 +124,9 @@ function shouldAttachOperationProgress(rawUrl: string, method: string): boolean 
     return (
       normalizedPath.startsWith("/api/") &&
       !normalizedPath.startsWith("/api/operation-progress/") &&
-      !normalizedPath.startsWith("/api/comments/") &&
-      !normalizedPath.startsWith("/api/notifications/") &&
-      !normalizedPath.startsWith("/api/ai/")
+      !(normalizedPath === "/api/comments" || normalizedPath.startsWith("/api/comments/")) &&
+      !(normalizedPath === "/api/notifications" || normalizedPath.startsWith("/api/notifications/")) &&
+      !(normalizedPath === "/api/ai" || normalizedPath.startsWith("/api/ai/"))
     );
   } catch {
     return false;

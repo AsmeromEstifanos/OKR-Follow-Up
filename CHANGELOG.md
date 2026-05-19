@@ -8,6 +8,12 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.6] — 2026-05-19
+### Fixed
+- operation-progress 404s on comment POST: exclusion checks were using trailing-slash prefix (`/api/comments/`) which never matched the exact path `/api/comments` (no slash). Fixed in both `shouldTrackSharePointRequest` and `shouldAttachOperationProgress` by checking `=== "/api/comments" || startsWith("/api/comments/")` pattern for comments, notifications, and ai routes.
+
+---
+
 ## [0.5.5] — 2026-05-19
 ### Changed
 - Notification panel now shows **all** chat threads (read and unread), not just unread ones
