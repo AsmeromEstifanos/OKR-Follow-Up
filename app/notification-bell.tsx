@@ -1,7 +1,7 @@
 "use client";
 
-import { apiPath } from "@/lib/base-path";
-import { commentCountKey, getCommentCounts, invalidateCommentCounts } from "@/lib/comment-counts";
+import { getCommentCounts, invalidateCommentCounts } from "@/lib/comment-counts";
+import { withBasePath } from "@/lib/base-path";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -15,7 +15,9 @@ type UnreadThread = {
   entityType: "objective" | "kr";
   entityKey: string;
   title: string;
-  count: number;
+  code: string;
+  parentObjectiveCode?: string;
+  newCount: number;
   latestAt: string;
 };
 
@@ -35,10 +37,12 @@ function getLastRead(entityType: string, entityKey: string, userEmail: string): 
 }
 
 function entityHref(entityType: string, entityKey: string): string {
-  // Lands on the OKR board with a query param the ChatIconButton on the row
-  // listens for to auto-open its modal.
+  // withBasePath ensures the root path is correct even when deployed under a
+  // sub-path like /okr — a bare "/" would produce "/okr/?…" (trailing slash)
+  // which Next.js cannot match and returns 404.
   const target = encodeURIComponent(`${entityType}::${entityKey}`);
-  return `/?openChat=${target}`;
+  const root = withBasePath("/");
+  return `${root}?openChat=${target}`;
 }
 
 function BellIcon(): JSX.Element {
@@ -73,14 +77,21 @@ export default function NotificationBell({ userEmail }: Props): JSX.Element {
     for (const [id, entry] of Object.entries(counts)) {
       if (entry.count === 0 || !entry.entityType || !entry.entityKey) continue;
       const lr = getLastRead(entry.entityType, entry.entityKey, userEmail);
-      const hasUnread = !lr || entry.latestAt > lr;
-      if (!hasUnread) continue;
+      // Compute exact unread count from timestamps. If lastRead is unset (user
+      // never opened the thread), every comment is unread.
+      const timestamps = entry.timestamps ?? [];
+      const newCount = lr
+        ? timestamps.filter((t) => t > lr).length
+        : entry.count;
+      if (newCount === 0) continue;
       items.push({
         id,
         entityType: entry.entityType,
         entityKey: entry.entityKey,
         title: entry.title ?? entry.entityKey,
-        count: entry.count,
+        code: entry.code ?? entry.entityKey,
+        parentObjectiveCode: entry.parentObjectiveCode,
+        newCount,
         latestAt: entry.latestAt
       });
     }
@@ -131,7 +142,7 @@ export default function NotificationBell({ userEmail }: Props): JSX.Element {
     // destination page marks the thread as read when the modal opens.
   }
 
-  const totalUnreadMessages = unread.reduce((sum, t) => sum + t.count, 0);
+  const totalUnreadMessages = unread.reduce((sum, t) => sum + t.newCount, 0);
   const badgeLabel = totalUnreadMessages > 9 ? "9+" : String(totalUnreadMessages);
 
   return (
@@ -165,28 +176,34 @@ export default function NotificationBell({ userEmail }: Props): JSX.Element {
             <p className="notif-empty">No new chat messages.</p>
           ) : (
             <ul className="notif-list">
-              {unread.map((thread) => (
-                <li key={thread.id} className="notif-item">
-                  <Link
-                    href={apiPath(entityHref(thread.entityType, thread.entityKey))}
-                    className="notif-chat-row"
-                    onClick={handleThreadClick}
-                  >
-                    <span className="notif-chat-icon" aria-hidden="true">
-                      <ChatBubbleIcon />
-                    </span>
-                    <span className="notif-chat-text">
-                      <span className="notif-chat-meta">
-                        {thread.entityType === "kr" ? "Key Result" : "Objective"} · {thread.entityKey}
+              {unread.map((thread) => {
+                const breadcrumb =
+                  thread.entityType === "kr"
+                    ? thread.parentObjectiveCode
+                      ? `OBJ ${thread.parentObjectiveCode} › KR ${thread.code}`
+                      : `KR ${thread.code}`
+                    : `OBJ ${thread.code}`;
+                return (
+                  <li key={thread.id} className="notif-item">
+                    <Link
+                      href={entityHref(thread.entityType, thread.entityKey)}
+                      className="notif-chat-row"
+                      onClick={handleThreadClick}
+                    >
+                      <span className="notif-chat-icon" aria-hidden="true">
+                        <ChatBubbleIcon />
                       </span>
-                      <span className="notif-chat-title">{thread.title}</span>
-                    </span>
-                    <span className="notif-chat-count" aria-label={`${thread.count} messages`}>
-                      {thread.count}
-                    </span>
-                  </Link>
-                </li>
-              ))}
+                      <span className="notif-chat-text">
+                        <span className="notif-chat-meta">{breadcrumb}</span>
+                        <span className="notif-chat-title">{thread.title}</span>
+                      </span>
+                      <span className="notif-chat-count" aria-label={`${thread.newCount} new messages`}>
+                        {thread.newCount > 9 ? "9+" : thread.newCount}
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>,

@@ -6,6 +6,9 @@ export type CommentCount = {
   entityType?: "objective" | "kr";
   entityKey?: string;
   title?: string;
+  code?: string;
+  parentObjectiveCode?: string;
+  timestamps?: string[];
 };
 
 type CountsMap = Record<string, CommentCount>;

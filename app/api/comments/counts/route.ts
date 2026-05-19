@@ -10,6 +10,9 @@ type EnrichedCount = {
   entityType: "objective" | "kr";
   entityKey: string;
   title: string;
+  code: string;
+  parentObjectiveCode?: string;
+  timestamps: string[];
 };
 
 export async function GET(): Promise<NextResponse> {
@@ -19,23 +22,45 @@ export async function GET(): Promise<NextResponse> {
     listKeyResults({})
   ]);
 
-  const titleByObjective = new Map(objectives.map((o) => [o.objectiveKey, o.title]));
-  const titleByKr = new Map(krs.map((k) => [k.krKey, k.title]));
+  const objectiveByKey = new Map(objectives.map((o) => [o.objectiveKey, o]));
+  const krByKey = new Map(krs.map((k) => [k.krKey, k]));
 
   const enriched: Record<string, EnrichedCount> = {};
   for (const [id, base] of Object.entries(counts)) {
     const [entityType, entityKey] = id.split("::");
     if (entityType !== "objective" && entityType !== "kr") continue;
 
-    const title =
-      (entityType === "objective" ? titleByObjective.get(entityKey) : titleByKr.get(entityKey)) ?? entityKey;
+    let title = entityKey;
+    let code = entityKey;
+    let parentObjectiveCode: string | undefined;
+
+    if (entityType === "objective") {
+      const obj = objectiveByKey.get(entityKey);
+      if (obj) {
+        title = obj.title;
+        code = obj.objectiveCode ?? obj.objectiveKey;
+      }
+    } else {
+      const kr = krByKey.get(entityKey);
+      if (kr) {
+        title = kr.title;
+        code = kr.krCode ?? kr.krKey;
+        const parentObj = objectiveByKey.get(kr.objectiveKey);
+        if (parentObj) {
+          parentObjectiveCode = parentObj.objectiveCode ?? parentObj.objectiveKey;
+        }
+      }
+    }
 
     enriched[id] = {
       count: base.count,
       latestAt: base.latestAt,
-      entityType: entityType,
+      entityType,
       entityKey,
-      title
+      title,
+      code,
+      parentObjectiveCode,
+      timestamps: base.timestamps
     };
   }
 

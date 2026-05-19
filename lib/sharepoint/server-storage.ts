@@ -2296,7 +2296,9 @@ export async function listComments(entityType: string, entityKey: string): Promi
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
-export async function listCommentCounts(): Promise<Record<string, { count: number; latestAt: string }>> {
+export async function listCommentCounts(): Promise<
+  Record<string, { count: number; latestAt: string; timestamps: string[] }>
+> {
   const config = getStorageConfig();
   if (!config.enabled) {
     return {};
@@ -2305,7 +2307,7 @@ export async function listCommentCounts(): Promise<Record<string, { count: numbe
   const { siteId, listIds } = await ensureAtomicTargets(config);
   const items = await listItems(config, siteId, listIds.comments, ["EntityType", "EntityKey", "CreatedAt"]);
 
-  const counts: Record<string, { count: number; latestAt: string }> = {};
+  const counts: Record<string, { count: number; latestAt: string; timestamps: string[] }> = {};
   for (const item of items) {
     const entityType = asString(item.fields?.EntityType).trim();
     const entityKey = asString(item.fields?.EntityKey).trim();
@@ -2316,11 +2318,12 @@ export async function listCommentCounts(): Promise<Record<string, { count: numbe
     const existing = counts[id];
     if (existing) {
       existing.count += 1;
+      existing.timestamps.push(createdAt);
       if (createdAt > existing.latestAt) {
         existing.latestAt = createdAt;
       }
     } else {
-      counts[id] = { count: 1, latestAt: createdAt };
+      counts[id] = { count: 1, latestAt: createdAt, timestamps: [createdAt] };
     }
   }
 

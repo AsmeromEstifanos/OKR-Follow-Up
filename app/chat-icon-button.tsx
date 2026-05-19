@@ -50,10 +50,10 @@ export default function ChatIconButton({ entityType, entityKey, entityLabel }: P
   const currentUserEmail = useCurrentUserEmail();
   const [isOpen, setIsOpen] = useState(false);
   const [totalCount, setTotalCount] = useState<number>(0);
-  const [hasUnread, setHasUnread] = useState<boolean>(false);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
 
   // Load the shared comment-count map once and pick out this entity's total +
-  // whether there's anything newer than the user last opened this thread.
+  // exact unread count based on per-user last-read timestamp.
   useEffect(() => {
     let cancelled = false;
     void getCommentCounts().then((counts) => {
@@ -61,12 +61,16 @@ export default function ChatIconButton({ entityType, entityKey, entityLabel }: P
       const entry = counts[commentCountKey(entityType, entityKey)];
       if (!entry || entry.count === 0) {
         setTotalCount(0);
-        setHasUnread(false);
+        setUnreadCount(0);
         return;
       }
       setTotalCount(entry.count);
       const lastRead = currentUserEmail ? getLastRead(entityType, entityKey, currentUserEmail) : "";
-      setHasUnread(!lastRead || entry.latestAt > lastRead);
+      const timestamps = entry.timestamps ?? [];
+      const newCount = lastRead
+        ? timestamps.filter((t) => t > lastRead).length
+        : entry.count;
+      setUnreadCount(newCount);
     });
     return () => {
       cancelled = true;
@@ -77,7 +81,7 @@ export default function ChatIconButton({ entityType, entityKey, entityLabel }: P
     setIsOpen(true);
     if (currentUserEmail) {
       setLastRead(entityType, entityKey, currentUserEmail);
-      setHasUnread(false);
+      setUnreadCount(0);
     }
   }, [currentUserEmail, entityType, entityKey]);
 
@@ -100,16 +104,17 @@ export default function ChatIconButton({ entityType, entityKey, entityLabel }: P
     setIsOpen(false);
     if (currentUserEmail) {
       setLastRead(entityType, entityKey, currentUserEmail);
+      setUnreadCount(0);
     }
   }, [currentUserEmail, entityType, entityKey]);
 
   const handleCommentsLoaded = useCallback((comments: Comment[]): void => {
-    // The modal has the authoritative list — sync the badge total and mark read.
     setTotalCount(comments.length);
-    setHasUnread(false);
+    setUnreadCount(0);
   }, []);
 
   const showBadge = totalCount > 0;
+  const badgeCount = unreadCount > 0 ? unreadCount : totalCount;
 
   return (
     <>
@@ -118,17 +123,17 @@ export default function ChatIconButton({ entityType, entityKey, entityLabel }: P
         className="chat-icon-btn"
         onClick={handleOpen}
         aria-label={`Open discussion for ${entityLabel}${
-          showBadge ? `, ${totalCount} message${totalCount === 1 ? "" : "s"}${hasUnread ? ", unread" : ""}` : ""
+          showBadge ? `, ${totalCount} message${totalCount === 1 ? "" : "s"}${unreadCount > 0 ? `, ${unreadCount} unread` : ""}` : ""
         }`}
         title={`Discussion${showBadge ? ` (${totalCount} message${totalCount === 1 ? "" : "s"})` : ""}`}
       >
         <ChatBubbleIcon />
         {showBadge && (
           <span
-            className={`chat-icon-badge ${hasUnread ? "chat-icon-badge-unread" : ""}`}
+            className={`chat-icon-badge ${unreadCount > 0 ? "chat-icon-badge-unread" : ""}`}
             aria-hidden="true"
           >
-            {totalCount > 9 ? "9+" : totalCount}
+            {badgeCount > 9 ? "9+" : badgeCount}
           </span>
         )}
       </button>
