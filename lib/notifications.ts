@@ -287,7 +287,11 @@ export type MentionNotificationParams = {
 export async function sendMentionNotifications(params: MentionNotificationParams): Promise<void> {
   const config = getGraphAppConfig();
   const fromEmail = (process.env.NOTIFICATION_FROM_EMAIL ?? "").trim();
-  if (!config || !fromEmail) return;
+  if (!config || !fromEmail) {
+    throw new Error(
+      `mention-notify not configured: config=${config ? "ok" : "missing"} fromEmail=${fromEmail ? "ok" : "missing"}`
+    );
+  }
 
   const token = await acquireToken(config);
   const { mentionedEmails, authorName, authorEmail, messageBody, entityType, entityKey, entityTitle } = params;

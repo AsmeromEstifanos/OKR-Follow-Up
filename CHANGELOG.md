@@ -8,6 +8,12 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.10] — 2026-05-19
+### Fixed
+- Mention notification misconfiguration now throws (instead of silently returning) so the exact missing piece (config vs fromEmail) surfaces in the chat UI error message
+
+---
+
 ## [0.5.9] — 2026-05-19
 ### Fixed
 - Mention notification errors are now awaited and surfaced: if the Graph email send fails, the exact error is returned in the POST response and shown in the chat UI, making it diagnosable without needing server logs
