@@ -627,7 +627,7 @@ export async function getActivityLogEntries(
 }
 
 export async function getCommentCounts(): Promise<
-  Record<string, { count: number; latestAt: string; timestamps: string[] }>
+  Record<string, { count: number; latestAt: string; latestBody: string; latestAuthor: string; timestamps: string[] }>
 > {
   const status = getSharePointStorageStatus();
   if (!status.enabled) {

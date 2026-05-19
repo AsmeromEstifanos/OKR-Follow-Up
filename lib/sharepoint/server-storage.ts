@@ -2297,7 +2297,7 @@ export async function listComments(entityType: string, entityKey: string): Promi
 }
 
 export async function listCommentCounts(): Promise<
-  Record<string, { count: number; latestAt: string; timestamps: string[] }>
+  Record<string, { count: number; latestAt: string; latestBody: string; latestAuthor: string; timestamps: string[] }>
 > {
   const config = getStorageConfig();
   if (!config.enabled) {
@@ -2305,13 +2305,15 @@ export async function listCommentCounts(): Promise<
   }
 
   const { siteId, listIds } = await ensureAtomicTargets(config);
-  const items = await listItems(config, siteId, listIds.comments, ["EntityType", "EntityKey", "CreatedAt"]);
+  const items = await listItems(config, siteId, listIds.comments, ["EntityType", "EntityKey", "AuthorName", "Body", "CreatedAt"]);
 
-  const counts: Record<string, { count: number; latestAt: string; timestamps: string[] }> = {};
+  const counts: Record<string, { count: number; latestAt: string; latestBody: string; latestAuthor: string; timestamps: string[] }> = {};
   for (const item of items) {
     const entityType = asString(item.fields?.EntityType).trim();
     const entityKey = asString(item.fields?.EntityKey).trim();
     const createdAt = asString(item.fields?.CreatedAt);
+    const body = asString(item.fields?.Body);
+    const authorName = asString(item.fields?.AuthorName);
     if (!entityType || !entityKey) continue;
 
     const id = `${entityType}::${entityKey}`;
@@ -2321,9 +2323,11 @@ export async function listCommentCounts(): Promise<
       existing.timestamps.push(createdAt);
       if (createdAt > existing.latestAt) {
         existing.latestAt = createdAt;
+        existing.latestBody = body;
+        existing.latestAuthor = authorName;
       }
     } else {
-      counts[id] = { count: 1, latestAt: createdAt, timestamps: [createdAt] };
+      counts[id] = { count: 1, latestAt: createdAt, latestBody: body, latestAuthor: authorName, timestamps: [createdAt] };
     }
   }
 

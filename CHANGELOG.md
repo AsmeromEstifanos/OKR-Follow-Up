@@ -8,6 +8,16 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.7] — 2026-05-19
+### Changed
+- Notification panel items now show department as first line (in accent color), OBJ/KR code as second line, title bold if unread
+- Last message preview (author + truncated body) shown below title
+- Relative timestamp (e.g. "5m ago", "2h ago") shown alongside count badge
+- Removed 9+ cap on message counts — shows actual number
+- Count badge and time stacked on the right side of each item
+
+---
+
 ## [0.5.6] — 2026-05-19
 ### Fixed
 - operation-progress 404s on comment POST: exclusion checks were using trailing-slash prefix (`/api/comments/`) which never matched the exact path `/api/comments` (no slash). Fixed in both `shouldTrackSharePointRequest` and `shouldAttachOperationProgress` by checking `=== "/api/comments" || startsWith("/api/comments/")` pattern for comments, notifications, and ai routes.

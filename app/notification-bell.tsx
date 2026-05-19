@@ -15,11 +15,14 @@ type ChatThread = {
   entityKey: string;
   title: string;
   code: string;
+  department?: string;
   parentObjectiveCode?: string;
   totalCount: number;
   newCount: number;
   hasUnread: boolean;
   latestAt: string;
+  latestBody: string;
+  latestAuthor: string;
 };
 
 const STORAGE_PREFIX = "okr-chat-last-read";
@@ -61,6 +64,19 @@ function ChatBubbleIcon(): JSX.Element {
   );
 }
 
+function formatRelativeTime(iso: string): string {
+  if (!iso) return "";
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 export default function NotificationBell({ userEmail }: Props): JSX.Element {
   const [isOpen, setIsOpen] = useState(false);
   const [threads, setThreads] = useState<ChatThread[]>([]);
@@ -87,11 +103,14 @@ export default function NotificationBell({ userEmail }: Props): JSX.Element {
         entityKey: entry.entityKey,
         title: entry.title ?? entry.entityKey,
         code: entry.code ?? entry.entityKey,
+        department: entry.department,
         parentObjectiveCode: entry.parentObjectiveCode,
         totalCount: entry.count,
         newCount,
         hasUnread: newCount > 0,
-        latestAt: entry.latestAt
+        latestAt: entry.latestAt,
+        latestBody: entry.latestBody ?? "",
+        latestAuthor: entry.latestAuthor ?? ""
       });
     }
 
@@ -196,6 +215,9 @@ export default function NotificationBell({ userEmail }: Props): JSX.Element {
                       ? `OBJ ${thread.parentObjectiveCode} › KR ${thread.code}`
                       : `KR ${thread.code}`
                     : `OBJ ${thread.code}`;
+                const preview = thread.latestBody
+                  ? (thread.latestAuthor ? `${thread.latestAuthor}: ` : "") + thread.latestBody
+                  : "";
                 return (
                   <li key={thread.id} className={`notif-item${thread.hasUnread ? " notif-item-unread" : ""}`}>
                     <Link
@@ -207,20 +229,29 @@ export default function NotificationBell({ userEmail }: Props): JSX.Element {
                         <ChatBubbleIcon />
                       </span>
                       <span className="notif-chat-text">
+                        {thread.department && (
+                          <span className="notif-chat-dept">{thread.department}</span>
+                        )}
                         <span className="notif-chat-meta">{breadcrumb}</span>
                         <span className={`notif-chat-title${thread.hasUnread ? " notif-chat-title-unread" : ""}`}>
                           {thread.title}
                         </span>
+                        {preview && (
+                          <span className="notif-chat-preview">{preview}</span>
+                        )}
                       </span>
-                      {thread.hasUnread ? (
-                        <span className="notif-chat-count notif-chat-count-unread" aria-label={`${thread.newCount} unread`}>
-                          {thread.newCount > 9 ? "9+" : thread.newCount}
-                        </span>
-                      ) : (
-                        <span className="notif-chat-count notif-chat-count-read" aria-label={`${thread.totalCount} messages`}>
-                          {thread.totalCount > 9 ? "9+" : thread.totalCount}
-                        </span>
-                      )}
+                      <span className="notif-chat-right">
+                        {thread.hasUnread ? (
+                          <span className="notif-chat-count notif-chat-count-unread" aria-label={`${thread.newCount} unread`}>
+                            {thread.newCount}
+                          </span>
+                        ) : (
+                          <span className="notif-chat-count notif-chat-count-read" aria-label={`${thread.totalCount} messages`}>
+                            {thread.totalCount}
+                          </span>
+                        )}
+                        <span className="notif-chat-time">{formatRelativeTime(thread.latestAt)}</span>
+                      </span>
                     </Link>
                   </li>
                 );

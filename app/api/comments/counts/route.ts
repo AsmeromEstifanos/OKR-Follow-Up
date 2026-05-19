@@ -7,10 +7,13 @@ export const runtime = "nodejs";
 type EnrichedCount = {
   count: number;
   latestAt: string;
+  latestBody: string;
+  latestAuthor: string;
   entityType: "objective" | "kr";
   entityKey: string;
   title: string;
   code: string;
+  department?: string;
   parentObjectiveCode?: string;
   timestamps: string[];
 };
@@ -32,6 +35,7 @@ export async function GET(): Promise<NextResponse> {
 
     let title = entityKey;
     let code = entityKey;
+    let department: string | undefined;
     let parentObjectiveCode: string | undefined;
 
     if (entityType === "objective") {
@@ -39,6 +43,7 @@ export async function GET(): Promise<NextResponse> {
       if (obj) {
         title = obj.title;
         code = obj.objectiveCode ?? obj.objectiveKey;
+        department = obj.department;
       }
     } else {
       const kr = krByKey.get(entityKey);
@@ -48,6 +53,7 @@ export async function GET(): Promise<NextResponse> {
         const parentObj = objectiveByKey.get(kr.objectiveKey);
         if (parentObj) {
           parentObjectiveCode = parentObj.objectiveCode ?? parentObj.objectiveKey;
+          department = parentObj.department;
         }
       }
     }
@@ -55,10 +61,13 @@ export async function GET(): Promise<NextResponse> {
     enriched[id] = {
       count: base.count,
       latestAt: base.latestAt,
+      latestBody: base.latestBody,
+      latestAuthor: base.latestAuthor,
       entityType,
       entityKey,
       title,
       code,
+      department,
       parentObjectiveCode,
       timestamps: base.timestamps
     };

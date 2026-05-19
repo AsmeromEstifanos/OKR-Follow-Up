@@ -3,10 +3,13 @@ import { apiPath } from "@/lib/base-path";
 export type CommentCount = {
   count: number;
   latestAt: string;
+  latestBody?: string;
+  latestAuthor?: string;
   entityType?: "objective" | "kr";
   entityKey?: string;
   title?: string;
   code?: string;
+  department?: string;
   parentObjectiveCode?: string;
   timestamps?: string[];
 };
