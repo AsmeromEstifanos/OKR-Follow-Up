@@ -491,11 +491,14 @@ export default function DashboardKeyResultControls({
                 <label>Progress</label>
                 <button
                   type="button"
-                  className={`milestone-binary-btn${krIsDone ? " milestone-binary-btn-active" : ""}`}
+                  role="switch"
+                  aria-checked={krIsDone}
+                  className="ios-toggle"
                   onClick={() => setKrIsDone((v) => !v)}
                   disabled={isSaving}
                 >
-                  {krIsDone ? "Done" : "Not Done"}
+                  <span className="ios-toggle-track"><span className="ios-toggle-thumb" /></span>
+                  <span className="ios-toggle-label">{krIsDone ? "Done" : "Not Done"}</span>
                 </button>
               </div>
             )}

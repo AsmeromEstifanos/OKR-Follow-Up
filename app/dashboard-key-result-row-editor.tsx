@@ -702,16 +702,21 @@ export default function DashboardKeyResultRowEditor({
           ) : isEditing && krMode === "non-measurable" ? (
             <button
               type="button"
-              className={`milestone-binary-btn${krIsDone ? " milestone-binary-btn-active" : ""}`}
+              role="switch"
+              aria-checked={krIsDone}
+              className="ios-toggle"
               onClick={() => setKrIsDone((v) => !v)}
               disabled={isSaving}
-            >{krIsDone ? "Done" : "Not Done"}</button>
+            >
+              <span className="ios-toggle-track"><span className="ios-toggle-thumb" /></span>
+              <span className="ios-toggle-label">{krIsDone ? "Done" : "Not Done"}</span>
+            </button>
           ) : (
             keyResult.currentValue !== null ? keyResult.currentValue : "-"
           )}
         </td>
         <td>
-          {`${keyResult.progressPct}%`}
+          {isEditing && krMode === "non-measurable" ? `${krIsDone ? 100 : 0}%` : `${keyResult.progressPct}%`}
         </td>
         <td>{isEditing ? <input className="objective-row-input" type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} disabled={isSaving} /> : formatDate(keyResult.dueDate)}</td>
         <td>{isEditing ? <input className="objective-row-input" value={notes} onChange={(event) => setNotes(event.target.value)} disabled={isSaving} /> : keyResult.notes || latestUpdateNotes || "-"}</td>

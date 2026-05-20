@@ -410,13 +410,16 @@ export default function KeyResultEditControls({
               <label>Progress</label>
               <button
                 type="button"
-                className={`milestone-binary-btn${Number(draft.krProgressPct) >= 100 ? " milestone-binary-btn-active" : ""}`}
+                role="switch"
+                aria-checked={Number(draft.krProgressPct) >= 100}
+                className="ios-toggle"
                 onClick={() => setDraft((current) => ({
                   ...current,
                   krProgressPct: Number(current.krProgressPct) >= 100 ? "0" : "100"
                 }))}
               >
-                {Number(draft.krProgressPct) >= 100 ? "Done" : "Not Done"}
+                <span className="ios-toggle-track"><span className="ios-toggle-thumb" /></span>
+                <span className="ios-toggle-label">{Number(draft.krProgressPct) >= 100 ? "Done" : "Not Done"}</span>
               </button>
             </div>
           )}
