@@ -8,6 +8,14 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.34] — 2026-05-20
+### Changed
+- Send Reminders dialog now has a rule selection step (Step 1) before recipient selection — choose which of the enabled reminder types to include in the manual send batch
+- API: GET `/api/notifications/remind` returns `ruleMenu` (all enabled rules with labels and schedule descriptions); accepts optional `?ruleIds=` query param to scope the preview
+- API: POST `/api/notifications/remind` accepts `ruleIds` in the request body to limit which rules are run
+
+---
+
 ## [0.5.33] — 2026-05-20
 ### Added
 - Activity log entries are now clickable — opens a popup with full change details instead of a broken link

@@ -21,7 +21,8 @@ export default function AuthGate({ children }: Props): JSX.Element {
   }, [accounts]);
 
   if (inProgress !== "none") {
-    const loaderSrc = inProgress === "logout" ? withBasePath("/svh.gif") : undefined;
+    const loaderSrc =
+      inProgress === "logout" ? withBasePath("/svh-logo.gif") : undefined;
 
     return (
       <div className="auth-loader" aria-live="polite" aria-busy="true">
@@ -33,7 +34,7 @@ export default function AuthGate({ children }: Props): JSX.Element {
   if (!isAuthenticated) {
     return (
       <div className="auth-loader" aria-live="polite">
-        <LoaderImage size={220} src={withBasePath("/svh.gif")} />
+        <LoaderImage size={220} src={withBasePath("/svh-logo.gif")} />
       </div>
     );
   }

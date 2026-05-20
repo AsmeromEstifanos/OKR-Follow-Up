@@ -7,7 +7,11 @@ type Role = "user" | "assistant";
 type Message = { role: Role; content: string; id: string };
 type Props = { userEmail?: string; userName?: string };
 type EmailRecipient = { name: string; email: string };
-type EmailAction = { recipients: EmailRecipient[]; subject: string; body: string };
+type EmailAction = {
+  recipients: EmailRecipient[];
+  subject: string;
+  body: string;
+};
 
 let msgIdCounter = 0;
 function newId(): string {
@@ -16,7 +20,13 @@ function newId(): string {
 
 function SparkleIcon(): JSX.Element {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <svg
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+    >
       <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6L12 2z" />
     </svg>
   );
@@ -24,7 +34,13 @@ function SparkleIcon(): JSX.Element {
 
 function SendIcon(): JSX.Element {
   return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <svg
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+    >
       <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
     </svg>
   );
@@ -33,7 +49,9 @@ function SendIcon(): JSX.Element {
 function TypingDots(): JSX.Element {
   return (
     <div className="ai-chat-typing" aria-label="AI is thinking">
-      <span /><span /><span />
+      <span />
+      <span />
+      <span />
     </div>
   );
 }
@@ -77,7 +95,7 @@ function MarkdownContent({ text }: { text: string }): JSX.Element {
           {listItems.map((item, i) => (
             <li key={i}>{renderInline(item)}</li>
           ))}
-        </ul>
+        </ul>,
       );
       listItems = [];
     }
@@ -87,12 +105,20 @@ function MarkdownContent({ text }: { text: string }): JSX.Element {
     const line = lines[i];
 
     const isPotentialRow = line.trim().startsWith("|") && line.includes("|");
-    if (isPotentialRow && i + 1 < lines.length && isTableSeparator(lines[i + 1])) {
+    if (
+      isPotentialRow &&
+      i + 1 < lines.length &&
+      isTableSeparator(lines[i + 1])
+    ) {
       flushList();
       const header = splitTableRow(line);
       const bodyRows: string[][] = [];
       let j = i + 2;
-      while (j < lines.length && lines[j].trim().startsWith("|") && lines[j].includes("|")) {
+      while (
+        j < lines.length &&
+        lines[j].trim().startsWith("|") &&
+        lines[j].includes("|")
+      ) {
         bodyRows.push(splitTableRow(lines[j]));
         j++;
       }
@@ -116,7 +142,7 @@ function MarkdownContent({ text }: { text: string }): JSX.Element {
               ))}
             </tbody>
           </table>
-        </div>
+        </div>,
       );
       i = j - 1;
       continue;
@@ -124,20 +150,36 @@ function MarkdownContent({ text }: { text: string }): JSX.Element {
 
     if (line.startsWith("#### ")) {
       flushList();
-      nodes.push(<p key={i} className="ai-md-h4">{renderInline(line.slice(5))}</p>);
+      nodes.push(
+        <p key={i} className="ai-md-h4">
+          {renderInline(line.slice(5))}
+        </p>,
+      );
     } else if (line.startsWith("### ")) {
       flushList();
-      nodes.push(<p key={i} className="ai-md-h3">{renderInline(line.slice(4))}</p>);
+      nodes.push(
+        <p key={i} className="ai-md-h3">
+          {renderInline(line.slice(4))}
+        </p>,
+      );
     } else if (line.startsWith("## ")) {
       flushList();
-      nodes.push(<p key={i} className="ai-md-h2">{renderInline(line.slice(3))}</p>);
+      nodes.push(
+        <p key={i} className="ai-md-h2">
+          {renderInline(line.slice(3))}
+        </p>,
+      );
     } else if (line.startsWith("- ") || line.startsWith("• ")) {
       listItems.push(line.slice(2));
     } else if (line.trim() === "") {
       flushList();
     } else {
       flushList();
-      nodes.push(<p key={i} className="ai-md-p">{renderInline(line)}</p>);
+      nodes.push(
+        <p key={i} className="ai-md-p">
+          {renderInline(line)}
+        </p>,
+      );
     }
   }
 
@@ -145,7 +187,10 @@ function MarkdownContent({ text }: { text: string }): JSX.Element {
   return <div className="ai-md-body">{nodes}</div>;
 }
 
-function parseEmailAction(content: string): { text: string; action: EmailAction | null } {
+function parseEmailAction(content: string): {
+  text: string;
+  action: EmailAction | null;
+} {
   const startIdx = content.indexOf("[SEND_EMAILS]");
   if (startIdx === -1) return { text: content, action: null };
 
@@ -155,7 +200,9 @@ function parseEmailAction(content: string): { text: string; action: EmailAction 
     return { text: content.slice(0, startIdx).trim(), action: null };
   }
 
-  const jsonStr = content.slice(startIdx + "[SEND_EMAILS]".length, endIdx).trim();
+  const jsonStr = content
+    .slice(startIdx + "[SEND_EMAILS]".length, endIdx)
+    .trim();
   const textBefore = content.slice(0, startIdx).trim();
   try {
     return { text: textBefore, action: JSON.parse(jsonStr) as EmailAction };
@@ -164,7 +211,10 @@ function parseEmailAction(content: string): { text: string; action: EmailAction 
   }
 }
 
-function parseOptions(content: string): { text: string; options: string[] | null } {
+function parseOptions(content: string): {
+  text: string;
+  options: string[] | null;
+} {
   const startIdx = content.indexOf("[OPTIONS]");
   if (startIdx === -1) return { text: content, options: null };
 
@@ -173,7 +223,9 @@ function parseOptions(content: string): { text: string; options: string[] | null
     return { text: content.slice(0, startIdx).trim(), options: null };
   }
 
-  const optionsStr = content.slice(startIdx + "[OPTIONS]".length, endIdx).trim();
+  const optionsStr = content
+    .slice(startIdx + "[OPTIONS]".length, endIdx)
+    .trim();
   const textBefore = content.slice(0, startIdx).trim();
   const options = optionsStr
     .split("|")
@@ -197,7 +249,7 @@ function makeWelcome(userName?: string): Message {
   return {
     role: "assistant",
     id: "welcome",
-    content: `${greeting} I'm your OKR assistant. Ask me anything about your objectives, key results, progress, blockers, or team performance.\n\nI can also draft Outlook emails for you — just ask me to remind someone to update their OKRs or share a summary with the team.`
+    content: `${greeting} I'm your OKR assistant. Ask me anything about your objectives, key results, progress, blockers, or team performance.\n\nI can also draft Outlook emails for you — just ask me to remind someone to update their OKRs or share a summary with the team.`,
   };
 }
 
@@ -217,15 +269,20 @@ function loadStoredMessages(fallback: Message[]): Message[] {
   return fallback;
 }
 
-export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Element {
+export default function AiGlobalChat({
+  userEmail,
+  userName,
+}: Props): JSX.Element {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>(() =>
-    loadStoredMessages([makeWelcome(userName)])
+    loadStoredMessages([makeWelcome(userName)]),
   );
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
-  const [dismissedEmailIds, setDismissedEmailIds] = useState<Set<string>>(new Set());
+  const [dismissedEmailIds, setDismissedEmailIds] = useState<Set<string>>(
+    new Set(),
+  );
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -265,8 +322,8 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
           userName,
           messages: next
             .filter((m) => m.id !== "welcome")
-            .map(({ role, content }) => ({ role, content }))
-        })
+            .map(({ role, content }) => ({ role, content })),
+        }),
       });
 
       if (!response.ok) {
@@ -275,7 +332,10 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
       }
 
       const assistantId = newId();
-      setMessages((prev) => [...prev, { role: "assistant", content: "", id: assistantId }]);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "", id: assistantId },
+      ]);
       setIsLoading(false);
 
       const reader = response.body?.getReader();
@@ -286,7 +346,9 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
           if (done) break;
           const chunk = decoder.decode(value, { stream: true });
           setMessages((prev) =>
-            prev.map((m) => (m.id === assistantId ? { ...m, content: m.content + chunk } : m))
+            prev.map((m) =>
+              m.id === assistantId ? { ...m, content: m.content + chunk } : m,
+            ),
           );
         }
       }
@@ -331,7 +393,11 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
     if (!to) {
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "No valid recipient emails to open.", id: newId() }
+        {
+          role: "assistant",
+          content: "No valid recipient emails to open.",
+          id: newId(),
+        },
       ]);
       return;
     }
@@ -349,7 +415,11 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
     if (!to) {
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "No valid recipient emails to open.", id: newId() }
+        {
+          role: "assistant",
+          content: "No valid recipient emails to open.",
+          id: newId(),
+        },
       ]);
       return;
     }
@@ -359,18 +429,26 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
     const url = `https://outlook.office.com/mail/deeplink/compose?to=${to}&subject=${subject}&body=${body}`;
 
     window.open(url, "_blank", "noopener,noreferrer");
-    finalizeEmailDispatch(msgId, action.recipients.length, "Outlook on the Web");
+    finalizeEmailDispatch(
+      msgId,
+      action.recipients.length,
+      "Outlook on the Web",
+    );
   }
 
-  function finalizeEmailDispatch(msgId: string, count: number, target: string): void {
+  function finalizeEmailDispatch(
+    msgId: string,
+    count: number,
+    target: string,
+  ): void {
     setDismissedEmailIds((prev) => new Set([...prev, msgId]));
     setMessages((prev) => [
       ...prev,
       {
         role: "assistant",
         content: `Opened ${target} with a draft to ${count} recipient${count === 1 ? "" : "s"}. Review and click Send to dispatch.`,
-        id: newId()
-      }
+        id: newId(),
+      },
     ]);
   }
 
@@ -378,7 +456,11 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
     setDismissedEmailIds((prev) => new Set([...prev, msgId]));
     setMessages((prev) => [
       ...prev,
-      { role: "assistant", content: "No problem — let me know if you'd like to make any changes.", id: newId() }
+      {
+        role: "assistant",
+        content: "No problem — let me know if you'd like to make any changes.",
+        id: newId(),
+      },
     ]);
   }
 
@@ -386,25 +468,51 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
     <div className="ai-fab-wrap">
       {/* Expanded panel */}
       {isOpen && (
-        <div className="ai-fab-panel" role="dialog" aria-label="OKR AI Assistant">
+        <div
+          className="ai-fab-panel"
+          role="dialog"
+          aria-label="OKR AI Assistant"
+        >
           <div className="ai-fab-header">
             <div className="ai-fab-header-left">
               <span className="ai-fab-header-icon" aria-hidden="true">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={withBasePath("/svh.gif")} alt="" className="ai-fab-header-gif" />
+                <img
+                  src={withBasePath("/svh-logo.gif")}
+                  alt=""
+                  className="ai-fab-header-gif"
+                />
               </span>
               <div>
                 <div className="ai-fab-title">OKR Assistant</div>
-                <div className="ai-fab-subtitle">Ask anything about your OKRs</div>
+                <div className="ai-fab-subtitle">
+                  Ask anything about your OKRs
+                </div>
               </div>
             </div>
             <div className="ai-fab-header-actions">
-              <button type="button" className="ai-fab-action-btn" onClick={handleClear} title="Clear conversation">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <button
+                type="button"
+                className="ai-fab-action-btn"
+                onClick={handleClear}
+                title="Clear conversation"
+              >
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
                   <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
                 </svg>
               </button>
-              <button type="button" className="ai-fab-action-btn" onClick={() => setIsOpen(false)} aria-label="Close">
+              <button
+                type="button"
+                className="ai-fab-action-btn"
+                onClick={() => setIsOpen(false)}
+                aria-label="Close"
+              >
                 ✕
               </button>
             </div>
@@ -416,16 +524,25 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
                 msg.role === "assistant"
                   ? parseAssistantContent(msg.content)
                   : { text: msg.content, action: null, options: null };
-              const showAction = action !== null && !dismissedEmailIds.has(msg.id);
+              const showAction =
+                action !== null && !dismissedEmailIds.has(msg.id);
               const isLastMessage = msgIdx === messages.length - 1;
-              const showOptions = options !== null && isLastMessage && !isLoading;
+              const showOptions =
+                options !== null && isLastMessage && !isLoading;
 
               return (
-                <div key={msg.id} className={`ai-fab-msg ${msg.role === "user" ? "ai-fab-msg-user" : "ai-fab-msg-ai"}`}>
+                <div
+                  key={msg.id}
+                  className={`ai-fab-msg ${msg.role === "user" ? "ai-fab-msg-user" : "ai-fab-msg-ai"}`}
+                >
                   {msg.role === "assistant" && (
                     <span className="ai-fab-msg-avatar" aria-hidden="true">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={withBasePath("/svh.gif")} alt="" className="ai-fab-avatar-gif" />
+                      <img
+                        src={withBasePath("/svh-logo.gif")}
+                        alt=""
+                        className="ai-fab-avatar-gif"
+                      />
                     </span>
                   )}
                   {msg.role === "user" ? (
@@ -433,63 +550,68 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
                       <p className="ai-fab-bubble-text">{msg.content}</p>
                     </div>
                   ) : (
-                  <div className="ai-fab-bubble-wrap">
-                    {text.trim() && (
-                      <div className="ai-fab-bubble">
-                        <MarkdownContent text={text} />
-                      </div>
-                    )}
-                    {showAction && (
-                      <div className="ai-email-confirm-card">
-                        <div className="ai-email-confirm-meta">
-                          <span className="ai-email-confirm-icon">✉️</span>
-                          <div>
-                            <div className="ai-email-confirm-subject">{action.subject}</div>
-                            <div className="ai-email-confirm-to">
-                              To: {action.recipients.map((r) => r.name || r.email).join(", ")}
+                    <div className="ai-fab-bubble-wrap">
+                      {text.trim() && (
+                        <div className="ai-fab-bubble">
+                          <MarkdownContent text={text} />
+                        </div>
+                      )}
+                      {showAction && (
+                        <div className="ai-email-confirm-card">
+                          <div className="ai-email-confirm-meta">
+                            <span className="ai-email-confirm-icon">✉️</span>
+                            <div>
+                              <div className="ai-email-confirm-subject">
+                                {action.subject}
+                              </div>
+                              <div className="ai-email-confirm-to">
+                                To:{" "}
+                                {action.recipients
+                                  .map((r) => r.name || r.email)
+                                  .join(", ")}
+                              </div>
                             </div>
                           </div>
+                          <div className="ai-email-confirm-actions">
+                            <button
+                              type="button"
+                              className="btn ai-email-send-btn"
+                              onClick={() => handleEmailSend(msg.id, action)}
+                            >
+                              Open in Outlook
+                            </button>
+                            <button
+                              type="button"
+                              className="tab-btn"
+                              onClick={() => handleEmailDismiss(msg.id)}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                          <button
+                            type="button"
+                            className="ai-email-fallback-link"
+                            onClick={() => handleEmailSendWeb(msg.id, action)}
+                          >
+                            Or open in Outlook on the Web
+                          </button>
                         </div>
-                        <div className="ai-email-confirm-actions">
-                          <button
-                            type="button"
-                            className="btn ai-email-send-btn"
-                            onClick={() => handleEmailSend(msg.id, action)}
-                          >
-                            Open in Outlook
-                          </button>
-                          <button
-                            type="button"
-                            className="tab-btn"
-                            onClick={() => handleEmailDismiss(msg.id)}
-                          >
-                            Cancel
-                          </button>
+                      )}
+                      {showOptions && options && (
+                        <div className="ai-options-row">
+                          {options.map((opt, oIdx) => (
+                            <button
+                              key={oIdx}
+                              type="button"
+                              className="ai-option-btn"
+                              onClick={() => void sendMessage(undefined, opt)}
+                            >
+                              {opt}
+                            </button>
+                          ))}
                         </div>
-                        <button
-                          type="button"
-                          className="ai-email-fallback-link"
-                          onClick={() => handleEmailSendWeb(msg.id, action)}
-                        >
-                          Or open in Outlook on the Web
-                        </button>
-                      </div>
-                    )}
-                    {showOptions && options && (
-                      <div className="ai-options-row">
-                        {options.map((opt, oIdx) => (
-                          <button
-                            key={oIdx}
-                            type="button"
-                            className="ai-option-btn"
-                            onClick={() => void sendMessage(undefined, opt)}
-                          >
-                            {opt}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                      )}
+                    </div>
                   )}
                 </div>
               );
@@ -499,7 +621,11 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
               <div className="ai-fab-msg ai-fab-msg-ai">
                 <span className="ai-fab-msg-avatar" aria-hidden="true">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={withBasePath("/svh.gif")} alt="" className="ai-fab-avatar-gif" />
+                  <img
+                    src={withBasePath("/svh-logo.gif")}
+                    alt=""
+                    className="ai-fab-avatar-gif"
+                  />
                 </span>
                 <div className="ai-fab-bubble">
                   <TypingDots />
@@ -507,9 +633,7 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
               </div>
             )}
 
-            {error && (
-              <p className="ai-fab-error">{error}</p>
-            )}
+            {error && <p className="ai-fab-error">{error}</p>}
 
             <div ref={bottomRef} />
           </div>
@@ -538,7 +662,9 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
       )}
 
       {/* FAB button with spinning gradient ring */}
-      <div className={`ai-fab-ring-wrap ${isOpen ? "ai-fab-ring-wrap-open" : ""}`}>
+      <div
+        className={`ai-fab-ring-wrap ${isOpen ? "ai-fab-ring-wrap-open" : ""}`}
+      >
         <div className="ai-fab-ring" aria-hidden="true" />
         <button
           type="button"
@@ -548,7 +674,12 @@ export default function AiGlobalChat({ userEmail, userName }: Props): JSX.Elemen
           title="OKR AI Assistant"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={withBasePath("/svh.gif")} alt="" aria-hidden="true" className="ai-fab-gif" />
+          <img
+            src={withBasePath("/svh-logo.gif")}
+            alt=""
+            aria-hidden="true"
+            className="ai-fab-gif"
+          />
         </button>
       </div>
     </div>

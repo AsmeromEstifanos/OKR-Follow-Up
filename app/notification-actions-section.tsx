@@ -24,7 +24,14 @@ type ReminderRecipient = {
   html?: string;
 };
 
-type ConfirmStage = "idle" | "loading" | "select" | "sending" | "done";
+type RuleMenuItem = {
+  id: string;
+  label: string;
+  scheduleLabel: string;
+};
+
+// Step 1: pick rules → Step 2: pick recipients → Step 3: preview email → send
+type ConfirmStage = "idle" | "loading" | "rules" | "select" | "sending" | "done";
 
 function SendIcon(): JSX.Element {
   return (
@@ -52,10 +59,19 @@ export default function NotificationActionsSection(): JSX.Element {
   const [isLogLoading, setIsLogLoading] = useState(false);
 
   const [confirmStage, setConfirmStage] = useState<ConfirmStage>("idle");
+
+  // Step 1 — rule selection
+  const [ruleMenu, setRuleMenu] = useState<RuleMenuItem[]>([]);
+  const [selectedRuleIds, setSelectedRuleIds] = useState<Set<string>>(new Set());
+
+  // Step 2 — recipient selection
   const [previewRecipients, setPreviewRecipients] = useState<ReminderRecipient[]>([]);
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
+
+  // Step 3 — email preview
   const [previewEmail, setPreviewEmail] = useState<string>("");
   const [isEmailPreviewOpen, setIsEmailPreviewOpen] = useState(false);
+
   const [confirmError, setConfirmError] = useState<string>("");
   const [sendSummary, setSendSummary] = useState<string>("");
 
@@ -81,10 +97,13 @@ export default function NotificationActionsSection(): JSX.Element {
     void loadReminderLog();
   }, [loadReminderLog]);
 
+  // Step 1: open and load the rule menu
   async function openConfirm(): Promise<void> {
     setConfirmStage("loading");
     setConfirmError("");
     setSendSummary("");
+    setRuleMenu([]);
+    setSelectedRuleIds(new Set());
     setPreviewRecipients([]);
     setSelectedEmails(new Set());
     setPreviewEmail("");
@@ -92,6 +111,40 @@ export default function NotificationActionsSection(): JSX.Element {
 
     try {
       const response = await fetch(apiPath("/api/notifications/remind"), {
+        headers: { "x-user-email": userEmail },
+        cache: "no-store"
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        setConfirmError(payload?.error ?? "Failed to load rules.");
+        setConfirmStage("rules");
+        return;
+      }
+
+      const payload = (await response.json()) as { ruleMenu?: RuleMenuItem[] };
+      const menu = Array.isArray(payload.ruleMenu) ? payload.ruleMenu : [];
+      setRuleMenu(menu);
+      setSelectedRuleIds(new Set(menu.map((r) => r.id)));
+      setConfirmStage("rules");
+    } catch {
+      setConfirmError("Failed to load rules.");
+      setConfirmStage("rules");
+    }
+  }
+
+  // Step 1 → Step 2: load recipients for selected rules
+  async function loadRecipientsForRules(): Promise<void> {
+    setConfirmStage("loading");
+    setConfirmError("");
+
+    try {
+      const ruleIdsParam = [...selectedRuleIds].join(",");
+      const url = ruleIdsParam
+        ? apiPath(`/api/notifications/remind?ruleIds=${encodeURIComponent(ruleIdsParam)}`)
+        : apiPath("/api/notifications/remind");
+
+      const response = await fetch(url, {
         headers: { "x-user-email": userEmail },
         cache: "no-store"
       });
@@ -119,10 +172,21 @@ export default function NotificationActionsSection(): JSX.Element {
     setConfirmStage("idle");
     setConfirmError("");
     setSendSummary("");
+    setRuleMenu([]);
+    setSelectedRuleIds(new Set());
     setPreviewRecipients([]);
     setSelectedEmails(new Set());
     setPreviewEmail("");
     setIsEmailPreviewOpen(false);
+  }
+
+  function toggleRule(id: string): void {
+    setSelectedRuleIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   function toggleRecipient(email: string): void {
@@ -173,7 +237,7 @@ export default function NotificationActionsSection(): JSX.Element {
       const response = await fetch(apiPath("/api/notifications/remind"), {
         method: "POST",
         headers: { "content-type": "application/json", "x-user-email": userEmail },
-        body: JSON.stringify({ recipients })
+        body: JSON.stringify({ ruleIds: [...selectedRuleIds], recipients })
       });
 
       if (!response.ok) {
@@ -229,8 +293,9 @@ export default function NotificationActionsSection(): JSX.Element {
         </button>
       </div>
       <p className="meta">
-        Manually dispatch the same reminder emails the scheduler would send for every enabled rule,
-        regardless of schedule. You pick the recipients in the next step.
+        Manually dispatch reminder emails. You choose which rules to include and which recipients to send to.
+        The scheduler sends automatically on the configured schedule — only rules whose schedule matches the
+        current time will fire automatically.
       </p>
 
       <div className="notif-actions-log">
@@ -292,17 +357,64 @@ export default function NotificationActionsSection(): JSX.Element {
             {confirmStage === "loading" && (
               <div className="notif-confirm-loading">
                 <span className="notif-log-spinner" aria-hidden="true" />
-                Loading recipients…
+                Loading…
               </div>
             )}
 
+            {/* Step 1: Rule selection */}
+            {confirmStage === "rules" && (
+              <>
+                <div className="notif-confirm-title">Choose reminder types to send</div>
+                {confirmError ? (
+                  <p className="notif-confirm-error">{confirmError}</p>
+                ) : ruleMenu.length === 0 ? (
+                  <p className="notif-confirm-empty">No reminder rules are enabled. Enable rules in the Notifications settings tab first.</p>
+                ) : (
+                  <ul className="notif-rule-menu">
+                    {ruleMenu.map((rule) => (
+                      <li key={rule.id} className="notif-rule-item">
+                        <label className="notif-rule-label">
+                          <input
+                            type="checkbox"
+                            checked={selectedRuleIds.has(rule.id)}
+                            onChange={() => toggleRule(rule.id)}
+                          />
+                          <div className="notif-rule-info">
+                            <span className="notif-rule-name">{rule.label}</span>
+                            <span className="notif-rule-schedule">{rule.scheduleLabel}</span>
+                          </div>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="notif-confirm-actions">
+                  <button type="button" className="notif-confirm-cancel" onClick={closeConfirm}>Cancel</button>
+                  {ruleMenu.length > 0 && (
+                    <button
+                      type="button"
+                      className="notif-confirm-send"
+                      onClick={() => void loadRecipientsForRules()}
+                      disabled={selectedRuleIds.size === 0}
+                    >
+                      Next: choose recipients
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* Step 2: Recipient selection */}
             {confirmStage === "select" && (
               <>
                 <div className="notif-confirm-title">Send reminder emails</div>
+                <div className="notif-confirm-subtitle">
+                  Sending: {[...selectedRuleIds].map((id) => ruleMenu.find((r) => r.id === id)?.label ?? id).join(", ")}
+                </div>
                 {confirmError ? (
                   <p className="notif-confirm-error">{confirmError}</p>
                 ) : previewRecipients.length === 0 ? (
-                  <p className="notif-confirm-empty">No one needs a reminder right now.</p>
+                  <p className="notif-confirm-empty">No one needs a reminder for the selected rules right now.</p>
                 ) : isEmailPreviewOpen && activePreview ? (
                   <div className="notif-email-preview">
                     <div className="notif-email-preview-toolbar">
@@ -367,8 +479,8 @@ export default function NotificationActionsSection(): JSX.Element {
                       Back
                     </button>
                   ) : (
-                    <button type="button" className="notif-confirm-cancel" onClick={closeConfirm}>
-                      {previewRecipients.length === 0 ? "Close" : "Cancel"}
+                    <button type="button" className="notif-confirm-cancel" onClick={() => setConfirmStage("rules")}>
+                      Back
                     </button>
                   )}
                   {!isEmailPreviewOpen && previewRecipients.length > 0 && (
