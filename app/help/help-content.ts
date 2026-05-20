@@ -204,8 +204,7 @@ This is useful for keeping an eye on team activity and understanding how goals h
     category: "For managers & admins",
     body: `If you're an Admin, you'll see a Config menu item with several tabs:
 
-- Admins — grant admin access to people
-- Roles — assign roles (Admin, Manager, Editor, Viewer) and set a default role for everyone else
+- Roles — assign roles (Admin, Manager, Editor, Viewer) and set a default role for everyone else; assigning the Admin role here is how you grant admin access
 - Field Options — customise the dropdown choices (objective types, statuses, etc.)
 - RAG — set the green/amber/red progress thresholds for your organisation
 - Ventures — set up your organisation structure: ventures and their departments

@@ -252,8 +252,7 @@ If you're an **Admin**, you'll see a **Config** menu item with several tabs:
 
 | Tab | What you can do |
 |---|---|
-| **Admins** | Grant admin access to people |
-| **Roles** | Assign roles (Admin, Manager, Editor, Viewer) and set a default role for everyone else |
+| **Roles** | Assign roles (Admin, Manager, Editor, Viewer) and set a default role for everyone else. Assigning the **Admin** role here is how you grant admin access |
 | **Field Options** | Customise the dropdown choices (objective types, statuses, etc.) |
 | **RAG** | Set the green/amber/red progress thresholds for your organisation |
 | **Ventures** | Set up your organisation structure — ventures and their departments |

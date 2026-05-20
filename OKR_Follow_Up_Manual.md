@@ -1,6 +1,6 @@
 # OKR Follow-Up — Application Manual
 
-**Version 0.5.38 · Last updated 2026-05-20**
+**Version 0.5.39 · Last updated 2026-05-20**
 
 This document is a complete reference for the OKR Follow-Up application: what every feature does, how it works internally, and what you need to reproduce any part of it in a new application. It is written for developers and power users alike.
 
@@ -618,21 +618,19 @@ Changes are stored in `notification-settings.json` on the server filesystem (in 
 
 **Access:** Admin role only.
 
-The config panel has six tabs.
+The config panel has five tabs.
 
-### 12.1 Admins tab (legacy)
+> **Note:** A legacy "Admins" tab was removed in v0.5.39. It was a narrower duplicate of the Roles tab — both wrote the same `Admin` role assignment to the same SharePoint list. Admin access is now granted solely by assigning the **Admin** role in the Roles tab. The underlying admin API (`/api/config/admins`, `isAdminEmail`, `listAdmins`) remains in place and is unchanged — `isAdminEmail(email)` simply returns true when the email has the `Admin` role.
 
-Lists email addresses with Admin access. This is a legacy mechanism predating the full role system. Adding an email here grants admin access in addition to the Roles system.
-
-### 12.2 Roles tab
+### 12.1 Roles tab
 
 Manage role assignments for individual users:
 - List all role assignments sorted by role hierarchy (Admin → Manager → Editor → Viewer)
-- Assign a role to a new email address
+- Assign a role to a new email address (assigning **Admin** grants full admin access)
 - Remove a role assignment
 - Set the **default role** for users not individually listed (dropdown: Admin / Manager / Editor / Viewer / None)
 
-### 12.3 Field Options tab
+### 12.2 Field Options tab
 
 Manage the dropdown lists used throughout the application:
 - Objective Types (e.g., Strategic, Operational)
@@ -642,21 +640,21 @@ Manage the dropdown lists used throughout the application:
 - KR Statuses
 - Check-In Frequencies (Weekly, BiWeekly, Monthly, AdHoc)
 
-### 12.4 RAG tab
+### 12.3 RAG tab
 
 Configure the RAG thresholds:
 - **Green minimum**: progress % at which an objective becomes Green (default 70)
 - **Amber minimum**: progress % at which it becomes Amber (default 40)
 - Below Amber minimum = Red
 
-### 12.5 Ventures tab
+### 12.4 Ventures tab
 
 Manage the organisational structure:
 - Create, rename, delete ventures
 - Create, rename, delete departments within ventures
 - Departments are the unit that objectives belong to
 
-### 12.6 Notifications tab
+### 12.5 Notifications tab
 
 - Enable/disable each of the 5 reminder rules
 - Customise schedule (time, day) per rule
@@ -666,7 +664,7 @@ Manage the organisational structure:
 
 ---
 
-## 12.7 In-app Help page
+## 12.6 In-app Help page
 
 **Route:** `/help` · **Access:** all signed-in users.
 

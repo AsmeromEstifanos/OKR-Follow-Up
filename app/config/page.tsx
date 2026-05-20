@@ -8,10 +8,9 @@ import { apiPath } from "@/lib/base-path";
 import type { AppConfig, AppRole, RoleUser } from "@/lib/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-type TabId = "admins" | "roles" | "fields" | "rag" | "ventures" | "notifications";
+type TabId = "roles" | "fields" | "rag" | "ventures" | "notifications";
 
 const TABS: { id: TabId; label: string }[] = [
-  { id: "admins", label: "Admins" },
   { id: "roles", label: "Roles" },
   { id: "fields", label: "Field Options" },
   { id: "rag", label: "RAG" },
@@ -33,11 +32,6 @@ type ApiError = {
 };
 
 type ApiActionState = "idle" | "loading" | "saving";
-
-type AdminUser = {
-  email: string;
-  displayName?: string;
-};
 
 const OBJECTIVE_TYPE_VALUES = ["Aspirational", "Committed", "Learning"];
 const OBJECTIVE_STATUS_VALUES = ["NotStarted", "OnTrack", "AtRisk", "OffTrack", "Done"];
@@ -147,7 +141,7 @@ export default function ConfigPage(): JSX.Element {
   const currentUserEmail = useCurrentUserEmail();
   const normalizedCurrentUser = normalizeEmail(currentUserEmail);
 
-  const [activeTab, setActiveTab] = useState<TabId>("admins");
+  const [activeTab, setActiveTab] = useState<TabId>("roles");
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [state, setState] = useState<ApiActionState>("loading");
   const [message, setMessage] = useState<string>("");
@@ -155,10 +149,6 @@ export default function ConfigPage(): JSX.Element {
 
   const [isAuthzLoading, setIsAuthzLoading] = useState<boolean>(true);
   const [isAdminUser, setIsAdminUser] = useState<boolean>(false);
-
-  const [admins, setAdmins] = useState<AdminUser[]>([]);
-  const [adminEmailDraft, setAdminEmailDraft] = useState<string>("");
-  const [adminDisplayNameDraft, setAdminDisplayNameDraft] = useState<string>("");
 
   const [roleUsers, setRoleUsers] = useState<RoleUser[]>([]);
   const [roleEmailDraft, setRoleEmailDraft] = useState<string>("");
@@ -211,18 +201,6 @@ export default function ConfigPage(): JSX.Element {
     setState("idle");
   }, []);
 
-  const loadAdmins = useCallback(async (): Promise<void> => {
-    const response = await fetch(apiPath("/api/config/admins"), { cache: "no-store" });
-    const payload = await readJson<{ admins?: AdminUser[] } & ApiError>(response);
-
-    if (!response.ok) {
-      setError(payload?.error ?? "Failed to load admin users.");
-      return;
-    }
-
-    setAdmins(payload?.admins ?? []);
-  }, []);
-
   const loadRoles = useCallback(async (): Promise<void> => {
     const [rolesRes, defaultRes] = await Promise.all([
       fetch(apiPath("/api/roles"), { cache: "no-store", headers: { "x-user-email": normalizedCurrentUser } }),
@@ -262,9 +240,8 @@ export default function ConfigPage(): JSX.Element {
     }
 
     void loadConfig();
-    void loadAdmins();
     void loadRoles();
-  }, [isAdminUser, loadAdmins, loadConfig, loadRoles]);
+  }, [isAdminUser, loadConfig, loadRoles]);
 
   const ragPreview = useMemo(() => {
     const nextGreen = Number(greenMin);
@@ -356,62 +333,6 @@ export default function ConfigPage(): JSX.Element {
 
     setConfig(payload);
     setMessage("Dropdown options updated.");
-    setState("idle");
-  };
-
-  const addAdmin = async (): Promise<void> => {
-    const email = normalizeEmail(adminEmailDraft);
-    if (!email) {
-      setError("Admin email is required.");
-      return;
-    }
-
-    setState("saving");
-    setError("");
-    setMessage("");
-
-    const response = await fetch(apiPath("/api/config/admins"), {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-user-email": normalizedCurrentUser
-      },
-      body: JSON.stringify({ email, displayName: adminDisplayNameDraft.trim() })
-    });
-    const payload = await readJson<{ admins?: AdminUser[] } & ApiError>(response);
-    if (!response.ok) {
-      setError(payload?.error ?? "Failed to add admin.");
-      setState("idle");
-      return;
-    }
-
-    setAdmins(payload?.admins ?? []);
-    setAdminEmailDraft("");
-    setAdminDisplayNameDraft("");
-    setMessage("Admin user added.");
-    setState("idle");
-  };
-
-  const removeAdmin = async (email: string): Promise<void> => {
-    setState("saving");
-    setError("");
-    setMessage("");
-
-    const response = await fetch(apiPath(`/api/config/admins/${encodeURIComponent(email)}`), {
-      method: "DELETE",
-      headers: {
-        "x-user-email": normalizedCurrentUser
-      }
-    });
-    const payload = await readJson<{ admins?: AdminUser[] } & ApiError>(response);
-    if (!response.ok) {
-      setError(payload?.error ?? "Failed to remove admin.");
-      setState("idle");
-      return;
-    }
-
-    setAdmins(payload?.admins ?? []);
-    setMessage("Admin user removed.");
     setState("idle");
   };
 
@@ -592,7 +513,7 @@ export default function ConfigPage(): JSX.Element {
   return (
     <div>
       <h1 className="page-title">Configuration</h1>
-      <p className="subtitle">Manage admins, dropdown options, RAG ranges, ventures, departments, and notifications.</p>
+      <p className="subtitle">Manage roles, dropdown options, RAG ranges, ventures, departments, and notifications.</p>
 
       <nav className="config-tabs" role="tablist" aria-label="Configuration sections">
         {TABS.map((tab) => (
@@ -608,55 +529,6 @@ export default function ConfigPage(): JSX.Element {
           </button>
         ))}
       </nav>
-
-      {activeTab === "admins" && (
-      <section className="section">
-        <h2>Admin Users</h2>
-        <div className="config-grid">
-          <OwnerInput
-            id="adminEmail"
-            label="Admin Email"
-            value={adminEmailDraft}
-            onChange={(value) => {
-              setAdminEmailDraft(value);
-              setAdminDisplayNameDraft("");
-            }}
-            selectValue="email"
-            onSelectUser={(user) => {
-              setAdminDisplayNameDraft(user?.displayName ?? "");
-            }}
-            placeholder="Type name or email"
-            disabled={isBusy}
-          />
-        </div>
-        <div className="actions">
-          <button className="btn btn-add" type="button" onClick={() => void addAdmin()} disabled={isBusy}>
-            Add Admin
-          </button>
-        </div>
-        <div className="config-checklist">
-          {admins.length === 0 ? <p className="meta">No admin users configured yet.</p> : null}
-          {admins.map((admin) => (
-            <div key={admin.email} className="config-inline-row">
-              <span>
-                {admin.displayName ? `${admin.displayName} ` : ""}
-                <span className="meta">({admin.email})</span>
-              </span>
-              <button
-                className="config-remove-btn"
-                type="button"
-                onClick={() => void removeAdmin(admin.email)}
-                disabled={isBusy}
-                aria-label={`Remove admin ${admin.email}`}
-                title="Remove admin"
-              >
-                ×
-              </button>
-            </div>
-          ))}
-        </div>
-      </section>
-      )}
 
       {activeTab === "roles" && (
       <section className="section">
