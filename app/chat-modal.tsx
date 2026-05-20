@@ -101,10 +101,22 @@ export default function ChatModal({
     const response = await fetch(url, { cache: "no-store" });
     if (response.ok) {
       const loaded = (await response.json()) as Comment[];
-      // Seed known mention names from author names present in the thread
+      // Resolve @tokens in loaded comment bodies to full display names via suggest API.
+      // Extract the first word after each @ as the query, deduplicate, then fetch.
+      const rawTokens = new Set<string>();
       loaded.forEach((c) => {
-        if (c.authorName) mentionedNamesRef.current.add(c.authorName);
+        (c.body.match(/@(\S+)/g) ?? []).forEach((t) => rawTokens.add(t.slice(1).toLowerCase()));
       });
+      if (rawTokens.size > 0) {
+        await Promise.allSettled(
+          [...rawTokens].map((token) =>
+            fetch(apiPath(`/api/users/suggest?q=${encodeURIComponent(token)}`))
+              .then((r) => (r.ok ? (r.json() as Promise<UserSuggestion[]>) : []))
+              .then((users) => users.forEach((u) => mentionedNamesRef.current.add(u.displayName)))
+              .catch(() => undefined)
+          )
+        );
+      }
       setComments(loaded);
       onCommentsLoaded(loaded);
     }

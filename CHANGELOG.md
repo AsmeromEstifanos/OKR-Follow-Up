@@ -8,6 +8,12 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.22] — 2026-05-20
+### Fixed
+- @mention highlights now appear for historical messages: on thread load, each @token in existing comment bodies is resolved to a full display name via the suggest API, so the known-names set is populated before rendering
+
+---
+
 ## [0.5.21] — 2026-05-20
 ### Fixed
 - @mention highlighting uses exact known names (seeded from author names in the thread and from dropdown selections) instead of a fragile capitalization heuristic — eliminates false highlights on capitalized words
