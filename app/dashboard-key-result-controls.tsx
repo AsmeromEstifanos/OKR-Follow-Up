@@ -489,24 +489,14 @@ export default function DashboardKeyResultControls({
             ) : (
               <div className="field">
                 <label>Progress</label>
-                <div className="milestone-binary-btns">
-                  <button
-                    type="button"
-                    className={`milestone-binary-btn${!krIsDone ? " milestone-binary-btn-active" : ""}`}
-                    onClick={() => setKrIsDone(false)}
-                    disabled={isSaving}
-                  >
-                    Not Done
-                  </button>
-                  <button
-                    type="button"
-                    className={`milestone-binary-btn${krIsDone ? " milestone-binary-btn-active" : ""}`}
-                    onClick={() => setKrIsDone(true)}
-                    disabled={isSaving}
-                  >
-                    Done
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  className={`milestone-binary-btn${krIsDone ? " milestone-binary-btn-active" : ""}`}
+                  onClick={() => setKrIsDone((v) => !v)}
+                  disabled={isSaving}
+                >
+                  {krIsDone ? "Done" : "Not Done"}
+                </button>
               </div>
             )}
             <div className="field">

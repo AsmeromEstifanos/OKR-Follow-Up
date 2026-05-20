@@ -408,22 +408,16 @@ export default function KeyResultEditControls({
           ) : (
             <div className="field">
               <label>Progress</label>
-              <div className="milestone-binary-btns">
-                <button
-                  type="button"
-                  className={`milestone-binary-btn${Number(draft.krProgressPct) < 100 ? " milestone-binary-btn-active" : ""}`}
-                  onClick={() => setDraft((current) => ({ ...current, krProgressPct: "0" }))}
-                >
-                  Not Done
-                </button>
-                <button
-                  type="button"
-                  className={`milestone-binary-btn${Number(draft.krProgressPct) >= 100 ? " milestone-binary-btn-active" : ""}`}
-                  onClick={() => setDraft((current) => ({ ...current, krProgressPct: "100" }))}
-                >
-                  Done
-                </button>
-              </div>
+              <button
+                type="button"
+                className={`milestone-binary-btn${Number(draft.krProgressPct) >= 100 ? " milestone-binary-btn-active" : ""}`}
+                onClick={() => setDraft((current) => ({
+                  ...current,
+                  krProgressPct: Number(current.krProgressPct) >= 100 ? "0" : "100"
+                }))}
+              >
+                {Number(draft.krProgressPct) >= 100 ? "Done" : "Not Done"}
+              </button>
             </div>
           )}
 

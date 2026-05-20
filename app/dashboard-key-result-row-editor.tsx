@@ -647,6 +647,17 @@ export default function DashboardKeyResultRowEditor({
               placeholder="Owner"
             />
           ) : null}
+          {isEditing && !hasMilestoneBackedProgress ? (
+            <select
+              className="objective-row-select"
+              value={krMode}
+              onChange={(e) => setKrMode(e.target.value as KrMode)}
+              disabled={isSaving}
+            >
+              <option value="measurable">Measurable</option>
+              <option value="non-measurable">Non-measurable</option>
+            </select>
+          ) : null}
           {canEdit && isEditing ? (
             <div className="objective-row-actions">
               <button className="btn" type="button" onClick={() => void saveEdit()} disabled={isSaving}>
@@ -679,50 +690,29 @@ export default function DashboardKeyResultRowEditor({
           )}
         </td>
         <td>
-          {hasMilestoneBackedProgress ? "-" : isEditing ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-              <select
-                className="objective-row-select"
-                value={krMode}
-                onChange={(e) => setKrMode(e.target.value as KrMode)}
-                disabled={isSaving}
-              >
-                <option value="measurable">Measurable</option>
-                <option value="non-measurable">Non-measurable</option>
-              </select>
-              {krMode === "measurable" && (
-                <input className="objective-row-input" value={targetValue} onChange={(e) => setTargetValue(e.target.value)} disabled={isSaving} placeholder="Target" />
-              )}
-            </div>
+          {hasMilestoneBackedProgress ? "-" : isEditing && krMode === "measurable" ? (
+            <input className="objective-row-input" value={targetValue} onChange={(e) => setTargetValue(e.target.value)} disabled={isSaving} placeholder="Target" />
           ) : (
             keyResult.targetValue !== null ? keyResult.targetValue : "-"
           )}
         </td>
         <td>
-          {hasMilestoneBackedProgress ? "-" : isEditing ? (
-            krMode === "measurable" ? (
-              <input className="objective-row-input" value={currentValue} onChange={(e) => setCurrentValue(e.target.value)} disabled={isSaving} placeholder="Current" />
-            ) : (
-              <div className="milestone-binary-btns">
-                <button
-                  type="button"
-                  className={`milestone-binary-btn${krIsDone ? " milestone-binary-btn-active" : ""}`}
-                  onClick={() => setKrIsDone(true)}
-                  disabled={isSaving}
-                >Done</button>
-                <button
-                  type="button"
-                  className={`milestone-binary-btn${!krIsDone ? " milestone-binary-btn-active" : ""}`}
-                  onClick={() => setKrIsDone(false)}
-                  disabled={isSaving}
-                >Not Done</button>
-              </div>
-            )
+          {hasMilestoneBackedProgress ? "-" : isEditing && krMode === "measurable" ? (
+            <input className="objective-row-input" value={currentValue} onChange={(e) => setCurrentValue(e.target.value)} disabled={isSaving} placeholder="Current" />
+          ) : isEditing && krMode === "non-measurable" ? (
+            <button
+              type="button"
+              className={`milestone-binary-btn${krIsDone ? " milestone-binary-btn-active" : ""}`}
+              onClick={() => setKrIsDone((v) => !v)}
+              disabled={isSaving}
+            >{krIsDone ? "Done" : "Not Done"}</button>
           ) : (
             keyResult.currentValue !== null ? keyResult.currentValue : "-"
           )}
         </td>
-        <td>{keyResult.progressPct}%</td>
+        <td>
+          {`${keyResult.progressPct}%`}
+        </td>
         <td>{isEditing ? <input className="objective-row-input" type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} disabled={isSaving} /> : formatDate(keyResult.dueDate)}</td>
         <td>{isEditing ? <input className="objective-row-input" value={notes} onChange={(event) => setNotes(event.target.value)} disabled={isSaving} /> : keyResult.notes || latestUpdateNotes || "-"}</td>
         <td>{isEditing ? <input className="objective-row-input" value={blockers} onChange={(event) => setBlockers(event.target.value)} disabled={isSaving} /> : keyResult.blockers || "-"}</td>

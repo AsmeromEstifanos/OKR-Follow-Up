@@ -225,6 +225,7 @@ export type UpdateKeyResultInput = Partial<
     | "blockers"
     | "supportNeeded"
     | "notes"
+    | "progressPct"
   >
 >;
 export type CreateCheckInInput = Omit<CheckIn, "checkInAt" | "progressPctSnapshot"> & {

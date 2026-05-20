@@ -1689,6 +1689,10 @@ export function updateKeyResult(krKey: string, patch: UpdateKeyResultInput): Key
     keyResult.notes = normalizeName(patch.notes);
   }
 
+  if (patch.progressPct !== undefined) {
+    keyResult.progressPct = clampPercent(patch.progressPct);
+  }
+
   recalcKrInStore(store, keyResult.krKey);
 
   keyResult.lastCheckinAt = nowIso();

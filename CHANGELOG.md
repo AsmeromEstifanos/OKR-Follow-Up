@@ -8,6 +8,19 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.27] — 2026-05-20
+### Fixed
+- Non-measurable KR inline edit: Done/Not Done replaced with a single toggle button in the Current column
+- `progressPct` added to allowed PATCH fields so non-measurable KR saves no longer return a read-only error
+
+---
+
+## [0.5.26] — 2026-05-20
+### Fixed
+- Inline KR row editor: Done/Not Done buttons now appear in the KR Progress % column (not the Current column); KR Type dropdown moved to the KR name cell alongside other edit controls; Target and Current columns show inputs only for measurable KRs
+
+---
+
 ## [0.5.25] — 2026-05-20
 ### Changed
 - Add KR form (board row) now shows a KR Type dropdown (Measurable / Non-measurable) instead of free-text "Measurement Rule"; Baseline/Target/Current inputs shown for measurable, Done/Not Done buttons shown for non-measurable

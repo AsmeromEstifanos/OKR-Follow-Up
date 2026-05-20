@@ -899,18 +899,13 @@ export default function DashboardCreateControls(): JSX.Element {
             ) : (
               <div className="field">
                 <label>Status</label>
-                <div className="milestone-binary-btns">
-                  <button
-                    type="button"
-                    className={`milestone-binary-btn${krIsDone ? " milestone-binary-btn-active" : ""}`}
-                    onClick={() => setKrIsDone(true)}
-                  >Done</button>
-                  <button
-                    type="button"
-                    className={`milestone-binary-btn${!krIsDone ? " milestone-binary-btn-active" : ""}`}
-                    onClick={() => setKrIsDone(false)}
-                  >Not Done</button>
-                </div>
+                <button
+                  type="button"
+                  className={`milestone-binary-btn${krIsDone ? " milestone-binary-btn-active" : ""}`}
+                  onClick={() => setKrIsDone((v) => !v)}
+                >
+                  {krIsDone ? "Done" : "Not Done"}
+                </button>
               </div>
             )}
             <div className="field">

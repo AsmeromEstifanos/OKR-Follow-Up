@@ -29,9 +29,10 @@ const ALLOWED_PATCH_FIELDS = new Set([
   "checkInFrequency",
   "blockers",
   "supportNeeded",
-  "notes"
+  "notes",
+  "progressPct"
 ]);
-const READ_ONLY_FIELDS = new Set(["krKey", "progressPct"]);
+const READ_ONLY_FIELDS = new Set(["krKey"]);
 
 function expectString(raw: Record<string, unknown>, field: string, allowEmpty = false): string {
   const value = raw[field];
@@ -144,6 +145,10 @@ function parseKrPatch(body: unknown): UpdateKeyResultInput {
 
   if (raw.notes !== undefined) {
     patch.notes = expectString(raw, "notes", true);
+  }
+
+  if (raw.progressPct !== undefined) {
+    patch.progressPct = expectNumber(raw, "progressPct");
   }
 
   return patch;
