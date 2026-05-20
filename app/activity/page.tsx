@@ -110,12 +110,27 @@ function formatValue(value: unknown, field?: string): string {
   return JSON.stringify(value);
 }
 
+const ENTITY_TYPE_WORDS: Record<string, string> = {
+  objectives: "objective",
+  krs: "key result",
+  milestones: "milestone",
+  "check-ins": "check-in",
+  periods: "period",
+  ventures: "venture",
+  position: "position",
+  venture: "venture",
+  admin: "admin",
+  "dropdown-config": "dropdown config",
+  "rag-config": "RAG config",
+  notification: "notification"
+};
+
 // Compose a human-readable sentence from the log entry
 function composeActionSentence(entry: ActivityEntry): string {
   const { httpMethod, entityType } = entry;
 
   const entityWord = entityType
-    ? entityType.replace(/-/g, " ").replace(/s$/, "")
+    ? (ENTITY_TYPE_WORDS[entityType] ?? entityType.replace(/-/g, " ").replace(/s$/, ""))
     : "item";
 
   if (httpMethod === "POST") return `Created ${entityWord}`;

@@ -190,7 +190,7 @@ export async function PATCH(request: NextRequest, context: Context): Promise<Nex
       const detailsJson = before
         ? buildActivityDiff(before as unknown as Record<string, unknown>, keyResult as unknown as Record<string, unknown>)
         : "";
-      const label = keyResult.krCode ? `${keyResult.krCode} — ${keyResult.title}` : keyResult.title;
+      const label = keyResult.krCode ? `${keyResult.krCode} ${keyResult.title}` : keyResult.title;
       const headers: Record<string, string> = { "x-activity-label": label };
       if (detailsJson) headers["x-activity-details"] = detailsJson;
       return NextResponse.json(keyResult, { headers });

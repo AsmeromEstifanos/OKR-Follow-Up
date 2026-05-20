@@ -8,6 +8,11 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.32] — 2026-05-20
+### Fixed
+- ByteString encoding error when saving KRs/objectives with codes: removed em dash from entity label headers, non-ASCII characters are now stripped before writing to SharePoint
+- Activity log now shows "key result" / "objective" instead of raw entity type slugs ("kr", "krs")
+
 ## [0.5.31] — 2026-05-20
 ### Fixed
 - Activity Log now displays human-readable sentences ("Updated key result **KR-01 — Title** · Progress changed from 40% to 85%") instead of raw technical strings

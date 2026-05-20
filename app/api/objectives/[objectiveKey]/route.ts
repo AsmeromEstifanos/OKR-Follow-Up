@@ -196,7 +196,7 @@ export async function PATCH(request: NextRequest, context: Context): Promise<Nex
       const detailsJson = before
         ? buildActivityDiff(before as unknown as Record<string, unknown>, objective as unknown as Record<string, unknown>)
         : "";
-      const label = objective.objectiveCode ? `${objective.objectiveCode} — ${objective.title}` : objective.title;
+      const label = objective.objectiveCode ? `${objective.objectiveCode} ${objective.title}` : objective.title;
       const headers: Record<string, string> = { "x-activity-label": label };
       if (detailsJson) headers["x-activity-details"] = detailsJson;
       return NextResponse.json(objective, { headers });

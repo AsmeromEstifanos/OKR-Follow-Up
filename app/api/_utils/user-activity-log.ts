@@ -110,7 +110,9 @@ export async function logSuccessfulRequestActivity(
   // x-activity-details — pre-built detailsJson string
   // x-activity-label   — human-readable entity label
   const detailsJson = result.headers.get("x-activity-details") ?? undefined;
-  const entityLabel = result.headers.get("x-activity-label") ?? undefined;
+  // Strip non-ASCII so SharePoint ByteString encoding never rejects the value
+  const rawLabel = result.headers.get("x-activity-label") ?? undefined;
+  const entityLabel = rawLabel ? rawLabel.replace(/[^\x00-\x7F]/g, "") : undefined;
 
   return logUserActivity({
     userEmail,
