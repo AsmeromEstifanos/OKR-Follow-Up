@@ -8,6 +8,14 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.35] — 2026-05-20
+### Added
+- In-app Help & User Guide page (`/help`): searchable, browsable documentation for end users with category filters and a jump-to-section table of contents
+- Help nav link added to the sidebar (visible to all signed-in users)
+- Two reference documents added to the repo: `OKR_Follow_Up_User_Guide.md` (non-technical) and `OKR_Follow_Up_Manual.md` (technical)
+
+---
+
 ## [0.5.34] — 2026-05-20
 ### Changed
 - Send Reminders dialog now has a rule selection step (Step 1) before recipient selection — choose which of the enabled reminder types to include in the manual send batch
