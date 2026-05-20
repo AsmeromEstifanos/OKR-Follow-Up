@@ -1,6 +1,7 @@
 import { deleteObjective, getObjectiveWithContext, updateObjective } from "@/lib/store";
 import type { Confidence, UpdateObjectiveInput } from "@/lib/types";
 import { withOperationProgress } from "@/app/api/_utils/with-operation-progress";
+import { buildActivityDiff } from "@/app/api/_utils/user-activity-log";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -185,13 +186,20 @@ export async function PATCH(request: NextRequest, context: Context): Promise<Nex
     try {
       const body = await request.json();
       const patch = parseObjectivePatch(body);
+      const before = (await getObjectiveWithContext(context.params.objectiveKey))?.objective ?? null;
       const objective = await updateObjective(context.params.objectiveKey, patch);
 
       if (!objective) {
         return NextResponse.json({ error: "Objective not found." }, { status: 404 });
       }
 
-      return NextResponse.json(objective);
+      const detailsJson = before
+        ? buildActivityDiff(before as unknown as Record<string, unknown>, objective as unknown as Record<string, unknown>)
+        : "";
+      const label = objective.objectiveCode ? `${objective.objectiveCode} — ${objective.title}` : objective.title;
+      const headers: Record<string, string> = { "x-activity-label": label };
+      if (detailsJson) headers["x-activity-details"] = detailsJson;
+      return NextResponse.json(objective, { headers });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to update objective.";
       return NextResponse.json({ error: message }, { status: 400 });

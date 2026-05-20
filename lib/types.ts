@@ -1,4 +1,24 @@
 export type PeriodStatus = "Planned" | "Active" | "Closed";
+
+// Role hierarchy: Admin > Manager > Editor > Viewer
+// Admin    — full access: config, activity log, all mutations
+// Manager  — activity log, all OKR mutations, no config
+// Editor   — all OKR mutations, no activity log, no config
+// Viewer   — read-only, no mutations, no activity log, no config
+export type AppRole = "Admin" | "Manager" | "Editor" | "Viewer";
+
+export const ROLE_HIERARCHY: Record<AppRole, number> = {
+  Admin: 40,
+  Manager: 30,
+  Editor: 20,
+  Viewer: 10
+};
+
+export interface RoleUser {
+  email: string;
+  role: AppRole;
+  displayName?: string;
+}
 export type ObjectiveStatus = string;
 export type ObjectiveType = string;
 export type OkrCycle = string;

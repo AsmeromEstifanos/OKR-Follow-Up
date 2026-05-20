@@ -5,18 +5,28 @@ import NotificationSettingsSection from "@/app/notification-settings-section";
 import useCurrentUserEmail from "@/app/use-current-user-email";
 import OwnerInput from "@/app/owner-input";
 import { apiPath } from "@/lib/base-path";
-import type { AppConfig } from "@/lib/types";
+import type { AppConfig, AppRole, RoleUser } from "@/lib/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-type TabId = "admins" | "fields" | "rag" | "ventures" | "notifications";
+type TabId = "admins" | "roles" | "fields" | "rag" | "ventures" | "notifications";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "admins", label: "Admins" },
+  { id: "roles", label: "Roles" },
   { id: "fields", label: "Field Options" },
   { id: "rag", label: "RAG" },
   { id: "ventures", label: "Ventures" },
   { id: "notifications", label: "Notifications" }
 ];
+
+const ALL_ROLES: AppRole[] = ["Admin", "Manager", "Editor", "Viewer"];
+
+const ROLE_DESCRIPTIONS: Record<AppRole, string> = {
+  Admin: "Full access: config, activity log, all OKR edits",
+  Manager: "Activity log + all OKR edits, no config",
+  Editor: "All OKR edits, no activity log or config",
+  Viewer: "Read-only, no edits"
+};
 
 type ApiError = {
   error?: string;
@@ -150,6 +160,11 @@ export default function ConfigPage(): JSX.Element {
   const [adminEmailDraft, setAdminEmailDraft] = useState<string>("");
   const [adminDisplayNameDraft, setAdminDisplayNameDraft] = useState<string>("");
 
+  const [roleUsers, setRoleUsers] = useState<RoleUser[]>([]);
+  const [roleEmailDraft, setRoleEmailDraft] = useState<string>("");
+  const [roleDisplayNameDraft, setRoleDisplayNameDraft] = useState<string>("");
+  const [roleRoleDraft, setRoleRoleDraft] = useState<AppRole>("Viewer");
+
   const [greenMin, setGreenMin] = useState<string>("70");
   const [amberMin, setAmberMin] = useState<string>("40");
 
@@ -207,6 +222,15 @@ export default function ConfigPage(): JSX.Element {
     setAdmins(payload?.admins ?? []);
   }, []);
 
+  const loadRoles = useCallback(async (): Promise<void> => {
+    const response = await fetch(apiPath("/api/roles"), {
+      cache: "no-store",
+      headers: { "x-user-email": normalizedCurrentUser }
+    });
+    const payload = await readJson<{ users?: RoleUser[] } & ApiError>(response);
+    if (response.ok) setRoleUsers(payload?.users ?? []);
+  }, [normalizedCurrentUser]);
+
   const loadAuthz = useCallback(async (): Promise<void> => {
     setIsAuthzLoading(true);
     try {
@@ -236,7 +260,8 @@ export default function ConfigPage(): JSX.Element {
 
     void loadConfig();
     void loadAdmins();
-  }, [isAdminUser, loadAdmins, loadConfig]);
+    void loadRoles();
+  }, [isAdminUser, loadAdmins, loadConfig, loadRoles]);
 
   const ragPreview = useMemo(() => {
     const nextGreen = Number(greenMin);
@@ -385,6 +410,37 @@ export default function ConfigPage(): JSX.Element {
     setAdmins(payload?.admins ?? []);
     setMessage("Admin user removed.");
     setState("idle");
+  };
+
+  const assignRole = async (): Promise<void> => {
+    const email = normalizeEmail(roleEmailDraft);
+    if (!email) { setError("Email is required."); return; }
+    setState("saving"); setError(""); setMessage("");
+    const response = await fetch(apiPath("/api/roles"), {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-user-email": normalizedCurrentUser },
+      body: JSON.stringify({ email, role: roleRoleDraft, displayName: roleDisplayNameDraft.trim() || undefined })
+    });
+    const payload = await readJson<{ users?: RoleUser[] } & ApiError>(response);
+    if (!response.ok) { setError(payload?.error ?? "Failed to assign role."); setState("idle"); return; }
+    setRoleUsers(payload?.users ?? []);
+    setRoleEmailDraft(""); setRoleDisplayNameDraft("");
+    setMessage("Role assigned.");
+    setState("idle");
+  };
+
+  const revokeRole = async (email: string): Promise<void> => {
+    setState("saving"); setError(""); setMessage("");
+    const response = await fetch(apiPath(`/api/roles/${encodeURIComponent(email)}`), {
+      method: "DELETE",
+      headers: { "x-user-email": normalizedCurrentUser }
+    });
+    if (!response.ok) {
+      const payload = await readJson<ApiError>(response);
+      setError(payload?.error ?? "Failed to remove role."); setState("idle"); return;
+    }
+    setRoleUsers((prev) => prev.filter((u) => u.email !== email));
+    setMessage("Role removed."); setState("idle");
   };
 
   const addVenture = async (): Promise<void> => {
@@ -579,6 +635,72 @@ export default function ConfigPage(): JSX.Element {
               >
                 ×
               </button>
+            </div>
+          ))}
+        </div>
+      </section>
+      )}
+
+      {activeTab === "roles" && (
+      <section className="section">
+        <h2>Role Assignments</h2>
+        <p className="meta">
+          Assign roles to control what each user can access.
+          <br />
+          {ALL_ROLES.map((r) => (
+            <span key={r} style={{ marginRight: "1rem" }}>
+              <strong>{r}</strong> — {ROLE_DESCRIPTIONS[r]}
+            </span>
+          ))}
+        </p>
+        <div className="config-grid">
+          <OwnerInput
+            id="roleEmail"
+            label="User Email"
+            value={roleEmailDraft}
+            onChange={(value) => { setRoleEmailDraft(value); setRoleDisplayNameDraft(""); }}
+            selectValue="email"
+            onSelectUser={(user) => { setRoleDisplayNameDraft(user?.displayName ?? ""); }}
+            placeholder="Type name or email"
+            disabled={isBusy}
+          />
+          <div className="field">
+            <label htmlFor="roleRoleDraft">Role</label>
+            <select
+              id="roleRoleDraft"
+              value={roleRoleDraft}
+              onChange={(e) => setRoleRoleDraft(e.target.value as AppRole)}
+              disabled={isBusy}
+            >
+              {ALL_ROLES.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="actions">
+          <button className="btn btn-add" type="button" onClick={() => void assignRole()} disabled={isBusy}>
+            Assign Role
+          </button>
+        </div>
+        <div className="config-checklist">
+          {roleUsers.length === 0 ? <p className="meta">No role assignments yet.</p> : null}
+          {roleUsers.map((u) => (
+            <div key={u.email} className="config-inline-row">
+              <span>
+                {u.displayName ? `${u.displayName} ` : ""}
+                <span className="meta">({u.email})</span>
+                {" — "}
+                <strong>{u.role}</strong>
+              </span>
+              <button
+                className="config-remove-btn"
+                type="button"
+                onClick={() => void revokeRole(u.email)}
+                disabled={isBusy}
+                aria-label={`Remove role for ${u.email}`}
+                title="Remove role"
+              >×</button>
             </div>
           ))}
         </div>

@@ -79,6 +79,14 @@ function ConfigIcon(): JSX.Element {
   );
 }
 
+function ActivityIcon(): JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M3 3h2v18H3V3zm4 14h2V7H7v10zm4-6h2v6h-2v-6zm4-4h2v10h-2V7zm4-2h2v12h-2V5z" fill="currentColor" />
+    </svg>
+  );
+}
+
 export default function AppShell({ children }: Props): JSX.Element {
   const { instance, accounts } = useMsal();
   const isAuthenticated = useIsAuthenticated();
@@ -89,6 +97,7 @@ export default function AppShell({ children }: Props): JSX.Element {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [isDesktopHovered, setIsDesktopHovered] = useState<boolean>(false);
   const [isAdminUser, setIsAdminUser] = useState<boolean>(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const currentUserEmail = useCurrentUserEmail();
 
   const connection = useSharePointConnection(isAuthenticated);
@@ -144,6 +153,7 @@ export default function AppShell({ children }: Props): JSX.Element {
   const normalizedPathname = useMemo(() => stripBasePath(pathname), [pathname]);
   const isDashboardRoute = normalizedPathname.startsWith("/dashboard");
   const isConfigRoute = normalizedPathname.startsWith("/config");
+  const isActivityRoute = normalizedPathname.startsWith("/activity");
   const navQuery = useMemo(() => {
     const params = new URLSearchParams(searchParams.toString());
     const preserved = new URLSearchParams();
@@ -187,17 +197,20 @@ export default function AppShell({ children }: Props): JSX.Element {
         if (!response.ok) {
           if (isMounted) {
             setIsAdminUser(false);
+            setUserRole(null);
           }
           return;
         }
 
-        const payload = (await response.json()) as { isAdmin?: boolean };
+        const payload = (await response.json()) as { isAdmin?: boolean; role?: string | null };
         if (isMounted) {
           setIsAdminUser(Boolean(payload.isAdmin));
+          setUserRole(payload.role ?? null);
         }
       } catch {
         if (isMounted) {
           setIsAdminUser(false);
+          setUserRole(null);
         }
       }
     };
@@ -318,6 +331,24 @@ export default function AppShell({ children }: Props): JSX.Element {
               <span className="ln-nav-label">{isNavCollapsed ? "" : "Config"}</span>
             </Link>
           ) : null}
+          {(userRole === "Admin" || userRole === "Manager") ? (
+            <Link
+              href="/activity"
+              className={`ln-nav-item ${isActivityRoute ? "ln-nav-item-active" : ""} ${
+                isNavCollapsed ? "ln-nav-item-collapsed" : ""
+              }`}
+              onClick={() => {
+                if (isMobile) {
+                  setIsMobileMenuOpen(false);
+                }
+              }}
+            >
+              <span className="ln-nav-icon" aria-hidden="true">
+                <ActivityIcon />
+              </span>
+              <span className="ln-nav-label">{isNavCollapsed ? "" : "Activity"}</span>
+            </Link>
+          ) : null}
         </nav>
 
         <div className="ln-sidebar-footer">
@@ -340,10 +371,10 @@ export default function AppShell({ children }: Props): JSX.Element {
               <span>{sharePointStatusLabel}</span>
             </div>
           ) : null}
-          <div className="ln-version-label" aria-label={`Application version ${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.5.29"}`}>
+          <div className="ln-version-label" aria-label={`Application version ${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.5.30"}`}>
             {isNavCollapsed
-              ? `v${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.5.29"}`
-              : `Version ${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.5.29"}`}
+              ? `v${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.5.30"}`
+              : `Version ${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.5.30"}`}
           </div>
         </div>
       </aside>

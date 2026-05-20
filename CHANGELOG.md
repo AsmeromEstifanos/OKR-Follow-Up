@@ -8,6 +8,14 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.30] — 2026-05-20
+### Added
+- Activity Log page (`/activity`): timeline feed grouped by day with per-entry field-change diffs (from→to), HTTP method badges, and clickable entity links
+- Insights panel on Activity page: summary stats, daily volume bar chart, entity type breakdown, top users, most-changed items
+- `/api/activity` route with date range, period shorthand (today/week/month/quarter/year), entity type and user email filters, cursor-based load-more pagination; requires Manager or Admin role
+- Role groups (Admin/Manager/Editor/Viewer) now control access: Activity nav link and API are restricted to Manager+ 
+- Before/after diffs captured on Objective and KR PATCH routes; stored in `detailsJson` for display in the activity feed
+
 ## [0.5.29] — 2026-05-20
 ### Fixed
 - Non-measurable KR save no longer errors with "targetValue must be a valid number" — PATCH route now accepts null for baselineValue, targetValue, and currentValue

@@ -1,4 +1,4 @@
-import { isAdminEmail } from "@/lib/store";
+import { getUserRole, isAdminEmail } from "@/lib/store";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -11,9 +11,9 @@ function normalizeEmail(value: string | null): string {
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const email = normalizeEmail(request.headers.get("x-user-email"));
   if (!email) {
-    return NextResponse.json({ email: "", isAdmin: false });
+    return NextResponse.json({ email: "", isAdmin: false, role: null });
   }
 
-  const admin = await isAdminEmail(email);
-  return NextResponse.json({ email, isAdmin: admin });
+  const [admin, role] = await Promise.all([isAdminEmail(email), getUserRole(email)]);
+  return NextResponse.json({ email, isAdmin: admin, role: role ?? null });
 }
