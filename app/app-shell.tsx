@@ -340,10 +340,10 @@ export default function AppShell({ children }: Props): JSX.Element {
               <span>{sharePointStatusLabel}</span>
             </div>
           ) : null}
-          <div className="ln-version-label" aria-label={`Application version ${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.5.28"}`}>
+          <div className="ln-version-label" aria-label={`Application version ${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.5.29"}`}>
             {isNavCollapsed
-              ? `v${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.5.28"}`
-              : `Version ${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.5.28"}`}
+              ? `v${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.5.29"}`
+              : `Version ${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.5.29"}`}
           </div>
         </div>
       </aside>

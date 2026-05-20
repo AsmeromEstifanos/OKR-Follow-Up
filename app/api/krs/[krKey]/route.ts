@@ -56,6 +56,16 @@ function expectNumber(raw: Record<string, unknown>, field: string): number {
   return value;
 }
 
+function expectNullableNumber(raw: Record<string, unknown>, field: string): number | null {
+  const value = raw[field];
+  if (value === null) return null;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${field} must be a valid number or null.`);
+  }
+
+  return value;
+}
+
 function parseKrPatch(body: unknown): UpdateKeyResultInput {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw new Error("Invalid key result update payload.");
@@ -112,15 +122,15 @@ function parseKrPatch(body: unknown): UpdateKeyResultInput {
   }
 
   if (raw.baselineValue !== undefined) {
-    patch.baselineValue = expectNumber(raw, "baselineValue");
+    patch.baselineValue = expectNullableNumber(raw, "baselineValue");
   }
 
   if (raw.targetValue !== undefined) {
-    patch.targetValue = expectNumber(raw, "targetValue");
+    patch.targetValue = expectNullableNumber(raw, "targetValue");
   }
 
   if (raw.currentValue !== undefined) {
-    patch.currentValue = expectNumber(raw, "currentValue");
+    patch.currentValue = expectNullableNumber(raw, "currentValue");
   }
 
   if (raw.status !== undefined) {

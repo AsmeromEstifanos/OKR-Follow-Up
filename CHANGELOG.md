@@ -8,6 +8,12 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.29] — 2026-05-20
+### Fixed
+- Non-measurable KR save no longer errors with "targetValue must be a valid number" — PATCH route now accepts null for baselineValue, targetValue, and currentValue
+
+---
+
 ## [0.5.28] — 2026-05-20
 ### Changed
 - Non-measurable KR toggle is now an iOS-style sliding switch; KR Progress % column updates live to 100% / 0% while editing
