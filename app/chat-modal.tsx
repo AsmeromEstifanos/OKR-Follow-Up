@@ -42,14 +42,22 @@ function formatTime(iso: string): string {
 }
 
 // Render a comment body with @mentions highlighted.
-// Matches @FirstName, @FirstName LastName, @FirstName Last1 Last2, etc.
-// A name part is any sequence of non-whitespace chars starting with a capital letter.
-function renderBody(text: string): JSX.Element {
-  const parts = text.split(/(@[A-Z]\S*(?:\s+[A-Z]\S*)*)/g);
+// knownNames is the set of display names that were explicitly @-mentioned
+// (collected from insertMention calls and comment bodies on load).
+function renderBody(text: string, knownNames: Set<string>): JSX.Element {
+  if (knownNames.size === 0) return <>{text}</>;
+
+  // Build alternation from longest name first so "Asmerom Estifanos" matches
+  // before a hypothetical "Asmerom" alone.
+  const escaped = [...knownNames]
+    .sort((a, b) => b.length - a.length)
+    .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const pattern = new RegExp(`(@(?:${escaped.join("|")}))`, "g");
+  const parts = text.split(pattern);
   return (
     <>
       {parts.map((part, i) =>
-        part.startsWith("@") ? (
+        part.startsWith("@") && knownNames.has(part.slice(1)) ? (
           <span key={i} className="chat-mention">{part}</span>
         ) : (
           <span key={i}>{part}</span>
@@ -78,8 +86,9 @@ export default function ChatModal({
   const [mentionSuggestions, setMentionSuggestions] = useState<UserSuggestion[]>([]);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [mentionStart, setMentionStart] = useState(0);
-  // Use a ref so handleSubmit always reads the latest value without closure staleness
+  // Use refs so handleSubmit always reads the latest value without closure staleness
   const mentionedEmailsRef = useRef<string[]>([]);
+  const mentionedNamesRef = useRef<Set<string>>(new Set());
   const mentionDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -92,6 +101,10 @@ export default function ChatModal({
     const response = await fetch(url, { cache: "no-store" });
     if (response.ok) {
       const loaded = (await response.json()) as Comment[];
+      // Seed known mention names from author names present in the thread
+      loaded.forEach((c) => {
+        if (c.authorName) mentionedNamesRef.current.add(c.authorName);
+      });
       setComments(loaded);
       onCommentsLoaded(loaded);
     }
@@ -170,6 +183,7 @@ export default function ChatModal({
     if (email && !mentionedEmailsRef.current.includes(email)) {
       mentionedEmailsRef.current = [...mentionedEmailsRef.current, email];
     }
+    mentionedNamesRef.current.add(user.displayName);
     setMentionQuery(null);
     setMentionSuggestions([]);
     requestAnimationFrame(() => {
@@ -341,7 +355,7 @@ export default function ChatModal({
                         <span className="chat-msg-author">{comment.authorName || comment.authorEmail}</span>
                       )}
                       <div className="chat-bubble">
-                        <p className="chat-bubble-text">{renderBody(comment.body)}</p>
+                        <p className="chat-bubble-text">{renderBody(comment.body, mentionedNamesRef.current)}</p>
                         <div className="chat-bubble-meta">
                           <span className="chat-msg-time">{formatTime(comment.createdAt)}</span>
                           {isOwn && (

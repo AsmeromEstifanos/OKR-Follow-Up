@@ -8,6 +8,12 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.21] — 2026-05-20
+### Fixed
+- @mention highlighting uses exact known names (seeded from author names in the thread and from dropdown selections) instead of a fragile capitalization heuristic — eliminates false highlights on capitalized words
+
+---
+
 ## [0.5.20] — 2026-05-20
 ### Fixed
 - @mention highlight now covers the full name (e.g. `@Asmerom Estifanos` highlighted as one token, not just `@Asmerom`)
