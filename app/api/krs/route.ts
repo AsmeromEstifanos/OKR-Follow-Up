@@ -30,7 +30,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
 
       const keyResult = await createKeyResult(body);
-      return NextResponse.json(keyResult, { status: 201 });
+      const label = keyResult.krCode ? `${keyResult.krCode} — ${keyResult.title}` : keyResult.title;
+      return NextResponse.json(keyResult, { status: 201, headers: { "x-activity-label": label } });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to create key result.";
       return NextResponse.json({ error: message }, { status: 400 });

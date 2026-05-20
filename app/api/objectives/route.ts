@@ -31,7 +31,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
 
       const objective = await createObjective(body);
-      return NextResponse.json(objective, { status: 201 });
+      const label = objective.objectiveCode ? `${objective.objectiveCode} — ${objective.title}` : objective.title;
+      return NextResponse.json(objective, { status: 201, headers: { "x-activity-label": label } });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to create objective.";
       return NextResponse.json({ error: message }, { status: 400 });

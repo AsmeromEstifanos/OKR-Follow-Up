@@ -8,6 +8,12 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.31] — 2026-05-20
+### Fixed
+- Activity Log now displays human-readable sentences ("Updated key result **KR-01 — Title** · Progress changed from 40% to 85%") instead of raw technical strings
+- Field changes show friendly names (e.g. "Current value", "Progress", "Status") with color-coded from/to values
+- Create routes (POST) for objectives and key results now record the item's code/title as the entity label
+
 ## [0.5.30] — 2026-05-20
 ### Added
 - Activity Log page (`/activity`): timeline feed grouped by day with per-entry field-change diffs (from→to), HTTP method badges, and clickable entity links

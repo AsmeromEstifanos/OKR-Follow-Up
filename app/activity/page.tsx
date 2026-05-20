@@ -41,22 +41,87 @@ const PERIOD_LABELS: Record<Period, string> = {
   custom: "Custom range"
 };
 
+// Human-readable field name mapping
+const FIELD_LABELS: Record<string, string> = {
+  title: "Title",
+  description: "Description",
+  status: "Status",
+  progressPct: "Progress",
+  currentValue: "Current value",
+  targetValue: "Target value",
+  baselineValue: "Baseline value",
+  confidence: "Confidence",
+  owner: "Owner",
+  ownerEmail: "Owner email",
+  department: "Department",
+  strategicTheme: "Strategic theme",
+  objectiveType: "Objective type",
+  okrCycle: "OKR cycle",
+  periodKey: "Period",
+  startDate: "Start date",
+  endDate: "End date",
+  dueDate: "Due date",
+  blockers: "Blockers",
+  notes: "Notes",
+  keyRisksDependency: "Key risks & dependencies",
+  constraintGuardrails: "Constraints & guardrails",
+  supportNeeded: "Support needed",
+  metricType: "Metric type",
+  measurementRule: "Measurement rule",
+  checkInFrequency: "Check-in frequency",
+  krCode: "KR code",
+  objectiveCode: "Objective code",
+  objectiveKey: "Objective",
+  rag: "RAG status"
+};
+
+// Fields to skip in the diff display (internal/noisy)
+const SKIP_FIELDS = new Set([
+  "updatedAt", "createdAt", "activityLogKey", "authLogKey",
+  "krKey", "objectiveKey_internal", "milestoneKey", "checkInKey"
+]);
+
 function parseChanges(detailsJson: string | undefined): FieldChange[] {
   if (!detailsJson) return [];
   try {
     const parsed = JSON.parse(detailsJson) as { changes?: FieldChange[] };
-    return parsed.changes ?? [];
+    return (parsed.changes ?? []).filter((c) => !SKIP_FIELDS.has(c.field));
   } catch {
     return [];
   }
 }
 
-function formatValue(value: unknown): string {
+function friendlyFieldName(field: string): string {
+  return FIELD_LABELS[field] ?? field.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase());
+}
+
+function formatValue(value: unknown, field?: string): string {
   if (value === null || value === undefined) return "—";
-  if (typeof value === "string") return value || "—";
-  if (typeof value === "number") return String(value);
+  if (typeof value === "string") {
+    if (!value.trim()) return "—";
+    if (field === "progressPct") return `${value}%`;
+    return value;
+  }
+  if (typeof value === "number") {
+    if (field === "progressPct") return `${value}%`;
+    return String(value);
+  }
   if (typeof value === "boolean") return value ? "Yes" : "No";
   return JSON.stringify(value);
+}
+
+// Compose a human-readable sentence from the log entry
+function composeActionSentence(entry: ActivityEntry): string {
+  const { httpMethod, entityType } = entry;
+
+  const entityWord = entityType
+    ? entityType.replace(/-/g, " ").replace(/s$/, "")
+    : "item";
+
+  if (httpMethod === "POST") return `Created ${entityWord}`;
+  if (httpMethod === "DELETE") return `Deleted ${entityWord}`;
+  if (httpMethod === "PATCH") return `Updated ${entityWord}`;
+  return entry.activityName;
 }
 
 function formatTime(iso: string): string {
@@ -93,23 +158,23 @@ function entityHref(entityType: string | undefined, entityKey: string | undefine
   return null;
 }
 
-function methodBadgeClass(method: string): string {
-  if (method === "POST") return "act-badge act-badge-post";
-  if (method === "PATCH") return "act-badge act-badge-patch";
-  if (method === "DELETE") return "act-badge act-badge-delete";
-  return "act-badge act-badge-get";
+function actionClass(method: string): string {
+  if (method === "POST") return "act-action act-action-create";
+  if (method === "PATCH") return "act-action act-action-update";
+  if (method === "DELETE") return "act-action act-action-delete";
+  return "act-action";
 }
 
 // Aggregate counts per day for the bar chart
-function buildDailyBuckets(entries: ActivityEntry[]): { day: string; count: number }[] {
+function buildDailyBuckets(entries: ActivityEntry[]): { label: string; count: number }[] {
   const map = new Map<string, number>();
   for (const e of entries) {
     const d = isoDay(e.occurredAt);
     map.set(d, (map.get(d) ?? 0) + 1);
   }
   return Array.from(map.entries())
-    .map(([day, count]) => ({ day, count }))
-    .sort((a, b) => a.day.localeCompare(b.day));
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([day, count]) => ({ label: day.slice(5), count }));
 }
 
 function buildEntityTypeCounts(entries: ActivityEntry[]): { type: string; count: number }[] {
@@ -147,7 +212,6 @@ function buildTopEntities(entries: ActivityEntry[]): { label: string; count: num
     .slice(0, 10);
 }
 
-// Simple SVG bar chart
 function BarChart({ data }: { data: { label: string; count: number }[] }): JSX.Element {
   const max = Math.max(...data.map((d) => d.count), 1);
   const barWidth = Math.min(40, Math.floor(600 / Math.max(data.length, 1)) - 4);
@@ -205,7 +269,6 @@ export default function ActivityPage(): JSX.Element {
   const [filterEntityType, setFilterEntityType] = useState("");
   const [filterUser, setFilterUser] = useState("");
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
-  const [allEntries, setAllEntries] = useState<ActivityEntry[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -216,7 +279,6 @@ export default function ActivityPage(): JSX.Element {
 
   const fetchRef = useRef(0);
 
-  // Auth check
   useEffect(() => {
     if (!currentUserEmail) return;
     let mounted = true;
@@ -252,7 +314,6 @@ export default function ActivityPage(): JSX.Element {
     if (!cursor) {
       setLoading(true);
       setEntries([]);
-      setAllEntries([]);
       setNextCursor(null);
       setError(null);
     } else {
@@ -273,7 +334,6 @@ export default function ActivityPage(): JSX.Element {
       const page = await res.json() as ActivityPage;
       if (fetchRef.current !== fetchId) return;
       setEntries((prev) => cursor ? [...prev, ...page.entries] : page.entries);
-      setAllEntries((prev) => cursor ? [...prev, ...page.entries] : page.entries);
       setNextCursor(page.nextCursor);
     } catch {
       if (fetchRef.current === fetchId) setError("Failed to load activity.");
@@ -285,7 +345,6 @@ export default function ActivityPage(): JSX.Element {
     }
   }, [currentUserEmail, buildQuery]);
 
-  // Fetch all entries for insights (no limit)
   const fetchInsights = useCallback(async () => {
     if (!currentUserEmail) return;
     setInsightsLoading(true);
@@ -324,7 +383,6 @@ export default function ActivityPage(): JSX.Element {
     if (showInsights && authorized === true) void fetchInsights();
   }, [showInsights, authorized, fetchInsights]);
 
-  // Group entries by day
   const grouped = useMemo(() => {
     const map = new Map<string, ActivityEntry[]>();
     for (const e of entries) {
@@ -336,11 +394,7 @@ export default function ActivityPage(): JSX.Element {
     return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
   }, [entries]);
 
-  const dailyBuckets = useMemo(() => {
-    const raw = buildDailyBuckets(insightsEntries);
-    return raw.map((d) => ({ label: d.day.slice(5), count: d.count }));
-  }, [insightsEntries]);
-
+  const dailyBuckets = useMemo(() => buildDailyBuckets(insightsEntries), [insightsEntries]);
   const entityTypeCounts = useMemo(() => buildEntityTypeCounts(insightsEntries), [insightsEntries]);
   const topUsers = useMemo(() => buildTopUsers(insightsEntries), [insightsEntries]);
   const topEntities = useMemo(() => buildTopEntities(insightsEntries), [insightsEntries]);
@@ -429,7 +483,6 @@ export default function ActivityPage(): JSX.Element {
             <option value="objectives">Objectives</option>
             <option value="krs">Key Results</option>
             <option value="milestones">Milestones</option>
-            <option value="check-ins">Check-ins</option>
             <option value="periods">Periods</option>
             <option value="ventures">Ventures</option>
           </select>
@@ -546,19 +599,21 @@ export default function ActivityPage(): JSX.Element {
               {dayEntries.map((entry) => {
                 const changes = parseChanges(entry.detailsJson);
                 const href = entityHref(entry.entityType, entry.entityKey);
+                const actionSentence = composeActionSentence(entry);
+                const entityDisplay = entry.entityLabel || null;
+
                 return (
                   <div key={entry.activityLogKey} className="act-entry">
                     <div className="act-entry-time">{formatTime(entry.occurredAt)}</div>
                     <div className="act-entry-body">
                       <div className="act-entry-header">
-                        <span className={methodBadgeClass(entry.httpMethod)}>{entry.httpMethod}</span>
-                        <span className="act-entry-action">{entry.activityName}</span>
-                        {href ? (
+                        <span className={actionClass(entry.httpMethod)}>{actionSentence}</span>
+                        {href && entityDisplay ? (
                           <Link href={href} className="act-entry-entity">
-                            {entry.entityLabel ?? entry.entityKey ?? ""}
+                            {entityDisplay}
                           </Link>
-                        ) : entry.entityLabel ? (
-                          <span className="act-entry-entity-plain">{entry.entityLabel}</span>
+                        ) : entityDisplay ? (
+                          <span className="act-entry-entity-plain">{entityDisplay}</span>
                         ) : null}
                         <span className="act-entry-user">{entry.userEmail}</span>
                       </div>
@@ -566,10 +621,11 @@ export default function ActivityPage(): JSX.Element {
                         <div className="act-changes">
                           {changes.map((c) => (
                             <div key={c.field} className="act-change-row">
-                              <span className="act-change-field">{c.field}</span>
-                              <span className="act-change-from">{formatValue(c.from)}</span>
-                              <span className="act-change-arrow">→</span>
-                              <span className="act-change-to">{formatValue(c.to)}</span>
+                              <span className="act-change-field">{friendlyFieldName(c.field)}</span>
+                              <span className="act-change-separator">changed from</span>
+                              <span className="act-change-from">{formatValue(c.from, c.field)}</span>
+                              <span className="act-change-arrow">to</span>
+                              <span className="act-change-to">{formatValue(c.to, c.field)}</span>
                             </div>
                           ))}
                         </div>

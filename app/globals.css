@@ -4757,44 +4757,54 @@ textarea {
 .act-entry-entity-plain { color: var(--ink); font-style: italic; }
 .act-entry-user { color: var(--muted); font-size: 0.75rem; margin-left: auto; }
 
-/* Method badges */
-.act-badge {
-  display: inline-block;
-  padding: 0.1rem 0.35rem;
-  border-radius: 3px;
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
+/* Action text (replaces method badges) */
+.act-action {
+  font-weight: 600;
+  font-size: 0.85rem;
   flex-shrink: 0;
 }
-.act-badge-post  { background: #d1fae5; color: #065f46; }
-.act-badge-patch { background: #fef3c7; color: #92400e; }
-.act-badge-delete { background: #fee2e2; color: #991b1b; }
-.act-badge-get   { background: #e0f2fe; color: #0c4a6e; }
+.act-action-create { color: #065f46; }
+.act-action-update { color: #92400e; }
+.act-action-delete { color: #991b1b; }
 
 /* Field changes */
 .act-changes {
-  margin-top: 0.3rem;
+  margin-top: 0.4rem;
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.25rem;
+  padding-left: 0.25rem;
+  border-left: 2px solid var(--line);
 }
 .act-change-row {
   display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.75rem;
+  align-items: baseline;
+  gap: 0.3rem;
+  font-size: 0.78rem;
   flex-wrap: wrap;
+  line-height: 1.4;
 }
 .act-change-field {
-  font-weight: 600;
-  color: var(--muted);
-  min-width: 100px;
+  font-weight: 700;
+  color: var(--ink);
 }
-.act-change-from { color: #991b1b; text-decoration: line-through; }
-.act-change-arrow { color: var(--muted); }
-.act-change-to { color: #065f46; font-weight: 500; }
+.act-change-separator { color: var(--muted); font-size: 0.73rem; }
+.act-change-from {
+  color: #991b1b;
+  background: #fee2e2;
+  border-radius: 3px;
+  padding: 0 0.25rem;
+  font-size: 0.78rem;
+}
+.act-change-arrow { color: var(--muted); font-size: 0.73rem; }
+.act-change-to {
+  color: #065f46;
+  background: #d1fae5;
+  border-radius: 3px;
+  padding: 0 0.25rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+}
 
 /* States */
 .act-loading, .act-error, .act-empty {
