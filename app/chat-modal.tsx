@@ -42,29 +42,40 @@ function formatTime(iso: string): string {
 }
 
 // Render a comment body with @mentions highlighted.
-// knownNames is the set of display names that were explicitly @-mentioned
-// (collected from insertMention calls and comment bodies on load).
+// Mentions are stored as @[Display Name] in the body text.
+// Legacy plain @Name tokens (no brackets) are also highlighted if the name
+// appears in knownNames (fallback for older messages).
 function renderBody(text: string, knownNames: Set<string>): JSX.Element {
-  if (knownNames.size === 0) return <>{text}</>;
+  // Split on bracketed mentions first: @[Display Name]
+  const parts = text.split(/(@\[[^\]]+\])/g);
+  const nodes: JSX.Element[] = [];
 
-  // Build alternation from longest name first so "Asmerom Estifanos" matches
-  // before a hypothetical "Asmerom" alone.
-  const escaped = [...knownNames]
-    .sort((a, b) => b.length - a.length)
-    .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  const pattern = new RegExp(`(@(?:${escaped.join("|")}))`, "g");
-  const parts = text.split(pattern);
-  return (
-    <>
-      {parts.map((part, i) =>
-        part.startsWith("@") && knownNames.has(part.slice(1)) ? (
-          <span key={i} className="chat-mention">{part}</span>
-        ) : (
-          <span key={i}>{part}</span>
-        )
-      )}
-    </>
-  );
+  parts.forEach((part, i) => {
+    if (part.startsWith("@[") && part.endsWith("]")) {
+      const name = part.slice(2, -1);
+      nodes.push(<span key={i} className="chat-mention">@{name}</span>);
+      return;
+    }
+    // Fallback: highlight plain @Name tokens that are in knownNames
+    if (knownNames.size === 0) {
+      nodes.push(<span key={i}>{part}</span>);
+      return;
+    }
+    const escaped = [...knownNames]
+      .sort((a, b) => b.length - a.length)
+      .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    const legacyPattern = new RegExp(`(@(?:${escaped.join("|")}))`, "g");
+    const subParts = part.split(legacyPattern);
+    subParts.forEach((sub, j) => {
+      if (sub.startsWith("@") && knownNames.has(sub.slice(1))) {
+        nodes.push(<span key={`${i}-${j}`} className="chat-mention">{sub}</span>);
+      } else {
+        nodes.push(<span key={`${i}-${j}`}>{sub}</span>);
+      }
+    });
+  });
+
+  return <>{nodes}</>;
 }
 
 export default function ChatModal({
@@ -101,22 +112,12 @@ export default function ChatModal({
     const response = await fetch(url, { cache: "no-store" });
     if (response.ok) {
       const loaded = (await response.json()) as Comment[];
-      // Resolve @tokens in loaded comment bodies to full display names via suggest API.
-      // Extract the first word after each @ as the query, deduplicate, then fetch.
-      const rawTokens = new Set<string>();
+      // Seed knownNames from bracketed @[Name] tokens in loaded bodies (for legacy fallback highlighting)
       loaded.forEach((c) => {
-        (c.body.match(/@(\S+)/g) ?? []).forEach((t) => rawTokens.add(t.slice(1).toLowerCase()));
-      });
-      if (rawTokens.size > 0) {
-        await Promise.allSettled(
-          [...rawTokens].map((token) =>
-            fetch(apiPath(`/api/users/suggest?q=${encodeURIComponent(token)}`))
-              .then((r) => (r.ok ? (r.json() as Promise<UserSuggestion[]>) : []))
-              .then((users) => users.forEach((u) => mentionedNamesRef.current.add(u.displayName)))
-              .catch(() => undefined)
-          )
+        (c.body.match(/@\[([^\]]+)\]/g) ?? []).forEach((t) =>
+          mentionedNamesRef.current.add(t.slice(2, -1))
         );
-      }
+      });
       setComments(loaded);
       onCommentsLoaded(loaded);
     }
@@ -188,7 +189,7 @@ export default function ChatModal({
     const cursor = inputRef.current?.selectionStart ?? body.length;
     const before = body.slice(0, mentionStart);
     const after = body.slice(cursor);
-    const token = `@${user.displayName} `;
+    const token = `@[${user.displayName}] `;
     const next = before + token + after;
     setBody(next);
     const email = user.mail || user.principalName;
@@ -221,8 +222,8 @@ export default function ChatModal({
 
     try {
       // Resolve manually typed @mentions not already in the ref (dropdown fills the ref automatically).
-      // Extract the first word after each @ as the suggest query — good enough for partial name matching.
-      const tokens = [...new Set((body.match(/@(\S+)/g) ?? []).map((t) => t.slice(1).toLowerCase()))];
+      // Bracketed format @[Name] is from dropdown; plain @word is manual typing.
+      const tokens = [...new Set((body.match(/@(\S+)/g) ?? []).map((t) => t.slice(1).replace(/^\[|\]$/g, "").split(/\s+/)[0].toLowerCase()))];
       if (tokens.length > 0) {
         const results = await Promise.allSettled(
           tokens.map((token) =>

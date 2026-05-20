@@ -8,6 +8,15 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.24] — 2026-05-20
+### Changed
+- KR types renamed: "Measurable" (numeric target/current) and "Non-measurable" (Done/Not Done only, 0 or 100%)
+- Non-measurable KRs show Done/Not Done toggle buttons instead of a progress % input, matching the milestone binary pattern
+### Fixed
+- @mention tokens now stored as `@[Display Name]` in message bodies — highlighting is unambiguous and works correctly for all names regardless of spaces or similar names
+
+---
+
 ## [0.5.23] — 2026-05-20
 ### Added
 - Key Results now support two types, matching milestones:

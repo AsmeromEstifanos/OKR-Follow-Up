@@ -36,6 +36,7 @@ type OwnerSuggestion = {
   mail: string;
 };
 
+type KrMode = "measurable" | "non-measurable";
 type MilestoneMode = "measurable" | "binary";
 
 type MilestoneDraft = {
@@ -246,9 +247,10 @@ export default function DashboardKeyResultRowEditor({
   const [owner, setOwner] = useState<string>(resolveOwnerName(keyResult.owner));
   const [ownerEmail, setOwnerEmail] = useState<string>(resolveOwnerEmail(keyResult.owner, keyResult.ownerEmail));
   const [measurementRule, setMeasurementRule] = useState<string>(keyResult.measurementRule ?? "");
-  const [krMode, setKrMode] = useState<"measurable" | "milestone-based">(
-    keyResult.targetValue === null || keyResult.currentValue === null ? "milestone-based" : "measurable"
+  const [krMode, setKrMode] = useState<KrMode>(
+    keyResult.targetValue === null || keyResult.currentValue === null ? "non-measurable" : "measurable"
   );
+  const [krIsDone, setKrIsDone] = useState<boolean>(keyResult.progressPct >= 100);
   const [krProgressPct, setKrProgressPct] = useState<string>(String(keyResult.progressPct));
   const [targetValue, setTargetValue] = useState<string>(keyResult.targetValue !== null ? String(keyResult.targetValue) : "");
   const [currentValue, setCurrentValue] = useState<string>(keyResult.currentValue !== null ? String(keyResult.currentValue) : "");
@@ -285,7 +287,8 @@ export default function DashboardKeyResultRowEditor({
     setOwner(resolveOwnerName(keyResult.owner));
     setOwnerEmail(resolveOwnerEmail(keyResult.owner, keyResult.ownerEmail));
     setMeasurementRule(keyResult.measurementRule ?? "");
-    setKrMode(keyResult.targetValue === null || keyResult.currentValue === null ? "milestone-based" : "measurable");
+    setKrMode(keyResult.targetValue === null || keyResult.currentValue === null ? "non-measurable" : "measurable");
+    setKrIsDone(keyResult.progressPct >= 100);
     setKrProgressPct(String(keyResult.progressPct));
     setTargetValue(keyResult.targetValue !== null ? String(keyResult.targetValue) : "");
     setCurrentValue(keyResult.currentValue !== null ? String(keyResult.currentValue) : "");
@@ -329,12 +332,7 @@ export default function DashboardKeyResultRowEditor({
         patchTargetValue = target;
         patchCurrentValue = current;
       } else {
-        const pct = Number(krProgressPct);
-        if (!Number.isFinite(pct)) {
-          setError("Progress % must be a number for a milestone-based KR.");
-          return;
-        }
-        patchProgressPct = pct;
+        patchProgressPct = krIsDone ? 100 : 0;
       }
     }
 
@@ -356,7 +354,7 @@ export default function DashboardKeyResultRowEditor({
         ...(!hasMilestoneBackedProgress && krMode === "measurable"
           ? { targetValue: patchTargetValue, currentValue: patchCurrentValue }
           : {}),
-        ...(!hasMilestoneBackedProgress && krMode === "milestone-based"
+        ...(!hasMilestoneBackedProgress && krMode === "non-measurable"
           ? { targetValue: null, currentValue: null, progressPct: patchProgressPct }
           : {}),
         status,
@@ -686,11 +684,11 @@ export default function DashboardKeyResultRowEditor({
               <select
                 className="objective-row-select"
                 value={krMode}
-                onChange={(e) => setKrMode(e.target.value as "measurable" | "milestone-based")}
+                onChange={(e) => setKrMode(e.target.value as KrMode)}
                 disabled={isSaving}
               >
                 <option value="measurable">Measurable</option>
-                <option value="milestone-based">Milestone-based</option>
+                <option value="non-measurable">Non-measurable</option>
               </select>
               {krMode === "measurable" && (
                 <input className="objective-row-input" value={targetValue} onChange={(e) => setTargetValue(e.target.value)} disabled={isSaving} placeholder="Target" />
@@ -705,15 +703,19 @@ export default function DashboardKeyResultRowEditor({
             krMode === "measurable" ? (
               <input className="objective-row-input" value={currentValue} onChange={(e) => setCurrentValue(e.target.value)} disabled={isSaving} placeholder="Current" />
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-                <input
-                  className="objective-row-input"
-                  type="number"
-                  value={krProgressPct}
-                  onChange={(e) => setKrProgressPct(e.target.value)}
+              <div className="milestone-binary-btns">
+                <button
+                  type="button"
+                  className={`milestone-binary-btn${krIsDone ? " milestone-binary-btn-active" : ""}`}
+                  onClick={() => setKrIsDone(true)}
                   disabled={isSaving}
-                  placeholder="Progress %"
-                />
+                >Done</button>
+                <button
+                  type="button"
+                  className={`milestone-binary-btn${!krIsDone ? " milestone-binary-btn-active" : ""}`}
+                  onClick={() => setKrIsDone(false)}
+                  disabled={isSaving}
+                >Not Done</button>
               </div>
             )
           ) : (

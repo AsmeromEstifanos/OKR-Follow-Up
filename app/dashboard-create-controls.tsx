@@ -28,6 +28,7 @@ type OwnerSuggestion = {
 };
 
 type CreateMode = "none" | "objective" | "kr";
+type KrMode = "measurable" | "non-measurable";
 
 const OBJECTIVE_TYPE_OPTIONS: ObjectiveType[] = ["Aspirational", "Committed", "Learning"];
 const HEALTH_STATUS_OPTIONS: ObjectiveStatus[] = ["OnTrack", "OffTrack", "Done", "AtRisk"];
@@ -174,7 +175,8 @@ export default function DashboardCreateControls(): JSX.Element {
   const [krOwner, setKrOwner] = useState<string>("");
   const [krOwnerEmail, setKrOwnerEmail] = useState<string>("");
   const [krStatus, setKrStatus] = useState<KrStatus>("OnTrack");
-  const [krMode, setKrMode] = useState<"measurable" | "milestone-based">("measurable");
+  const [krMode, setKrMode] = useState<KrMode>("measurable");
+  const [krIsDone, setKrIsDone] = useState<boolean>(false);
   const [krProgress, setKrProgress] = useState<string>("0 / 100");
   const [krProgressPct, setKrProgressPct] = useState<string>("0");
   const [krCheckInFrequency, setKrCheckInFrequency] = useState<CheckInFrequency>("Weekly");
@@ -534,12 +536,7 @@ export default function DashboardCreateControls(): JSX.Element {
         currentValue = progressPct;
       }
     } else {
-      const progressPct = Number(krProgressPct);
-      if (!Number.isFinite(progressPct)) {
-        setError("Provide a Progress % for a milestone-based KR.");
-        return;
-      }
-      progressPctToSend = progressPct;
+      progressPctToSend = krIsDone ? 100 : 0;
     }
 
     setIsBusy(true);
@@ -583,6 +580,7 @@ export default function DashboardCreateControls(): JSX.Element {
     setKrCodePreview("");
     setKrTitle("");
     setKrMode("measurable");
+    setKrIsDone(false);
     setKrProgress("0 / 100");
     setKrProgressPct("0");
     setKrCheckInFrequency("Weekly");
@@ -870,10 +868,10 @@ export default function DashboardCreateControls(): JSX.Element {
               <select
                 id="quick-kr-mode"
                 value={krMode}
-                onChange={(event) => setKrMode(event.target.value as "measurable" | "milestone-based")}
+                onChange={(event) => setKrMode(event.target.value as KrMode)}
               >
                 <option value="measurable">Measurable</option>
-                <option value="milestone-based">Milestone-based</option>
+                <option value="non-measurable">Non-measurable</option>
               </select>
             </div>
             {krMode === "measurable" ? (
@@ -900,17 +898,19 @@ export default function DashboardCreateControls(): JSX.Element {
               </>
             ) : (
               <div className="field">
-                <label htmlFor="quick-kr-progress-pct">Progress %</label>
-                <input
-                  id="quick-kr-progress-pct"
-                  type="number"
-                  step="any"
-                  min="0"
-                  max="100"
-                  value={krProgressPct}
-                  onChange={(event) => setKrProgressPct(event.target.value)}
-                  placeholder="0"
-                />
+                <label>Status</label>
+                <div className="milestone-binary-btns">
+                  <button
+                    type="button"
+                    className={`milestone-binary-btn${krIsDone ? " milestone-binary-btn-active" : ""}`}
+                    onClick={() => setKrIsDone(true)}
+                  >Done</button>
+                  <button
+                    type="button"
+                    className={`milestone-binary-btn${!krIsDone ? " milestone-binary-btn-active" : ""}`}
+                    onClick={() => setKrIsDone(false)}
+                  >Not Done</button>
+                </div>
               </div>
             )}
             <div className="field">
