@@ -456,6 +456,7 @@ export default function ActivityPage(): JSX.Element {
   const [insightsEntries, setInsightsEntries] = useState<ActivityEntry[]>([]);
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<ActivityEntry | null>(null);
+  const [knownEmails, setKnownEmails] = useState<string[]>([]);
 
   const fetchRef = useRef(0);
 
@@ -472,6 +473,46 @@ export default function ActivityPage(): JSX.Element {
       .catch(() => { if (mounted) setAuthorized(false); });
     return () => { mounted = false; };
   }, [currentUserEmail]);
+
+  // Collect the distinct emails that appear in the activity log (over a wide
+  // window, independent of the current filters) to populate the user dropdown.
+  useEffect(() => {
+    if (authorized !== true || !currentUserEmail) return;
+    let mounted = true;
+    const collect = async (): Promise<void> => {
+      const emails = new Set<string>();
+      let cursor: string | undefined;
+      let pages = 0;
+      try {
+        while (pages < 20) {
+          const params = new URLSearchParams();
+          params.set("period", "year");
+          params.set("limit", "200");
+          if (cursor) params.set("cursor", cursor);
+          const res = await fetch(apiPath(`/api/activity?${params.toString()}`), {
+            headers: { "x-user-email": currentUserEmail }
+          });
+          if (!res.ok) break;
+          const page = (await res.json()) as ActivityPage;
+          for (const entry of page.entries) {
+            if (entry.userEmail) emails.add(entry.userEmail);
+          }
+          if (!page.nextCursor) break;
+          cursor = page.nextCursor;
+          pages += 1;
+        }
+      } catch {
+        /* ignore — dropdown falls back to free-text */
+      }
+      if (mounted) {
+        setKnownEmails(Array.from(emails).sort((a, b) => a.localeCompare(b)));
+      }
+    };
+    void collect();
+    return () => {
+      mounted = false;
+    };
+  }, [authorized, currentUserEmail]);
 
   const buildQuery = useCallback((cursor?: string): string => {
     const params = new URLSearchParams();
@@ -677,13 +718,19 @@ export default function ActivityPage(): JSX.Element {
 
         <div className="act-filter-group">
           <label className="act-filter-label">User email</label>
-          <input
-            type="email"
-            className="act-input"
-            placeholder="filter by email"
+          <select
+            className="act-select"
             value={filterUser}
             onChange={(e) => setFilterUser(e.target.value)}
-          />
+          >
+            <option value="">All users</option>
+            {knownEmails.map((email) => (
+              <option key={email} value={email}>{email}</option>
+            ))}
+            {filterUser && !knownEmails.includes(filterUser) && (
+              <option value={filterUser}>{filterUser}</option>
+            )}
+          </select>
         </div>
 
         <button

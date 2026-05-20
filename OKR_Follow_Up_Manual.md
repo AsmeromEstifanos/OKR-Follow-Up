@@ -1,6 +1,6 @@
 # OKR Follow-Up — Application Manual
 
-**Version 0.5.36 · Last updated 2026-05-20**
+**Version 0.5.38 · Last updated 2026-05-20**
 
 This document is a complete reference for the OKR Follow-Up application: what every feature does, how it works internally, and what you need to reproduce any part of it in a new application. It is written for developers and power users alike.
 
@@ -444,7 +444,7 @@ The Activity Log page provides:
 - **Period presets**: Today, This Week, This Month, This Quarter, This Year
 - **Custom date range**: From / To date pickers
 - **Entity type**: Filter to objectives, key results, milestones, check-ins, comments, or reminders
-- **User email**: Filter to actions by a specific user
+- **User email**: Filter to actions by a specific user, chosen from a dropdown of the emails that appear in the activity log (collected over the last year)
 
 ### 8.5 Display
 

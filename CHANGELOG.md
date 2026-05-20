@@ -8,6 +8,12 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.38] — 2026-05-20
+### Changed
+- Activity Log "User email" filter is now a dropdown of the emails that appear in the activity log (collected over the last year) instead of a free-text field
+
+---
+
 ## [0.5.37] — 2026-05-20
 ### Fixed
 - Activity Log detail popup no longer shows the internal Period key (e.g. "P-CURRENT") — it isn't meaningful to users
