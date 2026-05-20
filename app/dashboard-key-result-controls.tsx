@@ -5,6 +5,8 @@ import useCurrentUserEmail from "@/app/use-current-user-email";
 import { apiPath } from "@/lib/base-path";
 import { beginOperationBatch } from "@/lib/client-operation-batch";
 import type { CheckInFrequency, KrStatus, MetricType } from "@/lib/types";
+
+type KrMode = "measurable" | "non-measurable";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -36,10 +38,11 @@ type PendingKr = {
   owner: string;
   ownerEmail: string;
   metricType: MetricType;
-  measurementRule: string;
-  baselineValue: number;
-  targetValue: number;
-  currentValue: number;
+  krMode: KrMode;
+  baselineValue: number | null;
+  targetValue: number | null;
+  currentValue: number | null;
+  progressPct?: number;
   status: KrStatus;
   dueDate: string;
   checkInFrequency: CheckInFrequency;
@@ -127,7 +130,8 @@ export default function DashboardKeyResultControls({
   const [owner, setOwner] = useState<string>(sanitizedDefaultOwner);
   const [ownerEmail, setOwnerEmail] = useState<string>(defaultOwnerEmailProp);
   const [metricType, setMetricType] = useState<MetricType>(metricTypeOptions[0] ?? "Operational");
-  const [measurementRule, setMeasurementRule] = useState<string>("");
+  const [krMode, setKrMode] = useState<KrMode>("measurable");
+  const [krIsDone, setKrIsDone] = useState<boolean>(false);
   const [baselineValue, setBaselineValue] = useState<string>("0");
   const [targetValue, setTargetValue] = useState<string>("100");
   const [currentValue, setCurrentValue] = useState<string>("0");
@@ -162,7 +166,8 @@ export default function DashboardKeyResultControls({
     setOwner("");
     setOwnerEmail("");
     setMetricType(metricTypeOptions[0] ?? "Operational");
-    setMeasurementRule("");
+    setKrMode("measurable");
+    setKrIsDone(false);
     setBaselineValue("0");
     setTargetValue("100");
     setCurrentValue("0");
@@ -186,7 +191,8 @@ export default function DashboardKeyResultControls({
     setOwner(sanitizedDefaultOwner);
     setOwnerEmail(defaultOwnerEmailProp);
     setMetricType(metricTypeOptions[0] ?? "Operational");
-    setMeasurementRule("");
+    setKrMode("measurable");
+    setKrIsDone(false);
     setBaselineValue("0");
     setTargetValue("100");
     setCurrentValue("0");
@@ -211,9 +217,9 @@ export default function DashboardKeyResultControls({
   useEffect(() => {
     if (!isAdding) {
       setOwner(sanitizedDefaultOwner);
-      setOwnerEmail("");
+      setOwnerEmail(defaultOwnerEmailProp);
     }
-  }, [isAdding, sanitizedDefaultOwner]);
+  }, [isAdding, sanitizedDefaultOwner, defaultOwnerEmailProp]);
 
   const buildPendingKr = (): PendingKr | null => {
     const trimmedTitle = title.trim();
@@ -222,17 +228,35 @@ export default function DashboardKeyResultControls({
       return null;
     }
 
-    const baseline = Number(baselineValue);
-    const target = Number(targetValue);
-    const current = Number(currentValue);
-    if (!Number.isFinite(baseline) || !Number.isFinite(target) || !Number.isFinite(current)) {
-      setError("Baseline, target, and current values must be numbers.");
-      return null;
-    }
-
     if (!dueDate) {
       setError("Due date is required.");
       return null;
+    }
+
+    if (krMode === "measurable") {
+      const baseline = Number(baselineValue);
+      const target = Number(targetValue);
+      const current = Number(currentValue);
+      if (!Number.isFinite(baseline) || !Number.isFinite(target) || !Number.isFinite(current)) {
+        setError("Baseline, target, and current values must be numbers.");
+        return null;
+      }
+      return {
+        title: trimmedTitle,
+        owner: owner.trim(),
+        ownerEmail: ownerEmail.trim(),
+        metricType,
+        krMode,
+        baselineValue: baseline,
+        targetValue: target,
+        currentValue: current,
+        status,
+        dueDate,
+        checkInFrequency,
+        blockers: blockers.trim(),
+        supportNeeded: supportNeeded.trim(),
+        notes: notes.trim()
+      };
     }
 
     return {
@@ -240,10 +264,11 @@ export default function DashboardKeyResultControls({
       owner: owner.trim(),
       ownerEmail: ownerEmail.trim(),
       metricType,
-      measurementRule: measurementRule.trim(),
-      baselineValue: baseline,
-      targetValue: target,
-      currentValue: current,
+      krMode,
+      baselineValue: null,
+      targetValue: null,
+      currentValue: null,
+      progressPct: krIsDone ? 100 : 0,
       status,
       dueDate,
       checkInFrequency,
@@ -310,10 +335,10 @@ export default function DashboardKeyResultControls({
             owner: item.owner,
             ownerEmail: item.ownerEmail,
             metricType: item.metricType,
-            measurementRule: item.measurementRule,
             baselineValue: item.baselineValue,
             targetValue: item.targetValue,
             currentValue: item.currentValue,
+            ...(item.progressPct !== undefined ? { progressPct: item.progressPct } : {}),
             status: item.status,
             dueDate: item.dueDate,
             checkInFrequency: item.checkInFrequency,
@@ -414,42 +439,76 @@ export default function DashboardKeyResultControls({
               </select>
             </div>
             <div className="field">
-              <label>Measurement Rule</label>
-              <input name="krMeasurementRule" value={measurementRule} onChange={(event) => setMeasurementRule(event.target.value)} disabled={isSaving} />
-            </div>
-            <div className="field">
-              <label>Baseline Value</label>
-              <input
-                name="krBaselineValue"
-                type="number"
-                step="any"
-                value={baselineValue}
-                onChange={(event) => setBaselineValue(event.target.value)}
+              <label>KR Type</label>
+              <select
+                name="krMode"
+                value={krMode}
+                onChange={(event) => setKrMode(event.target.value as KrMode)}
                 disabled={isSaving}
-              />
+              >
+                <option value="measurable">Measurable</option>
+                <option value="non-measurable">Non-measurable</option>
+              </select>
             </div>
-            <div className="field">
-              <label>Target Value</label>
-              <input
-                name="krTargetValue"
-                type="number"
-                step="any"
-                value={targetValue}
-                onChange={(event) => setTargetValue(event.target.value)}
-                disabled={isSaving}
-              />
-            </div>
-            <div className="field">
-              <label>Current Value</label>
-              <input
-                name="krCurrentValue"
-                type="number"
-                step="any"
-                value={currentValue}
-                onChange={(event) => setCurrentValue(event.target.value)}
-                disabled={isSaving}
-              />
-            </div>
+            {krMode === "measurable" ? (
+              <>
+                <div className="field">
+                  <label>Baseline Value</label>
+                  <input
+                    name="krBaselineValue"
+                    type="number"
+                    step="any"
+                    value={baselineValue}
+                    onChange={(event) => setBaselineValue(event.target.value)}
+                    disabled={isSaving}
+                  />
+                </div>
+                <div className="field">
+                  <label>Target Value</label>
+                  <input
+                    name="krTargetValue"
+                    type="number"
+                    step="any"
+                    value={targetValue}
+                    onChange={(event) => setTargetValue(event.target.value)}
+                    disabled={isSaving}
+                  />
+                </div>
+                <div className="field">
+                  <label>Current Value</label>
+                  <input
+                    name="krCurrentValue"
+                    type="number"
+                    step="any"
+                    value={currentValue}
+                    onChange={(event) => setCurrentValue(event.target.value)}
+                    disabled={isSaving}
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="field">
+                <label>Progress</label>
+                <div className="milestone-binary-btns">
+                  <button
+                    type="button"
+                    className={`milestone-binary-btn${!krIsDone ? " milestone-binary-btn-active" : ""}`}
+                    onClick={() => setKrIsDone(false)}
+                    disabled={isSaving}
+                  >
+                    Not Done
+                  </button>
+                  <button
+                    type="button"
+                    className={`milestone-binary-btn${krIsDone ? " milestone-binary-btn-active" : ""}`}
+                    onClick={() => setKrIsDone(true)}
+                    disabled={isSaving}
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="field">
               <label>KR Status</label>
               <select name="krStatus" value={status} onChange={(event) => setStatus(event.target.value as KrStatus)} disabled={isSaving}>

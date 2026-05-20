@@ -23,6 +23,8 @@ type KeyResultEditControlsProps = {
   checkInFrequencyOptions: CheckInFrequency[];
 };
 
+type KrMode = "measurable" | "non-measurable";
+
 type KeyResultDraft = {
   krCode: string;
   objectiveKey: string;
@@ -31,6 +33,7 @@ type KeyResultDraft = {
   owner: string;
   ownerEmail: string;
   metricType: MetricType;
+  krMode: KrMode;
   baselineValue: string;
   targetValue: string;
   currentValue: string;
@@ -62,6 +65,7 @@ function toDateInput(value: string | null): string {
 }
 
 function toDraft(keyResult: KeyResult): KeyResultDraft {
+  const isMeasurable = keyResult.targetValue !== null && keyResult.currentValue !== null;
   return {
     krCode: keyResult.krCode ?? keyResult.krKey,
     objectiveKey: keyResult.objectiveKey,
@@ -70,10 +74,11 @@ function toDraft(keyResult: KeyResult): KeyResultDraft {
     owner: resolveOwnerName(keyResult.owner),
     ownerEmail: resolveOwnerEmail(keyResult.owner, keyResult.ownerEmail),
     metricType: keyResult.metricType,
-    baselineValue: String(keyResult.baselineValue),
-    targetValue: String(keyResult.targetValue),
-    currentValue: String(keyResult.currentValue),
-    krProgress: `${keyResult.currentValue} / ${keyResult.targetValue}`,
+    krMode: isMeasurable ? "measurable" : "non-measurable",
+    baselineValue: isMeasurable ? String(keyResult.baselineValue ?? 0) : "0",
+    targetValue: isMeasurable ? String(keyResult.targetValue) : "100",
+    currentValue: isMeasurable ? String(keyResult.currentValue) : "0",
+    krProgress: isMeasurable ? `${keyResult.currentValue} / ${keyResult.targetValue}` : "",
     krProgressPct: String(keyResult.progressPct),
     status: keyResult.status,
     dueDate: toDateInput(keyResult.dueDate),
@@ -135,47 +140,64 @@ export default function KeyResultEditControls({
     setMessage("");
     setError("");
 
-    const baselineValue = Number(draft.baselineValue);
-    let targetValue = Number(draft.targetValue);
-    let currentValue = Number(draft.currentValue);
+    let patchBody: Record<string, unknown>;
 
-    if (!Number.isFinite(baselineValue) || !Number.isFinite(targetValue) || !Number.isFinite(currentValue)) {
-      setError("Baseline, target, and current values must be valid numbers.");
-      setIsSaving(false);
-      return;
-    }
+    if (draft.krMode === "non-measurable") {
+      const isDone = Number(draft.krProgressPct) >= 100;
+      patchBody = {
+        krCode: draft.krCode.trim(),
+        objectiveKey: draft.objectiveKey.trim(),
+        periodKey: draft.periodKey.trim(),
+        title: draft.title.trim(),
+        owner: draft.owner.trim(),
+        ownerEmail: draft.ownerEmail.trim(),
+        metricType: draft.metricType,
+        baselineValue: null,
+        targetValue: null,
+        currentValue: null,
+        progressPct: isDone ? 100 : 0,
+        status: draft.status,
+        dueDate: draft.dueDate,
+        checkInFrequency: draft.checkInFrequency,
+        blockers: draft.blockers.trim(),
+        notes: draft.notes.trim()
+      };
+    } else {
+      const baselineValue = Number(draft.baselineValue);
+      let targetValue = Number(draft.targetValue);
+      let currentValue = Number(draft.currentValue);
 
-    const progressChanged = draft.krProgress.trim() !== initialDraft.krProgress.trim();
-    const progressPctChanged = draft.krProgressPct.trim() !== initialDraft.krProgressPct.trim();
-
-    if (progressChanged) {
-      const parsedProgress = parseProgressValue(draft.krProgress);
-      if (!parsedProgress) {
-        setError("KR Progress must use the format 'current / target' with valid numbers.");
+      if (!Number.isFinite(baselineValue) || !Number.isFinite(targetValue) || !Number.isFinite(currentValue)) {
+        setError("Baseline, target, and current values must be valid numbers.");
         setIsSaving(false);
         return;
       }
 
-      targetValue = parsedProgress.target;
-      currentValue = parsedProgress.current;
-    } else if (progressPctChanged) {
-      const progressPctValue = Number(draft.krProgressPct);
-      if (!Number.isFinite(progressPctValue)) {
-        setError("KR Progress % must be a valid number.");
-        setIsSaving(false);
-        return;
+      const progressChanged = draft.krProgress.trim() !== initialDraft.krProgress.trim();
+      const progressPctChanged = draft.krProgressPct.trim() !== initialDraft.krProgressPct.trim();
+
+      if (progressChanged) {
+        const parsedProgress = parseProgressValue(draft.krProgress);
+        if (!parsedProgress) {
+          setError("KR Progress must use the format 'current / target' with valid numbers.");
+          setIsSaving(false);
+          return;
+        }
+
+        targetValue = parsedProgress.target;
+        currentValue = parsedProgress.current;
+      } else if (progressPctChanged) {
+        const progressPctValue = Number(draft.krProgressPct);
+        if (!Number.isFinite(progressPctValue)) {
+          setError("KR Progress % must be a valid number.");
+          setIsSaving(false);
+          return;
+        }
+
+        currentValue = baselineValue + ((targetValue - baselineValue) * progressPctValue) / 100;
       }
 
-      currentValue = baselineValue + ((targetValue - baselineValue) * progressPctValue) / 100;
-    }
-
-    const response = await fetch(apiPath(`/api/krs/${encodeURIComponent(keyResult.krKey)}`), {
-      method: "PATCH",
-      headers: {
-        "content-type": "application/json",
-        "x-user-email": currentUserEmail
-      },
-      body: JSON.stringify({
+      patchBody = {
         krCode: draft.krCode.trim(),
         objectiveKey: draft.objectiveKey.trim(),
         periodKey: draft.periodKey.trim(),
@@ -191,7 +213,16 @@ export default function KeyResultEditControls({
         checkInFrequency: draft.checkInFrequency,
         blockers: draft.blockers.trim(),
         notes: draft.notes.trim()
-      })
+      };
+    }
+
+    const response = await fetch(apiPath(`/api/krs/${encodeURIComponent(keyResult.krKey)}`), {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        "x-user-email": currentUserEmail
+      },
+      body: JSON.stringify(patchBody)
     });
 
     if (!response.ok) {
@@ -302,37 +333,99 @@ export default function KeyResultEditControls({
           </div>
 
           <div className="field">
-            <label htmlFor={`kr-baseline-${keyResult.krKey}`}>Baseline Value</label>
-            <input
-              id={`kr-baseline-${keyResult.krKey}`}
-              type="number"
-              step="any"
-              value={draft.baselineValue}
-              onChange={(event) => setDraft((current) => ({ ...current, baselineValue: event.target.value }))}
-            />
+            <label htmlFor={`kr-mode-${keyResult.krKey}`}>KR Type</label>
+            <select
+              id={`kr-mode-${keyResult.krKey}`}
+              value={draft.krMode}
+              onChange={(event) => setDraft((current) => ({
+                ...current,
+                krMode: event.target.value as KrMode,
+                krProgressPct: current.krMode !== event.target.value && event.target.value === "non-measurable"
+                  ? "0"
+                  : current.krProgressPct
+              }))}
+            >
+              <option value="measurable">Measurable</option>
+              <option value="non-measurable">Non-measurable</option>
+            </select>
           </div>
 
-          <div className="field">
-            <label htmlFor={`kr-target-${keyResult.krKey}`}>Target Value</label>
-            <input
-              id={`kr-target-${keyResult.krKey}`}
-              type="number"
-              step="any"
-              value={draft.targetValue}
-              onChange={(event) => setDraft((current) => ({ ...current, targetValue: event.target.value }))}
-            />
-          </div>
+          {draft.krMode === "measurable" ? (
+            <>
+              <div className="field">
+                <label htmlFor={`kr-baseline-${keyResult.krKey}`}>Baseline Value</label>
+                <input
+                  id={`kr-baseline-${keyResult.krKey}`}
+                  type="number"
+                  step="any"
+                  value={draft.baselineValue}
+                  onChange={(event) => setDraft((current) => ({ ...current, baselineValue: event.target.value }))}
+                />
+              </div>
 
-          <div className="field">
-            <label htmlFor={`kr-current-${keyResult.krKey}`}>Current Value</label>
-            <input
-              id={`kr-current-${keyResult.krKey}`}
-              type="number"
-              step="any"
-              value={draft.currentValue}
-              onChange={(event) => setDraft((current) => ({ ...current, currentValue: event.target.value }))}
-            />
-          </div>
+              <div className="field">
+                <label htmlFor={`kr-target-${keyResult.krKey}`}>Target Value</label>
+                <input
+                  id={`kr-target-${keyResult.krKey}`}
+                  type="number"
+                  step="any"
+                  value={draft.targetValue}
+                  onChange={(event) => setDraft((current) => ({ ...current, targetValue: event.target.value }))}
+                />
+              </div>
+
+              <div className="field">
+                <label htmlFor={`kr-current-${keyResult.krKey}`}>Current Value</label>
+                <input
+                  id={`kr-current-${keyResult.krKey}`}
+                  type="number"
+                  step="any"
+                  value={draft.currentValue}
+                  onChange={(event) => setDraft((current) => ({ ...current, currentValue: event.target.value }))}
+                />
+              </div>
+
+              <div className="field">
+                <label htmlFor={`kr-progress-${keyResult.krKey}`}>KR Progress</label>
+                <input
+                  id={`kr-progress-${keyResult.krKey}`}
+                  value={draft.krProgress}
+                  onChange={(event) => setDraft((current) => ({ ...current, krProgress: event.target.value }))}
+                />
+              </div>
+
+              <div className="field">
+                <label htmlFor={`kr-progress-pct-${keyResult.krKey}`}>KR Progress %</label>
+                <input
+                  id={`kr-progress-pct-${keyResult.krKey}`}
+                  type="number"
+                  step="any"
+                  value={draft.krProgressPct}
+                  onChange={(event) => setDraft((current) => ({ ...current, krProgressPct: event.target.value }))}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="field">
+              <label>Progress</label>
+              <div className="milestone-binary-btns">
+                <button
+                  type="button"
+                  className={`milestone-binary-btn${Number(draft.krProgressPct) < 100 ? " milestone-binary-btn-active" : ""}`}
+                  onClick={() => setDraft((current) => ({ ...current, krProgressPct: "0" }))}
+                >
+                  Not Done
+                </button>
+                <button
+                  type="button"
+                  className={`milestone-binary-btn${Number(draft.krProgressPct) >= 100 ? " milestone-binary-btn-active" : ""}`}
+                  onClick={() => setDraft((current) => ({ ...current, krProgressPct: "100" }))}
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="field">
             <label htmlFor={`kr-status-${keyResult.krKey}`}>Status</label>
@@ -347,26 +440,6 @@ export default function KeyResultEditControls({
                 </option>
               ))}
             </select>
-          </div>
-
-          <div className="field">
-            <label htmlFor={`kr-progress-${keyResult.krKey}`}>KR Progress</label>
-            <input
-              id={`kr-progress-${keyResult.krKey}`}
-              value={draft.krProgress}
-              onChange={(event) => setDraft((current) => ({ ...current, krProgress: event.target.value }))}
-            />
-          </div>
-
-          <div className="field">
-            <label htmlFor={`kr-progress-pct-${keyResult.krKey}`}>KR Progress %</label>
-            <input
-              id={`kr-progress-pct-${keyResult.krKey}`}
-              type="number"
-              step="any"
-              value={draft.krProgressPct}
-              onChange={(event) => setDraft((current) => ({ ...current, krProgressPct: event.target.value }))}
-            />
           </div>
 
           <div className="field">

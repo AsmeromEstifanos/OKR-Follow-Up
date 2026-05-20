@@ -8,6 +8,14 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.25] — 2026-05-20
+### Changed
+- Add KR form (board row) now shows a KR Type dropdown (Measurable / Non-measurable) instead of free-text "Measurement Rule"; Baseline/Target/Current inputs shown for measurable, Done/Not Done buttons shown for non-measurable
+- Owner Email now auto-populates from the parent objective's owner when opening the Add KR form
+- KR edit form (objective detail page) also shows KR Type dropdown with the same conditional fields; existing non-measurable KRs (null target/current) are detected automatically
+
+---
+
 ## [0.5.24] — 2026-05-20
 ### Changed
 - KR types renamed: "Measurable" (numeric target/current) and "Non-measurable" (Done/Not Done only, 0 or 100%)
