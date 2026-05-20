@@ -192,7 +192,9 @@ The assistant knows about your current goals and answers based on the live data.
     category: "For managers & admins",
     body: `If you're a Manager or Admin, you'll see an Activity menu item. This is a complete history of every change made in the app: who changed what and when, exactly what was updated (for example, "Progress changed from 40% to 85%"), with filters by date, team, type of item, or person.
 
-Click any entry to see the full details of that change in a popup. There's also an Insights panel showing activity trends, the most active users, and the most-changed goals.
+Click any entry to open a popup. For objectives and key results, the popup shows the item's current details exactly as they appear on the OKR board — title, owner, progress, target and current values, status, dates, notes, blockers and more — so you can see the full picture of the item, not just what changed. If the item has since been deleted, the popup tells you so.
+
+There's also an Insights panel showing activity trends, the most active users, and the most-changed goals.
 
 This is useful for keeping an eye on team activity and understanding how goals have evolved over time.`
   },

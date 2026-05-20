@@ -1,6 +1,6 @@
 # OKR Follow-Up — Application Manual
 
-**Version 0.5.35 · Last updated 2026-05-20**
+**Version 0.5.36 · Last updated 2026-05-20**
 
 This document is a complete reference for the OKR Follow-Up application: what every feature does, how it works internally, and what you need to reproduce any part of it in a new application. It is written for developers and power users alike.
 
@@ -450,7 +450,7 @@ The Activity Log page provides:
 
 - Entries are grouped by calendar day.
 - Each entry shows: user, action sentence ("Updated key result KR-001 · Title"), timestamp.
-- Clicking an entry opens a popup showing the full field-change diff (from → to for each field).
+- Clicking an entry opens a popup. For `objectives` and `krs` entries the popup fetches the live item from `GET /api/objectives` / `GET /api/krs`, matches it by `entityKey` (falling back to the code parsed from `entityLabel`), and renders all of the item's current fields in a defined order. For other entity types it falls back to showing the recorded field-change diff. If the item is no longer present it shows a "no longer exists" message.
 - A "Load more" button fetches the next page (cursor-based pagination using the ISO timestamp of the last entry).
 
 ### 8.6 Insights panel

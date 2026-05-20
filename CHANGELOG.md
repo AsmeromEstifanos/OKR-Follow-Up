@@ -8,6 +8,13 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.36] — 2026-05-20
+### Changed
+- Activity Log detail popup now shows the clicked objective's or key result's current details (as on the OKR board) — all fields in a labelled list — instead of re-showing the field changes already visible in the row; shows a "no longer exists" message if the item was deleted
+- Styled the shared `btn-primary` / `btn-secondary` buttons (Show Insights, Apply, etc.) which previously rendered as unstyled browser-default buttons
+
+---
+
 ## [0.5.35] — 2026-05-20
 ### Added
 - In-app Help & User Guide page (`/help`): searchable, browsable documentation for end users with category filters and a jump-to-section table of contents

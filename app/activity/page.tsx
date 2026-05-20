@@ -94,11 +94,19 @@ function friendlyFieldName(field: string): string {
   return FIELD_LABELS[field] ?? field.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase());
 }
 
+const DATE_FIELDS = new Set(["startDate", "endDate", "dueDate", "lastCheckinAt"]);
+
 function formatValue(value: unknown, field?: string): string {
   if (value === null || value === undefined) return "—";
   if (typeof value === "string") {
     if (!value.trim()) return "—";
     if (field === "progressPct") return `${value}%`;
+    if (field && DATE_FIELDS.has(field)) {
+      const d = new Date(value);
+      if (!Number.isNaN(d.getTime())) {
+        return field === "lastCheckinAt" ? d.toLocaleString() : d.toLocaleDateString();
+      }
+    }
     return value;
   }
   if (typeof value === "number") {
@@ -252,8 +260,106 @@ function BarChart({ data }: { data: { label: string; count: number }[] }): JSX.E
   );
 }
 
-function DetailPopup({ entry, onClose }: { entry: ActivityEntry; onClose: () => void }): JSX.Element {
+// Order in which fields appear in the detail popup. Anything not listed here
+// is appended afterwards in object order. Internal/noisy keys are skipped.
+const OBJECTIVE_FIELD_ORDER = [
+  "objectiveCode", "title", "description", "status", "rag", "progressPct",
+  "owner", "ownerEmail", "department", "ventureName", "strategicTheme",
+  "objectiveType", "okrCycle", "confidence", "periodKey", "startDate", "endDate",
+  "constraintGuardrails", "keyRisksDependency", "blockers", "notes", "lastCheckinAt"
+];
+
+const KR_FIELD_ORDER = [
+  "krCode", "title", "status", "progressPct", "metricType", "measurementRule",
+  "baselineValue", "targetValue", "currentValue", "owner", "ownerEmail",
+  "objectiveKey", "periodKey", "dueDate", "checkInFrequency",
+  "blockers", "supportNeeded", "notes", "lastCheckinAt"
+];
+
+// Keys never shown in the all-fields view (internal identifiers)
+const HIDDEN_DETAIL_FIELDS = new Set(["objectiveKey", "krKey"]);
+
+// Maps the activity entityType slug to the board list endpoint + key field.
+const ENTITY_FETCH_CONFIG: Record<string, { path: string; keyField: string; codeField?: string }> = {
+  objectives: { path: "/api/objectives", keyField: "objectiveKey", codeField: "objectiveCode" },
+  krs: { path: "/api/krs", keyField: "krKey", codeField: "krCode" }
+};
+
+function orderedEntries(
+  item: Record<string, unknown>,
+  order: string[]
+): Array<[string, unknown]> {
+  const seen = new Set<string>();
+  const result: Array<[string, unknown]> = [];
+  for (const key of order) {
+    if (key in item) {
+      result.push([key, item[key]]);
+      seen.add(key);
+    }
+  }
+  for (const key of Object.keys(item)) {
+    if (seen.has(key) || HIDDEN_DETAIL_FIELDS.has(key) || SKIP_FIELDS.has(key)) continue;
+    result.push([key, item[key]]);
+  }
+  return result.filter(([key]) => !HIDDEN_DETAIL_FIELDS.has(key));
+}
+
+// Parse the code (e.g. "KR-004") from an entity label like "KR-004 Some title".
+function codeFromLabel(label: string | undefined): string | null {
+  if (!label) return null;
+  const match = label.trim().match(/^([A-Za-z]+-\d+)/);
+  return match ? match[1] : null;
+}
+
+function DetailPopup({
+  entry,
+  userEmail,
+  onClose
+}: {
+  entry: ActivityEntry;
+  userEmail: string;
+  onClose: () => void;
+}): JSX.Element {
   const changes = parseChanges(entry.detailsJson);
+  const config = entry.entityType ? ENTITY_FETCH_CONFIG[entry.entityType] : undefined;
+
+  const [item, setItem] = useState<Record<string, unknown> | null>(null);
+  const [loadState, setLoadState] = useState<"idle" | "loading" | "loaded" | "notfound" | "error">(
+    config ? "loading" : "idle"
+  );
+
+  useEffect(() => {
+    if (!config || !userEmail) return;
+    let mounted = true;
+    setLoadState("loading");
+    fetch(apiPath(config.path), { headers: { "x-user-email": userEmail } })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("fetch failed"))))
+      .then((list: Record<string, unknown>[]) => {
+        if (!mounted) return;
+        const code = codeFromLabel(entry.entityLabel);
+        const found =
+          list.find((row) => entry.entityKey && String(row[config.keyField]) === entry.entityKey) ??
+          (config.codeField && code
+            ? list.find((row) => String(row[config.codeField as string]) === code)
+            : undefined);
+        if (found) {
+          setItem(found);
+          setLoadState("loaded");
+        } else {
+          setLoadState("notfound");
+        }
+      })
+      .catch(() => {
+        if (mounted) setLoadState("error");
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [config, userEmail, entry.entityKey, entry.entityLabel]);
+
+  const order = entry.entityType === "objectives" ? OBJECTIVE_FIELD_ORDER : KR_FIELD_ORDER;
+  const fields = item ? orderedEntries(item, order) : [];
+
   return (
     <div className="act-popup-backdrop" onClick={onClose} role="dialog" aria-modal="true">
       <div className="act-popup" onClick={(e) => e.stopPropagation()}>
@@ -270,7 +376,33 @@ function DetailPopup({ entry, onClose }: { entry: ActivityEntry; onClose: () => 
           <span>{entry.userEmail}</span>
           <span>{new Date(entry.occurredAt).toLocaleString()}</span>
         </div>
-        {changes.length > 0 ? (
+
+        {config ? (
+          <div className="act-popup-details">
+            <div className="act-popup-changes-heading">
+              {entry.entityType === "objectives" ? "Objective details" : "Key result details"}
+            </div>
+            {loadState === "loading" && <div className="act-popup-no-changes">Loading details…</div>}
+            {loadState === "error" && (
+              <div className="act-popup-no-changes">Couldn&rsquo;t load the current details.</div>
+            )}
+            {loadState === "notfound" && (
+              <div className="act-popup-no-changes">
+                This item no longer exists on the board (it may have been deleted).
+              </div>
+            )}
+            {loadState === "loaded" && (
+              <dl className="act-popup-fields">
+                {fields.map(([key, value]) => (
+                  <div key={key} className="act-popup-field-row">
+                    <dt className="act-popup-field-label">{friendlyFieldName(key)}</dt>
+                    <dd className="act-popup-field-value">{formatValue(value, key)}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </div>
+        ) : changes.length > 0 ? (
           <div className="act-popup-changes">
             <div className="act-popup-changes-heading">Changes</div>
             {changes.map((c) => (
@@ -472,7 +604,11 @@ export default function ActivityPage(): JSX.Element {
   return (
     <div className="act-page">
       {selectedEntry && (
-        <DetailPopup entry={selectedEntry} onClose={() => setSelectedEntry(null)} />
+        <DetailPopup
+          entry={selectedEntry}
+          userEmail={currentUserEmail}
+          onClose={() => setSelectedEntry(null)}
+        />
       )}
       <div className="act-header">
         <h1 className="act-title">Activity Log</h1>
