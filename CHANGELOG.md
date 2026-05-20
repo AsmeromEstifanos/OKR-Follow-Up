@@ -8,6 +8,12 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.20] — 2026-05-20
+### Fixed
+- @mention highlight now covers the full name (e.g. `@Asmerom Estifanos` highlighted as one token, not just `@Asmerom`)
+
+---
+
 ## [0.5.19] — 2026-05-19
 ### Fixed
 - @mention dropdown: name and email now left-aligned within each row

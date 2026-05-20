@@ -41,10 +41,11 @@ function formatTime(iso: string): string {
     d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-// Render a comment body with @mentions highlighted
+// Render a comment body with @mentions highlighted.
+// Matches @FirstName, @FirstName LastName, @FirstName Last1 Last2, etc.
+// A name part is any sequence of non-whitespace chars starting with a capital letter.
 function renderBody(text: string): JSX.Element {
-  // Match @word or @"multi word" patterns
-  const parts = text.split(/(@\S+)/g);
+  const parts = text.split(/(@[A-Z]\S*(?:\s+[A-Z]\S*)*)/g);
   return (
     <>
       {parts.map((part, i) =>
