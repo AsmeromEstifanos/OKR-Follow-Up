@@ -8,6 +8,12 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.37] — 2026-05-20
+### Fixed
+- Activity Log detail popup no longer shows the internal Period key (e.g. "P-CURRENT") — it isn't meaningful to users
+
+---
+
 ## [0.5.36] — 2026-05-20
 ### Changed
 - Activity Log detail popup now shows the clicked objective's or key result's current details (as on the OKR board) — all fields in a labelled list — instead of re-showing the field changes already visible in the row; shows a "no longer exists" message if the item was deleted

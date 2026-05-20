@@ -265,19 +265,19 @@ function BarChart({ data }: { data: { label: string; count: number }[] }): JSX.E
 const OBJECTIVE_FIELD_ORDER = [
   "objectiveCode", "title", "description", "status", "rag", "progressPct",
   "owner", "ownerEmail", "department", "ventureName", "strategicTheme",
-  "objectiveType", "okrCycle", "confidence", "periodKey", "startDate", "endDate",
+  "objectiveType", "okrCycle", "confidence", "startDate", "endDate",
   "constraintGuardrails", "keyRisksDependency", "blockers", "notes", "lastCheckinAt"
 ];
 
 const KR_FIELD_ORDER = [
   "krCode", "title", "status", "progressPct", "metricType", "measurementRule",
   "baselineValue", "targetValue", "currentValue", "owner", "ownerEmail",
-  "objectiveKey", "periodKey", "dueDate", "checkInFrequency",
+  "dueDate", "checkInFrequency",
   "blockers", "supportNeeded", "notes", "lastCheckinAt"
 ];
 
-// Keys never shown in the all-fields view (internal identifiers)
-const HIDDEN_DETAIL_FIELDS = new Set(["objectiveKey", "krKey"]);
+// Keys never shown in the all-fields view (internal identifiers / non-user-facing)
+const HIDDEN_DETAIL_FIELDS = new Set(["objectiveKey", "krKey", "periodKey"]);
 
 // Maps the activity entityType slug to the board list endpoint + key field.
 const ENTITY_FETCH_CONFIG: Record<string, { path: string; keyField: string; codeField?: string }> = {
