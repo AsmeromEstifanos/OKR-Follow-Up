@@ -85,9 +85,9 @@ export interface KeyResult {
   ownerEmail?: string;
   metricType: MetricType;
   measurementRule?: string;
-  baselineValue: number;
-  targetValue: number;
-  currentValue: number;
+  baselineValue: number | null;
+  targetValue: number | null;
+  currentValue: number | null;
   progressPct: number;
   status: KrStatus;
   dueDate: string;

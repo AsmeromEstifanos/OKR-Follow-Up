@@ -246,8 +246,12 @@ export default function DashboardKeyResultRowEditor({
   const [owner, setOwner] = useState<string>(resolveOwnerName(keyResult.owner));
   const [ownerEmail, setOwnerEmail] = useState<string>(resolveOwnerEmail(keyResult.owner, keyResult.ownerEmail));
   const [measurementRule, setMeasurementRule] = useState<string>(keyResult.measurementRule ?? "");
-  const [targetValue, setTargetValue] = useState<string>(String(keyResult.targetValue));
-  const [currentValue, setCurrentValue] = useState<string>(String(keyResult.currentValue));
+  const [krMode, setKrMode] = useState<"measurable" | "milestone-based">(
+    keyResult.targetValue === null || keyResult.currentValue === null ? "milestone-based" : "measurable"
+  );
+  const [krProgressPct, setKrProgressPct] = useState<string>(String(keyResult.progressPct));
+  const [targetValue, setTargetValue] = useState<string>(keyResult.targetValue !== null ? String(keyResult.targetValue) : "");
+  const [currentValue, setCurrentValue] = useState<string>(keyResult.currentValue !== null ? String(keyResult.currentValue) : "");
   const [status, setStatus] = useState<KrStatus>(keyResult.status);
   const [dueDate, setDueDate] = useState<string>(keyResult.dueDate?.slice(0, 10) ?? "");
   const [blockers, setBlockers] = useState<string>(keyResult.blockers ?? "");
@@ -281,8 +285,10 @@ export default function DashboardKeyResultRowEditor({
     setOwner(resolveOwnerName(keyResult.owner));
     setOwnerEmail(resolveOwnerEmail(keyResult.owner, keyResult.ownerEmail));
     setMeasurementRule(keyResult.measurementRule ?? "");
-    setTargetValue(String(keyResult.targetValue));
-    setCurrentValue(String(keyResult.currentValue));
+    setKrMode(keyResult.targetValue === null || keyResult.currentValue === null ? "milestone-based" : "measurable");
+    setKrProgressPct(String(keyResult.progressPct));
+    setTargetValue(keyResult.targetValue !== null ? String(keyResult.targetValue) : "");
+    setCurrentValue(keyResult.currentValue !== null ? String(keyResult.currentValue) : "");
     setStatus(keyResult.status);
     setDueDate(keyResult.dueDate?.slice(0, 10) ?? "");
     setBlockers(keyResult.blockers ?? "");
@@ -308,11 +314,28 @@ export default function DashboardKeyResultRowEditor({
       return;
     }
 
-    const target = Number(targetValue);
-    const current = Number(currentValue);
-    if (!hasMilestoneBackedProgress && (!Number.isFinite(target) || !Number.isFinite(current))) {
-      setError("Target and current must be numbers.");
-      return;
+    let patchTargetValue: number | null = null;
+    let patchCurrentValue: number | null = null;
+    let patchProgressPct: number | undefined;
+
+    if (!hasMilestoneBackedProgress) {
+      if (krMode === "measurable") {
+        const target = Number(targetValue);
+        const current = Number(currentValue);
+        if (!Number.isFinite(target) || !Number.isFinite(current)) {
+          setError("Target and current must be numbers for a measurable KR.");
+          return;
+        }
+        patchTargetValue = target;
+        patchCurrentValue = current;
+      } else {
+        const pct = Number(krProgressPct);
+        if (!Number.isFinite(pct)) {
+          setError("Progress % must be a number for a milestone-based KR.");
+          return;
+        }
+        patchProgressPct = pct;
+      }
     }
 
     setIsSaving(true);
@@ -330,7 +353,12 @@ export default function DashboardKeyResultRowEditor({
         owner: owner.trim(),
         ownerEmail: ownerEmail.trim(),
         measurementRule: measurementRule.trim(),
-        ...(!hasMilestoneBackedProgress ? { targetValue: target, currentValue: current } : {}),
+        ...(!hasMilestoneBackedProgress && krMode === "measurable"
+          ? { targetValue: patchTargetValue, currentValue: patchCurrentValue }
+          : {}),
+        ...(!hasMilestoneBackedProgress && krMode === "milestone-based"
+          ? { targetValue: null, currentValue: null, progressPct: patchProgressPct }
+          : {}),
         status,
         dueDate,
         blockers: blockers.trim(),
@@ -654,16 +682,42 @@ export default function DashboardKeyResultRowEditor({
         </td>
         <td>
           {hasMilestoneBackedProgress ? "-" : isEditing ? (
-            <input className="objective-row-input" value={targetValue} onChange={(event) => setTargetValue(event.target.value)} disabled={isSaving} />
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+              <select
+                className="objective-row-select"
+                value={krMode}
+                onChange={(e) => setKrMode(e.target.value as "measurable" | "milestone-based")}
+                disabled={isSaving}
+              >
+                <option value="measurable">Measurable</option>
+                <option value="milestone-based">Milestone-based</option>
+              </select>
+              {krMode === "measurable" && (
+                <input className="objective-row-input" value={targetValue} onChange={(e) => setTargetValue(e.target.value)} disabled={isSaving} placeholder="Target" />
+              )}
+            </div>
           ) : (
-            keyResult.targetValue
+            keyResult.targetValue !== null ? keyResult.targetValue : "-"
           )}
         </td>
         <td>
           {hasMilestoneBackedProgress ? "-" : isEditing ? (
-            <input className="objective-row-input" value={currentValue} onChange={(event) => setCurrentValue(event.target.value)} disabled={isSaving} />
+            krMode === "measurable" ? (
+              <input className="objective-row-input" value={currentValue} onChange={(e) => setCurrentValue(e.target.value)} disabled={isSaving} placeholder="Current" />
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+                <input
+                  className="objective-row-input"
+                  type="number"
+                  value={krProgressPct}
+                  onChange={(e) => setKrProgressPct(e.target.value)}
+                  disabled={isSaving}
+                  placeholder="Progress %"
+                />
+              </div>
+            )
           ) : (
-            keyResult.currentValue
+            keyResult.currentValue !== null ? keyResult.currentValue : "-"
           )}
         </td>
         <td>{keyResult.progressPct}%</td>

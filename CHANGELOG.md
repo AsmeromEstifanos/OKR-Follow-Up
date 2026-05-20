@@ -8,6 +8,16 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.23] — 2026-05-20
+### Added
+- Key Results now support two types, matching milestones:
+  - **Measurable** — has numeric Target / Current values; progress calculated automatically
+  - **Milestone-based** — no Target/Current; progress set directly as a % (driven by child milestones or manual entry)
+- KR Type selector in both the Add KR form and the inline KR edit row
+- `targetValue` / `currentValue` are now nullable on `KeyResult` (null = milestone-based)
+
+---
+
 ## [0.5.22] — 2026-05-20
 ### Fixed
 - @mention highlights now appear for historical messages: on thread load, each @token in existing comment bodies is resolved to a full display name via the suggest API, so the known-names set is populated before rendering

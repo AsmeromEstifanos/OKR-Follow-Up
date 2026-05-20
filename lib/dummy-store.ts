@@ -559,9 +559,10 @@ function recalcKrInStore(store: StoreState, krKey: string): void {
     keyResult.currentValue = keyResult.progressPct;
     keyResult.baselineValue = 0;
     keyResult.targetValue = 100;
-  } else {
-    keyResult.progressPct = computeKrProgress(keyResult.baselineValue, keyResult.targetValue, keyResult.currentValue);
+  } else if (keyResult.targetValue !== null && keyResult.currentValue !== null) {
+    keyResult.progressPct = computeKrProgress(keyResult.baselineValue ?? 0, keyResult.targetValue, keyResult.currentValue);
   }
+  // else: non-measurable KR — progressPct is managed directly (already set)
 
   keyResult.status = getStatusFromProgress(keyResult.progressPct);
 }
@@ -1560,7 +1561,10 @@ export function createKeyResult(input: CreateKeyResultInput): KeyResult {
   ensurePeriodExists(store, input.periodKey);
 
   const progressPct =
-    input.progressPct ?? computeKrProgress(input.baselineValue, input.targetValue, input.currentValue);
+    input.progressPct ??
+    (input.targetValue !== null && input.targetValue !== undefined && input.currentValue !== null && input.currentValue !== undefined
+      ? computeKrProgress(input.baselineValue ?? 0, input.targetValue, input.currentValue)
+      : 0);
   const checkInFrequency = normalizeCheckInFrequency(input.checkInFrequency);
   const blockers = normalizeName(input.blockers ?? "");
   const notes = normalizeName(input.notes ?? "");
@@ -1836,7 +1840,9 @@ export function createCheckIn(input: CreateCheckInInput): CheckIn {
   const currentValueSnapshot = input.currentValueSnapshot;
   const progressPctSnapshot =
     input.progressPctSnapshot ??
-    computeKrProgress(keyResult.baselineValue, keyResult.targetValue, currentValueSnapshot);
+    (keyResult.targetValue !== null
+      ? computeKrProgress(keyResult.baselineValue ?? 0, keyResult.targetValue, currentValueSnapshot)
+      : 0);
 
   const status = input.status;
   const checkIn: CheckIn = {

@@ -174,6 +174,7 @@ export default function DashboardCreateControls(): JSX.Element {
   const [krOwner, setKrOwner] = useState<string>("");
   const [krOwnerEmail, setKrOwnerEmail] = useState<string>("");
   const [krStatus, setKrStatus] = useState<KrStatus>("OnTrack");
+  const [krMode, setKrMode] = useState<"measurable" | "milestone-based">("measurable");
   const [krProgress, setKrProgress] = useState<string>("0 / 100");
   const [krProgressPct, setKrProgressPct] = useState<string>("0");
   const [krCheckInFrequency, setKrCheckInFrequency] = useState<CheckInFrequency>("Weekly");
@@ -506,25 +507,39 @@ export default function DashboardCreateControls(): JSX.Element {
       return;
     }
 
-    const parsedProgress = parseProgressValue(krProgress);
-    const progressPct = Number(krProgressPct);
-    const hasProgressPct = Number.isFinite(progressPct);
+    let baselineValue: number | null = null;
+    let targetValue: number | null = null;
+    let currentValue: number | null = null;
+    let progressPctToSend: number | undefined;
 
-    if (!parsedProgress && !hasProgressPct) {
-      setError("Provide Progress (for example: 45 / 100) or Progress %.");
-      return;
-    }
+    if (krMode === "measurable") {
+      const parsedProgress = parseProgressValue(krProgress);
+      const progressPct = Number(krProgressPct);
+      const hasProgressPct = Number.isFinite(progressPct);
 
-    const baselineValue = 0;
-    let targetValue = 100;
-    let currentValue = 0;
+      if (!parsedProgress && !hasProgressPct) {
+        setError("Provide Progress (for example: 45 / 100) or Progress %.");
+        return;
+      }
 
-    if (parsedProgress) {
-      targetValue = parsedProgress.target;
-      currentValue = parsedProgress.current;
-    } else if (hasProgressPct) {
+      baselineValue = 0;
       targetValue = 100;
-      currentValue = progressPct;
+      currentValue = 0;
+
+      if (parsedProgress) {
+        targetValue = parsedProgress.target;
+        currentValue = parsedProgress.current;
+      } else if (hasProgressPct) {
+        targetValue = 100;
+        currentValue = progressPct;
+      }
+    } else {
+      const progressPct = Number(krProgressPct);
+      if (!Number.isFinite(progressPct)) {
+        setError("Provide a Progress % for a milestone-based KR.");
+        return;
+      }
+      progressPctToSend = progressPct;
     }
 
     setIsBusy(true);
@@ -548,6 +563,7 @@ export default function DashboardCreateControls(): JSX.Element {
           baselineValue,
           targetValue,
           currentValue,
+          ...(progressPctToSend !== undefined ? { progressPct: progressPctToSend } : {}),
           status: krStatus,
           dueDate: selectedObjective.endDate,
           checkInFrequency: krCheckInFrequency,
@@ -566,6 +582,7 @@ export default function DashboardCreateControls(): JSX.Element {
 
     setKrCodePreview("");
     setKrTitle("");
+    setKrMode("measurable");
     setKrProgress("0 / 100");
     setKrProgressPct("0");
     setKrCheckInFrequency("Weekly");
@@ -849,24 +866,53 @@ export default function DashboardCreateControls(): JSX.Element {
               </select>
             </div>
             <div className="field">
-              <label htmlFor="quick-kr-progress">Progress</label>
-              <input
-                id="quick-kr-progress"
-                value={krProgress}
-                onChange={(event) => setKrProgress(event.target.value)}
-                placeholder="45 / 100"
-              />
+              <label htmlFor="quick-kr-mode">KR Type</label>
+              <select
+                id="quick-kr-mode"
+                value={krMode}
+                onChange={(event) => setKrMode(event.target.value as "measurable" | "milestone-based")}
+              >
+                <option value="measurable">Measurable</option>
+                <option value="milestone-based">Milestone-based</option>
+              </select>
             </div>
-            <div className="field">
-              <label htmlFor="quick-kr-progress-pct">Progress %</label>
-              <input
-                id="quick-kr-progress-pct"
-                type="number"
-                step="any"
-                value={krProgressPct}
-                onChange={(event) => setKrProgressPct(event.target.value)}
-              />
-            </div>
+            {krMode === "measurable" ? (
+              <>
+                <div className="field">
+                  <label htmlFor="quick-kr-progress">Progress</label>
+                  <input
+                    id="quick-kr-progress"
+                    value={krProgress}
+                    onChange={(event) => setKrProgress(event.target.value)}
+                    placeholder="45 / 100"
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="quick-kr-progress-pct">Progress %</label>
+                  <input
+                    id="quick-kr-progress-pct"
+                    type="number"
+                    step="any"
+                    value={krProgressPct}
+                    onChange={(event) => setKrProgressPct(event.target.value)}
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="field">
+                <label htmlFor="quick-kr-progress-pct">Progress %</label>
+                <input
+                  id="quick-kr-progress-pct"
+                  type="number"
+                  step="any"
+                  min="0"
+                  max="100"
+                  value={krProgressPct}
+                  onChange={(event) => setKrProgressPct(event.target.value)}
+                  placeholder="0"
+                />
+              </div>
+            )}
             <div className="field">
               <label htmlFor="quick-kr-okr-cycle">OKR Cycle</label>
               <input id="quick-kr-okr-cycle" value={selectedKrObjective?.okrCycle ?? ""} readOnly />
@@ -944,7 +990,7 @@ export default function DashboardCreateControls(): JSX.Element {
                         <td>{parentObjective ? `${parentObjective.progressPct}%` : "-"}</td>
                         <td>{formatStatusLabel(kr.status)}</td>
                         <td>
-                          {formatMetricValue(kr.currentValue, kr.metricType)} / {formatMetricValue(kr.targetValue, kr.metricType)}
+                          {kr.currentValue !== null && kr.targetValue !== null ? `${formatMetricValue(kr.currentValue, kr.metricType)} / ${formatMetricValue(kr.targetValue, kr.metricType)}` : "-"}
                         </td>
                         <td>{kr.progressPct}%</td>
                         <td>{parentObjective?.okrCycle || "-"}</td>
