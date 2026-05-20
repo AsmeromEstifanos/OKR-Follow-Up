@@ -164,6 +164,7 @@ export default function ConfigPage(): JSX.Element {
   const [roleEmailDraft, setRoleEmailDraft] = useState<string>("");
   const [roleDisplayNameDraft, setRoleDisplayNameDraft] = useState<string>("");
   const [roleRoleDraft, setRoleRoleDraft] = useState<AppRole>("Viewer");
+  const [defaultRole, setDefaultRoleState] = useState<AppRole | "">("");
 
   const [greenMin, setGreenMin] = useState<string>("70");
   const [amberMin, setAmberMin] = useState<string>("40");
@@ -223,12 +224,14 @@ export default function ConfigPage(): JSX.Element {
   }, []);
 
   const loadRoles = useCallback(async (): Promise<void> => {
-    const response = await fetch(apiPath("/api/roles"), {
-      cache: "no-store",
-      headers: { "x-user-email": normalizedCurrentUser }
-    });
-    const payload = await readJson<{ users?: RoleUser[] } & ApiError>(response);
-    if (response.ok) setRoleUsers(payload?.users ?? []);
+    const [rolesRes, defaultRes] = await Promise.all([
+      fetch(apiPath("/api/roles"), { cache: "no-store", headers: { "x-user-email": normalizedCurrentUser } }),
+      fetch(apiPath("/api/roles/default"), { cache: "no-store", headers: { "x-user-email": normalizedCurrentUser } })
+    ]);
+    const payload = await readJson<{ users?: RoleUser[] } & ApiError>(rolesRes);
+    if (rolesRes.ok) setRoleUsers(payload?.users ?? []);
+    const defaultPayload = await readJson<{ defaultRole?: AppRole | null }>(defaultRes);
+    if (defaultRes.ok) setDefaultRoleState((defaultPayload?.defaultRole as AppRole) ?? "");
   }, [normalizedCurrentUser]);
 
   const loadAuthz = useCallback(async (): Promise<void> => {
@@ -443,6 +446,20 @@ export default function ConfigPage(): JSX.Element {
     setMessage("Role removed."); setState("idle");
   };
 
+  const saveDefaultRole = async (role: AppRole | ""): Promise<void> => {
+    setState("saving"); setError(""); setMessage("");
+    const response = await fetch(apiPath("/api/roles/default"), {
+      method: "PUT",
+      headers: { "content-type": "application/json", "x-user-email": normalizedCurrentUser },
+      body: JSON.stringify({ defaultRole: role || null })
+    });
+    const payload = await readJson<{ defaultRole?: AppRole | null } & ApiError>(response);
+    if (!response.ok) { setError(payload?.error ?? "Failed to save default role."); setState("idle"); return; }
+    setDefaultRoleState((payload?.defaultRole as AppRole) ?? "");
+    setMessage("Default role saved.");
+    setState("idle");
+  };
+
   const addVenture = async (): Promise<void> => {
     if (!ventureName.trim()) {
       setError("Venture name is required.");
@@ -653,6 +670,32 @@ export default function ConfigPage(): JSX.Element {
             </span>
           ))}
         </p>
+
+        <div className="config-subsection">
+          <h3 className="config-subsection-heading">Default role for unlisted users</h3>
+          <p className="meta">Users not individually assigned a role will inherit this role. Leave unset to deny access to all unlisted users.</p>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+            <select
+              value={defaultRole}
+              onChange={(e) => setDefaultRoleState(e.target.value as AppRole | "")}
+              disabled={isBusy}
+              style={{ minWidth: 140 }}
+            >
+              <option value="">— No default (deny) —</option>
+              {ALL_ROLES.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="btn btn-add"
+              onClick={() => void saveDefaultRole(defaultRole)}
+              disabled={isBusy}
+            >
+              Save default
+            </button>
+          </div>
+        </div>
         <div className="config-grid">
           <OwnerInput
             id="roleEmail"

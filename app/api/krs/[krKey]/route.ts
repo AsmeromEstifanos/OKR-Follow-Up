@@ -2,6 +2,7 @@ import { deleteKeyResult, getKeyResult, updateKeyResult } from "@/lib/store";
 import type { UpdateKeyResultInput } from "@/lib/types";
 import { withOperationProgress } from "@/app/api/_utils/with-operation-progress";
 import { buildActivityDiff } from "@/app/api/_utils/user-activity-log";
+import { requireOwnerOrManagerForUpdate } from "@/app/api/_utils/department-owner-guard";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -181,6 +182,10 @@ export async function PATCH(request: NextRequest, context: Context): Promise<Nex
       const body = await request.json();
       const patch = parseKrPatch(body);
       const before = await getKeyResult(context.params.krKey);
+
+      const blocked = await requireOwnerOrManagerForUpdate(request, before?.ownerEmail ?? before?.owner);
+      if (blocked) return blocked;
+
       const keyResult = await updateKeyResult(context.params.krKey, patch);
 
       if (!keyResult) {

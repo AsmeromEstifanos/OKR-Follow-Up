@@ -8,6 +8,15 @@ Versioning follows [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH
 
 ---
 
+## [0.5.33] — 2026-05-20
+### Added
+- Activity log entries are now clickable — opens a popup with full change details instead of a broken link
+- Config > Roles: "Default role for unlisted users" setting — users not individually assigned a role inherit this role
+- Editor role now enforces owns-only access: Editors can only create/update objectives and key results they are listed as owner of
+
+### Fixed
+- Activity tab no longer highlights two nav items simultaneously (OKR Board was always-active when not on dashboard/config)
+
 ## [0.5.32] — 2026-05-20
 ### Fixed
 - ByteString encoding error when saving KRs/objectives with codes: removed em dash from entity label headers, non-ASCII characters are now stripped before writing to SharePoint

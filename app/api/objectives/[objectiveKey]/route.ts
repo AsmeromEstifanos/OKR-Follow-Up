@@ -2,6 +2,7 @@ import { deleteObjective, getObjectiveWithContext, updateObjective } from "@/lib
 import type { Confidence, UpdateObjectiveInput } from "@/lib/types";
 import { withOperationProgress } from "@/app/api/_utils/with-operation-progress";
 import { buildActivityDiff } from "@/app/api/_utils/user-activity-log";
+import { requireOwnerOrManagerForUpdate } from "@/app/api/_utils/department-owner-guard";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -187,6 +188,10 @@ export async function PATCH(request: NextRequest, context: Context): Promise<Nex
       const body = await request.json();
       const patch = parseObjectivePatch(body);
       const before = (await getObjectiveWithContext(context.params.objectiveKey))?.objective ?? null;
+
+      const blocked = await requireOwnerOrManagerForUpdate(request, before?.ownerEmail ?? before?.owner);
+      if (blocked) return blocked;
+
       const objective = await updateObjective(context.params.objectiveKey, patch);
 
       if (!objective) {

@@ -1,4 +1,4 @@
-import { getConfig, getObjective, isAdminEmail } from "@/lib/store";
+import { getConfig, getKeyResult, getObjective, getUserRole, isAdminEmail } from "@/lib/store";
 import { NextRequest, NextResponse } from "next/server";
 
 function normalize(value: string | null | undefined): string {
@@ -48,17 +48,29 @@ function isDepartmentOwner(
   });
 }
 
+// Editors can create/edit only items where their email matches the item's ownerEmail.
+// Managers and Admins can act on anything.
+async function resolveEffectiveRole(email: string): Promise<"admin" | "manager" | "editor" | "viewer" | null> {
+  const isAdmin = await isAdminEmail(email);
+  if (isAdmin) return "admin";
+  const role = await getUserRole(email);
+  if (!role) return null;
+  return role.toLowerCase() as "admin" | "manager" | "editor" | "viewer";
+}
+
 export async function requireDepartmentOwnerOrAdminForObjectiveCreate(
   request: NextRequest,
-  payload: { department?: string; ventureName?: string }
+  payload: { department?: string; ventureName?: string; ownerEmail?: string }
 ): Promise<NextResponse | null> {
   const signedInEmail = getSignedInEmail(request);
   if (!signedInEmail) {
     return NextResponse.json({ error: "Missing signed-in user email." }, { status: 401 });
   }
 
-  const isAdmin = await isAdminEmail(signedInEmail);
-  if (isAdmin) {
+  const effectiveRole = await resolveEffectiveRole(signedInEmail);
+
+  // Admin and Manager can create any objective
+  if (effectiveRole === "admin" || effectiveRole === "manager") {
     return null;
   }
 
@@ -67,25 +79,37 @@ export async function requireDepartmentOwnerOrAdminForObjectiveCreate(
     return NextResponse.json({ error: "Department is required." }, { status: 400 });
   }
 
+  // Department owner can create in their own department
   const ownerAllowed = await isDepartmentOwner(departmentName, payload.ventureName, signedInEmail);
   if (ownerAllowed) {
     return null;
   }
 
-  return NextResponse.json({ error: "Only the department owner or an admin can create objectives." }, { status: 403 });
+  // Editor can create if they are the ownerEmail of the objective being created
+  if (effectiveRole === "editor") {
+    const itemOwnerEmail = normalize(payload.ownerEmail);
+    if (itemOwnerEmail && itemOwnerEmail === signedInEmail) {
+      return null;
+    }
+    return NextResponse.json({ error: "Editors can only create objectives assigned to themselves." }, { status: 403 });
+  }
+
+  return NextResponse.json({ error: "Only the department owner, a manager, or an admin can create objectives." }, { status: 403 });
 }
 
 export async function requireDepartmentOwnerOrAdminForKrCreate(
   request: NextRequest,
-  payload: { objectiveKey?: string }
+  payload: { objectiveKey?: string; ownerEmail?: string }
 ): Promise<NextResponse | null> {
   const signedInEmail = getSignedInEmail(request);
   if (!signedInEmail) {
     return NextResponse.json({ error: "Missing signed-in user email." }, { status: 401 });
   }
 
-  const isAdmin = await isAdminEmail(signedInEmail);
-  if (isAdmin) {
+  const effectiveRole = await resolveEffectiveRole(signedInEmail);
+
+  // Admin and Manager can create any KR
+  if (effectiveRole === "admin" || effectiveRole === "manager") {
     return null;
   }
 
@@ -99,11 +123,53 @@ export async function requireDepartmentOwnerOrAdminForKrCreate(
     return NextResponse.json({ error: "Objective not found." }, { status: 404 });
   }
 
+  // Department owner of the parent objective's department can create KRs
   const ownerAllowed = await isDepartmentOwner(objective.department, objective.ventureName, signedInEmail);
   if (ownerAllowed) {
     return null;
   }
 
-  return NextResponse.json({ error: "Only the department owner or an admin can create key results." }, { status: 403 });
+  // Editor can create a KR if they are the ownerEmail of the KR being created,
+  // or if they own the parent objective
+  if (effectiveRole === "editor") {
+    const krOwnerEmail = normalize(payload.ownerEmail);
+    if (krOwnerEmail && krOwnerEmail === signedInEmail) {
+      return null;
+    }
+    const objectiveOwnerEmail = normalize(objective.ownerEmail ?? objective.owner);
+    if (objectiveOwnerEmail && objectiveOwnerEmail === signedInEmail) {
+      return null;
+    }
+    return NextResponse.json({ error: "Editors can only create key results on objectives they own." }, { status: 403 });
+  }
+
+  return NextResponse.json({ error: "Only the department owner, a manager, or an admin can create key results." }, { status: 403 });
+}
+
+// Guard for PATCH (update) — Editors can only update items they own
+export async function requireOwnerOrManagerForUpdate(
+  request: NextRequest,
+  itemOwnerEmail: string | null | undefined
+): Promise<NextResponse | null> {
+  const signedInEmail = getSignedInEmail(request);
+  if (!signedInEmail) {
+    return NextResponse.json({ error: "Missing signed-in user email." }, { status: 401 });
+  }
+
+  const effectiveRole = await resolveEffectiveRole(signedInEmail);
+  if (effectiveRole === "admin" || effectiveRole === "manager") {
+    return null;
+  }
+
+  if (effectiveRole === "editor") {
+    const ownerNormalized = normalize(itemOwnerEmail);
+    if (ownerNormalized && ownerNormalized === signedInEmail) {
+      return null;
+    }
+    return NextResponse.json({ error: "Editors can only edit items they own." }, { status: 403 });
+  }
+
+  // Viewer or no role
+  return NextResponse.json({ error: "You do not have permission to edit this item." }, { status: 403 });
 }
 

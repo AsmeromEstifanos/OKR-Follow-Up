@@ -51,6 +51,9 @@ import {
   setRoleAssignment,
   deleteRoleAssignment,
   listRoleAssignments,
+  getDefaultRoleAssignment,
+  setDefaultRoleAssignment,
+  deleteDefaultRoleAssignment,
   type RoleAssignment,
   type ActivityLogQuery,
   type ActivityLogPage,
@@ -579,11 +582,14 @@ export async function getUserRole(email: string): Promise<AppRole | null> {
 
   const assignments = await listRoleAssignments();
   const match = assignments.find((a) => a.userEmail === normalized);
-  if (!match) return null;
+  if (match) {
+    const role = match.role.trim() as AppRole;
+    const valid: AppRole[] = ["Admin", "Manager", "Editor", "Viewer"];
+    return valid.includes(role) ? role : null;
+  }
 
-  const role = match.role.trim() as AppRole;
-  const valid: AppRole[] = ["Admin", "Manager", "Editor", "Viewer"];
-  return valid.includes(role) ? role : null;
+  // Fall back to the default role for unlisted users
+  return getDefaultRole();
 }
 
 export async function listRoleUsers(): Promise<RoleUser[]> {
@@ -632,6 +638,31 @@ export async function removeUserRole(email: string): Promise<void> {
   updateOperationProgress(18, "Removing role assignment");
   await deleteRoleAssignment(normalized);
   updateOperationProgress(88, "Role assignment removed");
+}
+
+export async function getDefaultRole(): Promise<AppRole | null> {
+  const status = getSharePointStorageStatus();
+  if (!status.enabled) return null;
+
+  const role = await getDefaultRoleAssignment();
+  if (!role) return null;
+  const valid: AppRole[] = ["Admin", "Manager", "Editor", "Viewer"];
+  const cast = role.trim() as AppRole;
+  return valid.includes(cast) ? cast : null;
+}
+
+export async function setDefaultRole(role: AppRole | null): Promise<void> {
+  const status = getSharePointStorageStatus();
+  if (!status.enabled) throw new Error("SharePoint storage is not enabled.");
+
+  if (!role) {
+    await deleteDefaultRoleAssignment();
+    return;
+  }
+
+  const valid: AppRole[] = ["Admin", "Manager", "Editor", "Viewer"];
+  if (!valid.includes(role)) throw new Error("Invalid role.");
+  await setDefaultRoleAssignment(role);
 }
 
 export async function logAuthSignIn(email: string, displayName?: string): Promise<AuthLogEntry | null> {

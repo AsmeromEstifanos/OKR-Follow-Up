@@ -1,8 +1,7 @@
 "use client";
 
 import useCurrentUserEmail from "@/app/use-current-user-email";
-import { apiPath, withBasePath } from "@/lib/base-path";
-import Link from "next/link";
+import { apiPath } from "@/lib/base-path";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -166,13 +165,6 @@ function isoDay(iso: string): string {
   return iso.slice(0, 10);
 }
 
-function entityHref(entityType: string | undefined, entityKey: string | undefined): string | null {
-  if (!entityType || !entityKey) return null;
-  if (entityType === "objectives") return withBasePath(`/objectives/${entityKey}`);
-  if (entityType === "krs") return withBasePath(`/objectives/${entityKey}`);
-  return null;
-}
-
 function actionClass(method: string): string {
   if (method === "POST") return "act-action act-action-create";
   if (method === "PATCH") return "act-action act-action-update";
@@ -260,6 +252,46 @@ function BarChart({ data }: { data: { label: string; count: number }[] }): JSX.E
   );
 }
 
+function DetailPopup({ entry, onClose }: { entry: ActivityEntry; onClose: () => void }): JSX.Element {
+  const changes = parseChanges(entry.detailsJson);
+  return (
+    <div className="act-popup-backdrop" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="act-popup" onClick={(e) => e.stopPropagation()}>
+        <div className="act-popup-header">
+          <div>
+            <span className={actionClass(entry.httpMethod)}>{composeActionSentence(entry)}</span>
+            {entry.entityLabel && (
+              <span className="act-popup-entity">{entry.entityLabel}</span>
+            )}
+          </div>
+          <button type="button" className="act-popup-close" onClick={onClose} aria-label="Close">×</button>
+        </div>
+        <div className="act-popup-meta">
+          <span>{entry.userEmail}</span>
+          <span>{new Date(entry.occurredAt).toLocaleString()}</span>
+        </div>
+        {changes.length > 0 ? (
+          <div className="act-popup-changes">
+            <div className="act-popup-changes-heading">Changes</div>
+            {changes.map((c) => (
+              <div key={c.field} className="act-popup-change-row">
+                <div className="act-popup-change-field">{friendlyFieldName(c.field)}</div>
+                <div className="act-popup-change-values">
+                  <span className="act-change-from">{formatValue(c.from, c.field)}</span>
+                  <span className="act-change-arrow">→</span>
+                  <span className="act-change-to">{formatValue(c.to, c.field)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="act-popup-no-changes">No field-level changes recorded for this event.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function HorizontalBar({ label, count, max }: { label: string; count: number; max: number }): JSX.Element {
   const pct = max > 0 ? (count / max) * 100 : 0;
   return (
@@ -291,6 +323,7 @@ export default function ActivityPage(): JSX.Element {
   const [showInsights, setShowInsights] = useState(false);
   const [insightsEntries, setInsightsEntries] = useState<ActivityEntry[]>([]);
   const [insightsLoading, setInsightsLoading] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<ActivityEntry | null>(null);
 
   const fetchRef = useRef(0);
 
@@ -438,6 +471,9 @@ export default function ActivityPage(): JSX.Element {
 
   return (
     <div className="act-page">
+      {selectedEntry && (
+        <DetailPopup entry={selectedEntry} onClose={() => setSelectedEntry(null)} />
+      )}
       <div className="act-header">
         <h1 className="act-title">Activity Log</h1>
         <button
@@ -613,22 +649,23 @@ export default function ActivityPage(): JSX.Element {
               <div className="act-day-heading">{formatDayHeading(dayEntries[0].occurredAt)}</div>
               {dayEntries.map((entry) => {
                 const changes = parseChanges(entry.detailsJson);
-                const href = entityHref(entry.entityType, entry.entityKey);
                 const actionSentence = composeActionSentence(entry);
                 const entityDisplay = entry.entityLabel || null;
 
                 return (
-                  <div key={entry.activityLogKey} className="act-entry">
+                  <button
+                    key={entry.activityLogKey}
+                    type="button"
+                    className="act-entry act-entry-btn"
+                    onClick={() => setSelectedEntry(entry)}
+                    title="Click to see full details"
+                  >
                     <div className="act-entry-time">{formatTime(entry.occurredAt)}</div>
                     <div className="act-entry-body">
                       <div className="act-entry-header">
                         <span className={actionClass(entry.httpMethod)}>{actionSentence}</span>
-                        {href && entityDisplay ? (
-                          <Link href={href} className="act-entry-entity">
-                            {entityDisplay}
-                          </Link>
-                        ) : entityDisplay ? (
-                          <span className="act-entry-entity-plain">{entityDisplay}</span>
+                        {entityDisplay ? (
+                          <span className="act-entry-entity">{entityDisplay}</span>
                         ) : null}
                         <span className="act-entry-user">{entry.userEmail}</span>
                       </div>
@@ -646,7 +683,7 @@ export default function ActivityPage(): JSX.Element {
                         </div>
                       )}
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>

@@ -300,7 +300,7 @@ export default function AppShell({ children }: Props): JSX.Element {
           <Link
             href={boardHref}
             className={`ln-nav-item ${
-              !isDashboardRoute && !isConfigRoute ? "ln-nav-item-active" : ""
+              !isDashboardRoute && !isConfigRoute && !isActivityRoute ? "ln-nav-item-active" : ""
             } ${isNavCollapsed ? "ln-nav-item-collapsed" : ""}`}
             onClick={() => {
               if (isMobile) {
@@ -371,10 +371,10 @@ export default function AppShell({ children }: Props): JSX.Element {
               <span>{sharePointStatusLabel}</span>
             </div>
           ) : null}
-          <div className="ln-version-label" aria-label={`Application version ${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.5.32"}`}>
+          <div className="ln-version-label" aria-label={`Application version ${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.5.33"}`}>
             {isNavCollapsed
-              ? `v${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.5.32"}`
-              : `Version ${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.5.32"}`}
+              ? `v${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.5.33"}`
+              : `Version ${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.5.33"}`}
           </div>
         </div>
       </aside>
