@@ -105,3 +105,37 @@ export const loginRequest: PopupRequest = {
 };
 
 export const sharePointProbeScopes = ["Sites.Read.All"];
+
+let silentSsoAttempted = false;
+
+/**
+ * Attempt a silent single-sign-on using the existing Microsoft Entra tenant
+ * session (shared across apps in the same tenant, even on different origins).
+ * Lets a user who signed in to the companion app land here already signed in,
+ * with no popup. Safe no-op if there's no existing session — returns false and
+ * the manual Sign In button remains available. Runs at most once per page load.
+ */
+export async function attemptSilentSso(): Promise<boolean> {
+  if (silentSsoAttempted || msalConfigError) {
+    return false;
+  }
+  silentSsoAttempted = true;
+
+  try {
+    await initializeMsal();
+
+    if (ensureActiveAccount()) {
+      return true;
+    }
+
+    const result = await msalInstance.ssoSilent({ scopes: loginScopes });
+    if (result.account) {
+      msalInstance.setActiveAccount(result.account);
+      return true;
+    }
+  } catch {
+    // No existing session / interaction required: fall back to manual sign-in.
+  }
+
+  return false;
+}

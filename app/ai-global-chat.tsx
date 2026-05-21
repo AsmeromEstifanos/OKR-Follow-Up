@@ -478,7 +478,7 @@ export default function AiGlobalChat({
               <span className="ai-fab-header-icon" aria-hidden="true">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={withBasePath("/svh-logo.gif")}
+                  src={withBasePath("/SVH.gif")}
                   alt=""
                   className="ai-fab-header-gif"
                 />
@@ -539,7 +539,7 @@ export default function AiGlobalChat({
                     <span className="ai-fab-msg-avatar" aria-hidden="true">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={withBasePath("/svh-logo.gif")}
+                        src={withBasePath("/SVH.gif")}
                         alt=""
                         className="ai-fab-avatar-gif"
                       />
@@ -622,7 +622,7 @@ export default function AiGlobalChat({
                 <span className="ai-fab-msg-avatar" aria-hidden="true">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={withBasePath("/svh-logo.gif")}
+                    src={withBasePath("/SVH.gif")}
                     alt=""
                     className="ai-fab-avatar-gif"
                   />
@@ -675,7 +675,7 @@ export default function AiGlobalChat({
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={withBasePath("/svh-logo.gif")}
+            src={withBasePath("/SVH.gif")}
             alt=""
             aria-hidden="true"
             className="ai-fab-gif"

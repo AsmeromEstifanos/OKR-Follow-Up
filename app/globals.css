@@ -5283,3 +5283,44 @@ textarea {
   opacity: 0.55;
   cursor: not-allowed;
 }
+
+/* --- Top app-switch tabs (SVH / Ventures) --- */
+.app-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 0 8px;
+  border-bottom: 1px solid #d8e0ea;
+  background: #ffffff;
+}
+.app-tab {
+  display: inline-flex;
+  align-items: center;
+  padding: 12px 22px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #5b6b7c;
+  text-decoration: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.app-tab:hover {
+  color: var(--accent);
+  background: #f1f6ff80;
+}
+.app-tab-active {
+  color: var(--accent-strong);
+  border-bottom-color: var(--accent);
+  cursor: default;
+}
+.app-tab-active:hover {
+  background: transparent;
+}
+.app-tab-disabled {
+  color: #aab4c0;
+  cursor: not-allowed;
+}

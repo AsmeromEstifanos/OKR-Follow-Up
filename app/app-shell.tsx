@@ -95,6 +95,30 @@ function HelpIcon(): JSX.Element {
   );
 }
 
+// URL of the companion app (the EASE OKR / Ventures app). Per-deployment env.
+const COMPANION_APP_URL = process.env.NEXT_PUBLIC_COMPANION_APP_URL ?? "";
+
+// Top app-switch tabs. This is the classic ("SVH") app, so SVH is active and
+// the "Ventures" tab links to the companion (EASE) app.
+function TopAppTabs(): JSX.Element {
+  return (
+    <nav className="app-tabs" aria-label="Application">
+      <span className="app-tab app-tab-active" aria-current="page">
+        SVH
+      </span>
+      {COMPANION_APP_URL ? (
+        <a className="app-tab" href={COMPANION_APP_URL}>
+          Ventures
+        </a>
+      ) : (
+        <span className="app-tab app-tab-disabled" aria-disabled="true">
+          Ventures
+        </span>
+      )}
+    </nav>
+  );
+}
+
 export default function AppShell({ children }: Props): JSX.Element {
   const { instance, accounts } = useMsal();
   const isAuthenticated = useIsAuthenticated();
@@ -419,6 +443,7 @@ export default function AppShell({ children }: Props): JSX.Element {
       ) : null}
 
       <main className={mainClassName}>
+        <TopAppTabs />
         <AuthGate>
           <div className="layout">{children}</div>
         </AuthGate>
