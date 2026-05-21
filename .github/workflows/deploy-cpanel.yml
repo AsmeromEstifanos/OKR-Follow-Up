@@ -25,6 +25,7 @@ jobs:
       NEXT_PUBLIC_POST_LOGOUT_REDIRECT_URI: https://sol-ventures.com/okr
       NEXT_PUBLIC_LOGIN_SCOPES: openid profile email User.Read Sites.Read.All Sites.ReadWrite.All
       NEXT_PUBLIC_SHAREPOINT_SITE_URL: https://easeint1.sharepoint.com/sites/OKRFollowUp
+      NEXT_PUBLIC_COMPANION_APP_URL: https://sol-ventures.com/ease-okr
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
